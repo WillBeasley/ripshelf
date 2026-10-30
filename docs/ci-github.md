@@ -3,7 +3,7 @@
 Run the tests and publish multi-arch images to GHCR with GitHub Actions.
 
 There are two workflows in `.github/workflows/`:
-- **`test.yml`** runs on pushes to `main`, on `v*` tags and on pull requests. It runs ruff, pytest and svelte-check, with Python 3.12 and Node 22.
+- **`test.yml`** runs on pushes to `main`, on `v*` tags and on pull requests. It runs ruff, pytest (12 at a time, with pytest-xdist) and svelte-check, with Python 3.12 and Node 22. Changes only to `docs/` or Markdown files don't start it, and a newer push to the same branch or pull request cancels a run still going. Run it by hand from Actions → test → Run workflow.
 - **`images.yml`** builds the image for `linux/amd64` and `linux/arm64` and pushes it to the GitHub Container Registry as `ghcr.io/willbeasley/ripshelf`. It runs only for release tags, so pushes to `main` and pull requests build no image. The tags are:
 
   | Event | Tags |

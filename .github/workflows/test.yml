@@ -4,14 +4,23 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    paths-ignore: ["docs/**", "**.md"]
   pull_request:
+    paths-ignore: ["docs/**", "**.md"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A newer push to the same branch or pull request replaces a run still going.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -23,17 +32,18 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      # ffmpeg and 7z are used by the tests.
+      # The transcode and TV tests use a real ffmpeg (they skip without one).
       - name: Tools
         run: |
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg p7zip-full
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg
       - name: Python
         run: pip install -q -r requirements-dev.lock && pip install -q --no-deps -e .
       - name: Lint
         run: ruff check src tests
       - name: Tests
-        run: pytest -q
+        # The tests mostly wait on fake rips, so three per core keeps the runner busy.
+        run: pytest -q -n 12 --dist worksteal
       - name: UI
         working-directory: web
         run: |
