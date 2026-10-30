@@ -10,7 +10,7 @@ Two scripts do most of the work, and a Claude Code session on the Pi can run the
 ```sh
 scripts/pi/setup-pi.sh --tests      # the test suite's dependencies, then run it
 scripts/pi/setup-pi.sh --native     # run ripshelf from the checkout (builds MakeMKV)
-scripts/pi/setup-pi.sh --docker     # Docker, then build the image on the Pi
+scripts/pi/setup-pi.sh --docker     # Docker, then pull the image
 scripts/pi/check-pi.sh              # what's there and what's missing
 scripts/pi/check-pi.sh --worker     # and whether the controller answers and takes the worker's token
 ```
@@ -113,14 +113,13 @@ A USB drive shows up as `/dev/srN` (block) and `/dev/sgN` (SCSI generic). ripshe
 ## Docker route
 
 ```sh
-scripts/pi/setup-pi.sh --docker     # Docker, then docker build -t localhost/ripshelf:latest .
+scripts/pi/setup-pi.sh --docker     # Docker, then docker pull ghcr.io/willbeasley/ripshelf:latest
 ```
 
-Building on the Pi takes 15 to 30 minutes (MakeMKV compiles). Once an image is published, `docker compose pull` gets the arm64 one instead ([installation.md](installation.md)). To build arm64 on a PC, use buildx with QEMU ([building.md](building.md#for-another-architecture)).
+The published image includes arm64, so Docker pulls the right one. To build it on the Pi instead, add `--build-image` (it takes 15 to 30 minutes, because MakeMKV compiles) and put `RIPSHELF_IMAGE=localhost/ripshelf:latest` in a `.env` file next to the compose file. To build arm64 on a PC, use buildx with QEMU ([building.md](building.md#for-another-architecture)).
 
 Then follow [installation.md](installation.md) with [compose.yaml](../compose.yaml), with these changes:
 
-- a `.env` file next to it with `RIPSHELF_IMAGE=localhost/ripshelf:latest`
 - the `group_add` cdrom id (`getent group cdrom`, usually 24)
 - **delete the render group and the `/dev/dri` line**, because the Pi's GPU can't encode
 - the drives, each `/dev/srN` with its own `/dev/sgN`
@@ -221,7 +220,7 @@ This is how a worker behaves, from [workers.md](workers.md) and the code (`src/r
 1. On the controller, go to Settings → Remote workers, name it (for example "Pi 5") and click **Add remote worker**. The controller URL in the compose file must be the address the Pi uses to reach it. Copy the compose file, because the token is shown only once.
 2. On the controller, go to Settings → Import MakeMKV private data. For an LG GGC-H20N, the `dump_*.tgz` MakeMKV needs ([troubleshooting.md](troubleshooting.md#an-older-drive-hangs-in-makemkv-lg-ggc-h20n-and-others)). For a UHD drive, its `_private_data.tar`.
 3. On the Pi, run it one of two ways.
-   - With Docker, use the compose file with `RIPSHELF_IMAGE=localhost/ripshelf:latest` and this drive's `sr`/`sg` lines.
+   - With Docker, use the compose file with this drive's `sr`/`sg` lines (and `RIPSHELF_IMAGE=localhost/ripshelf:latest` if you built the image on the Pi).
    - Natively, put `RIPSHELF_CONTROLLER_URL`, `RIPSHELF_WORKER_TOKEN`, `RIPSHELF_WORKER_ID` and `RIPSHELF_WORKER_NAME` in `ripshelf.env` in the checkout, then run `.venv/bin/ripshelf worker`.
 4. `scripts/pi/check-pi.sh --worker` checks that the controller answers and accepts the token, without registering anything.
 

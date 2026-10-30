@@ -4,23 +4,24 @@
 #
 #   scripts/pi/setup-pi.sh --tests            # what the test suite needs, then run it
 #   scripts/pi/setup-pi.sh --native           # run ripshelf from this checkout (builds MakeMKV)
-#   scripts/pi/setup-pi.sh --docker           # Docker, and build the image on the Pi
+#   scripts/pi/setup-pi.sh --docker           # Docker, and pull the published image
 #   scripts/pi/setup-pi.sh --all              # all three
 #
 # Options:
 #   --accept-makemkv-eula   don't ask before accepting MakeMKV's licence (read it first:
 #                           makemkv-bin-<version>/src/eula_en_linux.txt)
 #   --usb-current           set usb_max_current_enable=1 in /boot/firmware/config.txt
-#   --no-image              with --docker: install Docker but don't build the image
+#   --build-image           with --docker: build the image on the Pi instead of pulling it
+#   --no-image              with --docker: install Docker but don't pull or build the image
 #   --yes                   answer yes to every question (reboot included)
 #   --dry-run               print the commands instead of running them
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-DO_TESTS=0 DO_NATIVE=0 DO_DOCKER=0 BUILD_IMAGE=1 USB_CURRENT=0 YES=0 DRY=0 EULA=0
+DO_TESTS=0 DO_NATIVE=0 DO_DOCKER=0 IMAGE=pull USB_CURRENT=0 YES=0 DRY=0 EULA=0
 REBOOT_WANTED=0 RELOGIN_WANTED=0
 
-usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 [ $# -gt 0 ] || usage 1
 for a in "$@"; do
@@ -29,7 +30,8 @@ for a in "$@"; do
         --native) DO_NATIVE=1 ;;
         --docker) DO_DOCKER=1 ;;
         --all) DO_TESTS=1 DO_NATIVE=1 DO_DOCKER=1 ;;
-        --no-image) BUILD_IMAGE=0 ;;
+        --build-image) IMAGE=build ;;
+        --no-image) IMAGE=none ;;
         --usb-current) USB_CURRENT=1 ;;
         --accept-makemkv-eula) EULA=1 ;;
         --yes|-y) YES=1 ;;
@@ -221,11 +223,14 @@ setup_docker() {
         [ "$DRY" = 1 ] || curl -fsSL https://get.docker.com | $SUDO sh
     fi
     add_group docker
-    if [ "$BUILD_IMAGE" = 1 ]; then
+    local d=(docker)
+    # Just added to the docker group, which only takes effect at the next login.
+    docker info >/dev/null 2>&1 || { [ -z "$SUDO" ] || d=(sudo docker); }
+    if [ "$IMAGE" = pull ]; then
+        step "Pulling ghcr.io/willbeasley/ripshelf:latest"
+        run "${d[@]}" pull ghcr.io/willbeasley/ripshelf:latest
+    elif [ "$IMAGE" = build ]; then
         step "Building localhost/ripshelf:latest on the Pi (MakeMKV compiles: 15-30 minutes)"
-        local d=(docker)
-        # Just added to the docker group, which only takes effect at the next login.
-        docker info >/dev/null 2>&1 || { [ -z "$SUDO" ] || d=(sudo docker); }
         (in_dir "$ROOT" && run "${d[@]}" build -t localhost/ripshelf:latest .)
     fi
 }
@@ -255,7 +260,8 @@ fi
 
 step "Done"
 [ "$DO_NATIVE" = 1 ] && note "Start it: cd $ROOT && .venv/bin/ripshelf   (UI on http://<pi>:8380)"
-[ "$DO_DOCKER" = 1 ] && note "Docker: see docs/raspberry-pi.md (compose with RIPSHELF_IMAGE=localhost/ripshelf:latest)"
+[ "$DO_DOCKER" = 1 ] && note "Docker: see docs/raspberry-pi.md (the compose file pulls the image)"
+[ "$DO_DOCKER" = 1 ] && [ "$IMAGE" = build ] && note "Use the image built here: RIPSHELF_IMAGE=localhost/ripshelf:latest in .env"
 note "Check everything: scripts/pi/check-pi.sh"
 [ "$RELOGIN_WANTED" = 1 ] && note "Group changes take effect after you log out and in again (or reboot)."
 if [ "$REBOOT_WANTED" = 1 ]; then
