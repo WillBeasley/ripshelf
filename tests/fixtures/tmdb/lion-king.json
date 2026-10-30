@@ -1,0 +1,8 @@
+{
+  "query": "The Lion King",
+  "results": [
+    {"id": 420818, "title": "The Lion King", "original_title": "The Lion King", "release_date": "2019-07-12", "genre_ids": [12, 18, 10751, 16], "vote_count": 10200, "popularity": 70.0},
+    {"id": 8587, "title": "The Lion King", "original_title": "The Lion King", "release_date": "1994-06-24", "genre_ids": [10751, 16, 18], "vote_count": 18300, "popularity": 100.0}
+  ],
+  "details": {"420818": {"runtime": 118}, "8587": {"runtime": 89}}
+}

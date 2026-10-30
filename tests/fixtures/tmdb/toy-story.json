@@ -1,0 +1,14 @@
+{
+  "query": "Toy Story",
+  "results": [
+    {"id": 862, "title": "Toy Story", "original_title": "Toy Story", "release_date": "1995-11-22", "genre_ids": [16, 12, 10751, 35], "vote_count": 18900, "popularity": 120.0},
+    {"id": 863, "title": "Toy Story 2", "original_title": "Toy Story 2", "release_date": "1999-10-30", "genre_ids": [16, 35, 10751], "vote_count": 14000, "popularity": 90.0},
+    {"id": 10193, "title": "Toy Story 3", "original_title": "Toy Story 3", "release_date": "2010-06-16", "genre_ids": [16, 10751, 35], "vote_count": 15000, "popularity": 95.0},
+    {"id": 301528, "title": "Toy Story 4", "original_title": "Toy Story 4", "release_date": "2019-06-19", "genre_ids": [16, 12, 35, 10751], "vote_count": 10000, "popularity": 88.0},
+    {"id": 213121, "title": "Toy Story of Terror!", "original_title": "Toy Story of Terror!", "release_date": "2013-10-16", "genre_ids": [16, 35, 10751, 10770], "vote_count": 900, "popularity": 15.0}
+  ],
+  "details": {
+    "862": {"runtime": 81}, "863": {"runtime": 92}, "10193": {"runtime": 103},
+    "301528": {"runtime": 100}, "213121": {"runtime": 22}
+  }
+}

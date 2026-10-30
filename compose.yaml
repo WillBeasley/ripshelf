@@ -1,0 +1,48 @@
+# ripshelf. Copy this file into an empty folder, change the lines marked  <-- ,
+# create the folders, then start it:
+#
+#   mkdir -p data scratch movies tv disc-backups backups
+#   docker compose up -d        # UI on http://<host>:8380
+#
+# The image is pulled from a registry (docs/installation.md). To run one you
+# built yourself, set RIPSHELF_IMAGE in a .env file next to this one
+# (docs/building.md).
+# Relative paths are relative to this file's folder.
+# Create the folders yourself, because ones Docker creates are owned by root.
+
+services:
+  ripshelf:
+    image: ${RIPSHELF_IMAGE:-ghcr.io/willbeasley/ripshelf:latest}
+    container_name: ripshelf
+    restart: unless-stopped
+    user: "1000:1000"                   # <-- your user and group ids (id -u, id -g); files are created as this user
+    group_add:
+      - "24"                            # <-- the host's cdrom group id (getent group cdrom)
+      - "993"                           # <-- the host's render group id, for GPU transcoding (getent group render)
+    devices:
+      # <-- your optical drives, each /dev/srN with its own /dev/sgN (the numbers differ).
+      #     ls /sys/class/block/sr*/device/scsi_generic  shows the pairs.
+      - /dev/sr0
+      - /dev/sg1
+      - /dev/sr1
+      - /dev/sg2
+      - /dev/dri:/dev/dri               # <-- Intel/AMD GPU for transcoding; delete if you have none
+    environment:
+      TZ: Etc/UTC                       # <-- your time zone
+      # <-- MakeMKV is proprietary, with its own licence. Read it (README, "Legal") and,
+      #     if you accept it, change this to yes. Until then MakeMKV isn't run.
+      RIPSHELF_ACCEPT_MAKEMKV_EULA: "no"
+      RIPSHELF_MOVIES_DIR: /movies
+      RIPSHELF_TV_DIR: /tv
+      RIPSHELF_DISC_BACKUPS_DIR: /disc-backups
+    volumes:
+      - ./data:/data                    # database, settings, MakeMKV data per drive (keep it)
+      - ./scratch:/scratch              # <-- rips in progress, on a fast disk with ~100 GB free for UHD
+      - ./movies:/movies                # <-- where films go (your movies library)
+      - ./tv:/tv                        # <-- where TV goes (can be on another disk)
+      - ./disc-backups:/disc-backups    # <-- full disc backups (Settings → "What to rip"), ~50 to 100 GB each
+      - ./backups:/backups              # <-- daily database backups; off the data disk if you can
+      # One library folder holding Movies/ and TV/ also works. Mount it at /library
+      # and delete the two RIPSHELF_*_DIR lines and the /movies and /tv mounts.
+    ports:
+      - "8380:8380"                     # no login, so keep it on your LAN or VPN

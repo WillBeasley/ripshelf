@@ -1,0 +1,13 @@
+{
+  "query": "The Thing",
+  "results": [
+    {"id": 60935, "title": "The Thing", "original_title": "The Thing", "release_date": "2011-10-12", "genre_ids": [27, 9648, 878], "vote_count": 2900, "popularity": 40.2},
+    {"id": 1091, "title": "The Thing", "original_title": "The Thing", "release_date": "1982-06-25", "genre_ids": [27, 9648, 878], "vote_count": 7400, "popularity": 60.5},
+    {"id": 9000201, "title": "Terror Takes Shape: The Making of The Thing", "original_title": "Terror Takes Shape", "release_date": "1998-09-09", "genre_ids": [99], "vote_count": 30, "popularity": 2.0}
+  ],
+  "details": {
+    "60935": {"runtime": 103},
+    "1091": {"runtime": 109},
+    "9000201": {"runtime": 84, "genres": [{"id": 99, "name": "Documentary"}]}
+  }
+}

@@ -1,0 +1,73 @@
+# ripshelf with one small worker container per drive, the faster setup.
+# Each MakeMKV sees only its own drive, so drives don't slow each other down.
+# With four drives, scanning four discs took about 80 s this way against 116 s
+# with compose.yaml (docs/modes.md). Same image and data folders as compose.yaml:
+# switching between the two needs no re-import.
+#
+# The image is pulled from a registry (docs/installation.md); set
+# RIPSHELF_IMAGE in a .env file next to this one to use another (docs/building.md).
+# Change the lines marked  <-- , create the folders, then start it:
+#
+#   mkdir -p data/makemkv scratch movies tv disc-backups backups
+#   docker compose -f compose.per-drive.yaml up -d        # UI on http://<host>:8380
+
+x-worker: &worker
+  image: ${RIPSHELF_IMAGE:-ghcr.io/willbeasley/ripshelf:latest}
+  command: ["ripshelf", "worker"]
+  restart: unless-stopped
+  user: "1000:1000"                     # <-- the same user as the controller
+  group_add: ["24"]                     # <-- the host's cdrom group id (getent group cdrom)
+  volumes:
+    - ./data/makemkv:/makemkv           # each drive's MakeMKV data, shared with the controller
+    - ./scratch:/scratch                # rips go straight into the controller's scratch
+  depends_on: [ripshelf]
+
+x-worker-env: &worker-env
+  TZ: Etc/UTC                           # <-- your time zone
+  RIPSHELF_ACCEPT_MAKEMKV_EULA: "no"     # <-- yes once you accept MakeMKV's licence (see the controller)
+  RIPSHELF_CONTROLLER_URL: http://ripshelf:8380
+  RIPSHELF_DATA_DIR: /tmp/ripshelf       # a worker keeps nothing else
+  RIPSHELF_MAKEMKV_PATH: /makemkv
+  RIPSHELF_WORKER_TOKEN_FILE: /makemkv/.worker-token   # made by the controller on first start
+  RIPSHELF_WORKER_SHARED_SCRATCH: "1"
+
+services:
+  # The controller has the UI, database, identification, transcoding and the library.
+  # It has no drives itself.
+  ripshelf:
+    image: ${RIPSHELF_IMAGE:-ghcr.io/willbeasley/ripshelf:latest}   # <-- the same image as the workers
+    container_name: ripshelf
+    restart: unless-stopped
+    user: "1000:1000"                   # <-- your user and group ids (id -u, id -g)
+    group_add: ["993"]                  # <-- the render group id, for GPU transcoding (getent group render)
+    devices:
+      - /dev/dri:/dev/dri               # <-- Intel/AMD GPU for transcoding; delete if you have none
+    environment:
+      TZ: Etc/UTC                       # <-- your time zone
+      # <-- MakeMKV is proprietary, with its own licence. Read it (README, "Legal") and,
+      #     if you accept it, change this to yes here and in x-worker-env. Until then MakeMKV isn't run.
+      RIPSHELF_ACCEPT_MAKEMKV_EULA: "no"
+      RIPSHELF_MOVIES_DIR: /movies
+      RIPSHELF_TV_DIR: /tv
+      RIPSHELF_DISC_BACKUPS_DIR: /disc-backups
+      RIPSHELF_WORKER_TOKEN_FILE: /data/makemkv/.worker-token
+    volumes:
+      - ./data:/data                    # database, settings, MakeMKV data per drive (keep it)
+      - ./scratch:/scratch              # <-- rips in progress, on a fast disk with ~100 GB free for UHD
+      - ./movies:/movies                # <-- where films go (your movies library)
+      - ./tv:/tv                        # <-- where TV goes
+      - ./disc-backups:/disc-backups    # <-- full disc backups (Settings → "What to rip"), ~50 to 100 GB each
+      - ./backups:/backups              # <-- daily database backups
+    ports:
+      - "8380:8380"                     # no login, so keep it on your LAN or VPN
+
+  # One block per drive, with its /dev/srN and its own /dev/sgN (the numbers differ, see
+  # ls /sys/class/block/sr*/device/scsi_generic), and a short name.
+  drive-sr0:
+    <<: *worker
+    devices: [/dev/sr0, /dev/sg1]       # <--
+    environment: {<<: *worker-env, RIPSHELF_WORKER_ID: sr0}   # <--
+  drive-sr1:
+    <<: *worker
+    devices: [/dev/sr1, /dev/sg2]       # <--
+    environment: {<<: *worker-env, RIPSHELF_WORKER_ID: sr1}   # <--

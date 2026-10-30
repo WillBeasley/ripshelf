@@ -1,0 +1,14 @@
+# Build the image from this checkout instead of pulling it (docs/building.md).
+# Use it on top of compose.yaml or compose.per-drive.yaml, from the checkout:
+#
+#   echo RIPSHELF_IMAGE=localhost/ripshelf:latest > .env
+#   docker compose -f compose.yaml -f compose.build.yaml up -d --build
+#
+# The .env line makes every service (the per-drive workers too) use the image
+# built here rather than the registry's.
+
+services:
+  ripshelf:
+    build: .
+    image: ${RIPSHELF_IMAGE:-localhost/ripshelf:latest}
+    pull_policy: build

@@ -1,0 +1,237 @@
+:root {
+	--bg: #14161a;
+	--surface: #1d2025;
+	--surface-2: #262a30;
+	--border: #343941;
+	--text: #e8e9ec;
+	--muted: #9aa0aa;
+	--accent: #5b8def;
+	--accent-text: #0b1020;
+	--ok: #4ade80;
+	--ok-bg: #12301f;
+	--warn: #fbbf24;
+	--warn-bg: #352a0d;
+	--bad: #f87171;
+	--bad-bg: #3a1717;
+	--info-bg: #172544;
+	--info: #93b4f5;
+	--track: #2e333a;
+	--radius: 12px;
+	--shadow: none;
+	color-scheme: dark;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	-webkit-text-size-adjust: 100%;
+}
+
+a {
+	color: var(--accent);
+}
+
+h1,
+h2,
+h3 {
+	margin: 0;
+	line-height: 1.25;
+}
+
+h1 {
+	font-size: 1.3rem;
+}
+
+h2 {
+	font-size: 1.08rem;
+}
+
+h3 {
+	font-size: 0.95rem;
+}
+
+.muted {
+	color: var(--muted);
+}
+
+.small {
+	font-size: 0.85rem;
+}
+
+.mono {
+	font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+	font-size: 0.82rem;
+	overflow-wrap: anywhere;
+}
+
+.card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow);
+	padding: 14px;
+}
+
+.stack {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.spread {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.grid {
+	display: grid;
+	gap: 12px;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+}
+
+button,
+.button {
+	font: inherit;
+	font-size: 0.92rem;
+	border-radius: 9px;
+	border: 1px solid var(--border);
+	background: var(--surface-2);
+	color: var(--text);
+	padding: 8px 13px;
+	min-height: 38px;
+	cursor: pointer;
+	text-decoration: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+button:hover:not(:disabled) {
+	filter: brightness(0.97);
+}
+
+button:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+button.primary {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--accent-text);
+	font-weight: 600;
+}
+
+/* Something waits on the user: the same orange as the Review tab's count badge. */
+.button.attention {
+	background: var(--warn);
+	border-color: var(--warn);
+	color: var(--bg);
+	font-weight: 700;
+	justify-content: center;
+	box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 55%, transparent);
+	animation: attention 2s ease-out infinite;
+}
+
+.button.attention::before {
+	content: '';
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: currentColor;
+}
+
+@keyframes attention {
+	70%,
+	100% {
+		box-shadow: 0 0 0 8px transparent;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.button.attention {
+		animation: none;
+	}
+}
+
+button.danger {
+	color: var(--bad);
+}
+
+button.link {
+	background: none;
+	border: none;
+	padding: 0;
+	min-height: 0;
+	color: var(--accent);
+}
+
+input,
+select,
+textarea {
+	font: inherit;
+	color: var(--text);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 8px 10px;
+	min-height: 38px;
+	width: 100%;
+}
+
+label.field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 0.88rem;
+}
+
+label.check {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+label.check input {
+	width: auto;
+	min-height: 0;
+}
+
+.chip {
+	display: inline-block;
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	padding: 2px 7px;
+	border-radius: 999px;
+	background: var(--surface-2);
+	color: var(--muted);
+	border: 1px solid var(--border);
+}
+
+.chip.uhd {
+	background: var(--info-bg);
+	color: var(--info);
+	border-color: transparent;
+}
+
+.error-text {
+	color: var(--bad);
+}

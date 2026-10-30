@@ -1,0 +1,32 @@
+# Secrets: env files hold the MakeMKV key, TMDb key and worker tokens
+.env
+*.env
+!example.env
+
+# State a native run keeps next to the checkout (docs/settings.md)
+/data/
+/var/
+/scratch/
+/library/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Web UI
+web/node_modules/
+web/.svelte-kit/
+web/build/
+src/ripshelf/static/
+
+# Local tooling
+.claude/

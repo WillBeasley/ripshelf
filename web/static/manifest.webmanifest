@@ -1,0 +1,14 @@
+{
+	"name": "ripshelf",
+	"short_name": "ripshelf",
+	"start_url": "/",
+	"display": "standalone",
+	"background_color": "#14161a",
+	"theme_color": "#14161a",
+	"icons": [
+		{ "src": "/brand/app-icon-dark.svg", "sizes": "any", "type": "image/svg+xml" },
+		{ "src": "/brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
+		{ "src": "/brand/icon-512.png", "sizes": "512x512", "type": "image/png" },
+		{ "src": "/brand/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+	]
+}
