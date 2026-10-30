@@ -30,7 +30,7 @@ def alive(pid: int) -> bool:
     # A zombie still answers kill(0); check its state.
     try:
         return Path(f"/proc/{pid}/stat").read_text().split()[2] != "Z"
-    except FileNotFoundError:
+    except OSError:  # reaped between the two checks (ProcessLookupError or FileNotFoundError)
         return False
 
 
