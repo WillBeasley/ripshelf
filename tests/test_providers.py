@@ -442,6 +442,33 @@ async def test_films_merges_tmdb_and_omdb(keyed):
 
 
 @respx.mock
+async def test_films_retries_a_word_shorter_when_nothing_is_found(keyed):
+    def search(request):
+        found = request.url.params["query"] == "Dirty Harry"
+        return httpx.Response(200, json={"results": [
+            {"id": 984, "title": "Dirty Harry", "release_date": "1971-12-22"}] if found else []})
+
+    route = respx.get(f"{TMDB}/search/movie").mock(side_effect=search)
+    respx.get(f"{TMDB}/movie/984").mock(return_value=httpx.Response(200, json={"id": 984, "runtime": 102}))
+    got, notes = await films.search(keyed, ["Dirty Harry Xx Yy"], None)
+    assert [c.title for c in got] == ["Dirty Harry"]
+    assert [r.request.url.params["query"] for r in route.calls] == [
+        "Dirty Harry Xx Yy", "Dirty Harry Xx", "Dirty Harry"]
+    assert ("info", "Nothing found, so searching for “Dirty Harry” instead") in notes
+    # Never down to one word, which would match far too much.
+    got, _ = await films.search(keyed, ["Nothing At All Xx"], None)
+    assert got == [] and [r.request.url.params["query"] for r in route.calls[3:]] == [
+        "Nothing At All Xx", "Nothing At All"]
+
+
+@respx.mock
+async def test_films_does_not_retry_when_a_provider_failed(keyed):
+    route = respx.get(f"{TMDB}/search/movie").mock(return_value=httpx.Response(401))
+    got, notes = await films.search(keyed, ["Dirty Harry Xx"], None)
+    assert got == [] and len(route.calls) == 1 and notes == [("warning", "TMDB rejected the API key")]
+
+
+@respx.mock
 async def test_settings_tests_for_new_providers(settings):
     omdb_route(respx)
     assert not (await checks.omdb(settings, SettingsUpdate())).ok

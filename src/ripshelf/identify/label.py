@@ -59,11 +59,16 @@ class ParsedLabel:
         words = self.title.split()
         # For truncated labels, also try without the last (possibly cut) word.
         if len(self.raw) >= 30 and len(words) > 2:
-            words = words[:-1]
-            while len(words) > 1 and words[-1].lower() in SMALL_WORDS:
-                words = words[:-1]
-            out.append(" ".join(words))
+            out.append(drop_last_word(self.title))
         return out
+
+
+def drop_last_word(query: str) -> str:
+    """The query without its last word, and any small words left dangling ("of the")."""
+    words = query.split()[:-1]
+    while len(words) > 1 and words[-1].lower() in SMALL_WORDS:
+        words = words[:-1]
+    return " ".join(words)
 
 
 def title_case(s: str) -> str:
