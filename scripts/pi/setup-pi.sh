@@ -247,13 +247,6 @@ fi
 
 if [ "$DO_TESTS" = 1 ]; then
     step "Running the checks CI runs"
-    # Simulated UHD rips check that scratch (under the temp folder) has room for a real one,
-    # so a small /tmp (Trixie makes it a tmpfs) fails them. var/ is git-ignored.
-    tmp_free=$(df -BG --output=avail "${TMPDIR:-/tmp}" | tail -1 | tr -dc 0-9)
-    if [ "${tmp_free:-0}" -lt 150 ]; then
-        note "${TMPDIR:-/tmp} has ${tmp_free} GB free; the tests use $ROOT/var/tmp instead"
-        run mkdir -p "$ROOT/var/tmp"; export TMPDIR="$ROOT/var/tmp"
-    fi
     (in_dir "$ROOT" && run "$PY" -m ruff check src tests && run "$PY" -m pytest -q)
     (in_dir "$ROOT/web" && run npm run check)
 fi

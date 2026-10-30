@@ -54,10 +54,6 @@ esac
 free_gb=$(df -BG --output=avail "$ROOT" | tail -1 | tr -dc 0-9)
 [ "${free_gb:-0}" -ge 100 ] && ok "${free_gb} GB free under $ROOT" \
     || warn "${free_gb} GB free under $ROOT: a UHD rip needs about 100 GB of scratch"
-tmp=${TMPDIR:-/tmp}
-tmp_free=$(df -BG --output=avail "$tmp" | tail -1 | tr -dc 0-9)
-[ "${tmp_free:-0}" -ge 150 ] && ok "${tmp_free} GB free in $tmp ($(findmnt -no FSTYPE -T "$tmp"))" \
-    || warn "${tmp_free} GB free in $tmp ($(findmnt -no FSTYPE -T "$tmp")): the tests' simulated UHD rips want 100+ GB; setup-pi.sh --tests uses var/tmp"
 if have vcgencmd; then
     t=$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2)
     case "$t" in
