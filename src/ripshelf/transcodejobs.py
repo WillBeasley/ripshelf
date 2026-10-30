@@ -1,14 +1,16 @@
 """The transcode step of the pipeline (mixed into ``jobs.Manager``).
 
 Runs after the rip and the identity are settled, before finalise, one file at
-a time and one job at a time (the GPU is shared). It runs as a job task that
-does not belong to the drive, so the drive takes the next disc meanwhile.
+a time per job. Up to ``transcode_parallel`` jobs transcode at once (one by
+default, as they share the GPU). It runs as a job task that does not belong to
+the drive, so the drive takes the next disc meanwhile.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,11 +31,42 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+class Slots:
+    """A semaphore whose size is read on each acquire, so a new limit applies to
+    the jobs already waiting (call ``resized``). Lowering it lets the transcodes
+    already running finish."""
+
+    def __init__(self, size: Callable[[], int]) -> None:
+        self._size = size
+        self._busy = 0
+        self._cond = asyncio.Condition()
+
+    def full(self) -> bool:
+        return self._busy >= self._size()
+
+    async def resized(self) -> None:
+        async with self._cond:
+            self._cond.notify_all()
+
+    async def __aenter__(self) -> None:
+        async with self._cond:
+            await self._cond.wait_for(lambda: not self.full())
+            self._busy += 1
+
+    async def __aexit__(self, *exc) -> None:
+        async with self._cond:
+            self._busy -= 1
+            self._cond.notify_all()
+
+
 class TranscodeMixin:
     def _init_transcode(self) -> None:
-        self._gpu = asyncio.Semaphore(1)
+        self._gpu = Slots(lambda: self.s.transcode_parallel)
         self._bg: dict[int, set[asyncio.Task]] = {}
         self._transcoders: dict[int, transcode.Transcoder] = {}
+
+    async def transcode_limit_changed(self) -> None:
+        await self._gpu.resized()
 
     def _spawn_bg(self, coro, job_id: int) -> asyncio.Task:
         """A job task not tied to a drive (transcode + finalise)."""
@@ -87,12 +120,14 @@ class TranscodeMixin:
     async def _transcode(self, job_id: int) -> None:
         job = self.db.get_job(job_id)
         targets = self._transcode_targets(job)
-        waiting = self._gpu.locked()
+        waiting = self._gpu.full()
         if waiting:
             self._event(job, "info", "Waiting for another job's transcode to finish")
         self._set_state(job, JobState.transcoding, f"Transcode check for {len(targets)} file(s)")
         if waiting:
-            self._set_step(job, "Waiting to transcode", "Another job is using the encoder; one transcode at a time")
+            n = self.s.transcode_parallel
+            self._set_step(job, "Waiting to transcode",
+                           f"Other jobs are using the encoder; {n} transcode{'s' if n > 1 else ''} at a time")
         async with self._gpu:
             job = self.db.get_job(job_id)
             self._set_step(job, "Checking whether to transcode", "Choosing the encoder")

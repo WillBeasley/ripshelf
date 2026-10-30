@@ -612,6 +612,7 @@ class SettingsView(BaseModel):
     transcode_encoder: TranscodeEncoder = "auto"
     transcode_quality: int = 21
     transcode_keep_original: bool = False
+    transcode_parallel: int = 1
     vaapi_device: str = "/dev/dri/renderD128"
 
 
@@ -629,6 +630,7 @@ class SettingsUpdate(BaseModel):
     transcode_encoder: TranscodeEncoder | None = None
     transcode_quality: int | None = Field(None, ge=10, le=40)
     transcode_keep_original: bool | None = None
+    transcode_parallel: int | None = Field(None, ge=1, le=8)
     vaapi_device: str | None = None
     tv_unmatched: TvUnmatched | None = None
     tv_rip_extras: bool | None = None

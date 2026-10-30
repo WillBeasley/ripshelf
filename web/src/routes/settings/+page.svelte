@@ -81,6 +81,7 @@
 		transcode_encoder: 'auto' as 'auto' | 'vaapi' | 'x265',
 		transcode_quality: 21,
 		transcode_keep_original: false,
+		transcode_parallel: 1,
 		vaapi_device: '/dev/dri/renderD128',
 		library_dir: '',
 		movies_dir: '',
@@ -181,6 +182,7 @@
 			transcode_encoder: v.transcode_encoder,
 			transcode_quality: v.transcode_quality,
 			transcode_keep_original: v.transcode_keep_original,
+			transcode_parallel: v.transcode_parallel,
 			vaapi_device: v.vaapi_device,
 			library_dir: v.library_dir,
 			movies_dir: v.custom_movies_dir ?? '',
@@ -337,6 +339,7 @@
 			transcode_encoder: f.transcode_encoder,
 			transcode_quality: Number(f.transcode_quality),
 			transcode_keep_original: f.transcode_keep_original,
+			transcode_parallel: Number(f.transcode_parallel),
 			vaapi_device: f.vaapi_device.trim() || '/dev/dri/renderD128',
 			...changedFolders()
 		};
@@ -731,6 +734,14 @@
 						Quality (QP/CRF, lower = better) <input type="number" min="10" max="40" bind:value={f.transcode_quality} disabled={!f.transcode_enabled} />
 					</label>
 				</div>
+				<label class="field">
+					Transcodes at once <input type="number" min="1" max="8" bind:value={f.transcode_parallel} disabled={!f.transcode_enabled} />
+				</label>
+				<p class="small muted">
+					How many jobs transcode side by side, whichever drive or worker ripped them; the rest wait their turn.
+					One is best for x265, which already uses every CPU core. A GPU can often take two or three, though some
+					consumer cards cap how many encodes run at once. A new limit applies to the jobs still waiting.
+				</p>
 				<label class="check"><input type="checkbox" bind:checked={f.transcode_keep_original} disabled={!f.transcode_enabled} /> Keep the original rip too (“… - original.mkv”)</label>
 				<label class="check"><input type="checkbox" bind:checked={f.transcode_hdr} disabled={!f.transcode_enabled} /> Also touch HDR and Dolby Vision sources</label>
 				<label class="field">GPU device <input bind:value={f.vaapi_device} disabled={!f.transcode_enabled} /></label>

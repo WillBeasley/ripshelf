@@ -61,7 +61,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_AUTO_EJECT` | on | |
 | `RIPSHELF_RIP_MODE` / `DRIVE_MODES` | `titles` / `{}` | `titles` or `backup` (a whole Blu-ray or UHD, decrypted). `DRIVE_MODES` sets it per drive id, for example `{"pioneer-...": "backup"}` ([backup.md](backup.md)) |
 | `RIPSHELF_DRIVE_NAMES` | `{}` | a name for a drive id, shown instead of the model, for example `{"pioneer-...": "Top bay"}`. Usually set with the pencil on the drive card |
-| `RIPSHELF_TRANSCODE_ENABLED` | on | also `TRANSCODE_CODECS` (`["vc1"]`), `TRANSCODE_CROP` (`off`, `when_transcoding` or `always`), `TRANSCODE_HDR`, `TRANSCODE_SOURCES` (per disc type, e.g. `{"bluray": {"transcode": true, "crop": false}}`), `TRANSCODE_ENCODER` (`auto`, `vaapi` or `x265`), `TRANSCODE_QUALITY` (21) and `TRANSCODE_KEEP_ORIGINAL` |
+| `RIPSHELF_TRANSCODE_ENABLED` | on | also `TRANSCODE_CODECS` (`["vc1"]`), `TRANSCODE_CROP` (`off`, `when_transcoding` or `always`), `TRANSCODE_HDR`, `TRANSCODE_SOURCES` (per disc type, e.g. `{"bluray": {"transcode": true, "crop": false}}`), `TRANSCODE_ENCODER` (`auto`, `vaapi` or `x265`), `TRANSCODE_QUALITY` (21), `TRANSCODE_KEEP_ORIGINAL` and `TRANSCODE_PARALLEL` (1, how many jobs transcode at once, up to 8) |
 | `RIPSHELF_TV_UNMATCHED` | `extras` | what happens to titles that aren't episodes. `extras`, `specials` (Season 00) or `skip` |
 | `RIPSHELF_BACKUP_KEEP` | 7 | daily database backups kept, 0 turns them off (Settings → Drives and MakeMKV → Database backups) |
 | `RIPSHELF_PUBLIC_URL` | none | this UI's address, used in notification links |

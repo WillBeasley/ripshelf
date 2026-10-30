@@ -373,6 +373,51 @@ async def test_disc_kind_switched_off_is_copied_as_is(harness, tc_settings):
     assert done.transcode.files[0].note == "DVD discs are not transcoded"
 
 
+async def test_slots_follow_the_limit():
+    import asyncio
+
+    from ripshelf.transcodejobs import Slots
+
+    limit, running, peak = 2, 0, 0
+    slots = Slots(lambda: limit)
+    release = asyncio.Event()
+
+    async def job() -> None:
+        nonlocal running, peak
+        async with slots:
+            running += 1
+            peak = max(peak, running)
+            await release.wait()
+            running -= 1
+
+    tasks = [asyncio.create_task(job()) for _ in range(5)]
+    await until(lambda: running == 2)
+    await asyncio.sleep(0.05)
+    assert running == 2 and slots.full()
+    limit = 4  # raised while three wait: two more start at once
+    await slots.resized()
+    await until(lambda: running == 4)
+    limit = 1  # lowered: the running ones finish, then one at a time
+    release.set()
+    await asyncio.gather(*tasks)
+    assert peak == 4 and not slots.full()
+
+
+async def test_waiting_transcode_can_be_cancelled():
+    import asyncio
+
+    from ripshelf.transcodejobs import Slots
+
+    slots = Slots(lambda: 1)
+    async with slots:
+        waiter = asyncio.create_task(slots.__aenter__())
+        await asyncio.sleep(0.05)
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+    assert not slots.full()  # the cancelled waiter took no slot
+
+
 def test_transcoding_on_by_default_for_vc1_only():
     s = Settings(_env_file=None)
     assert s.transcode_enabled and s.transcode_codecs == ["vc1"]

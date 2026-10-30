@@ -1451,6 +1451,7 @@ export interface SettingsUpdate {
   transcode_encoder?: ("auto" | "vaapi" | "x265") | null;
   transcode_quality?: number | null;
   transcode_keep_original?: boolean | null;
+  transcode_parallel?: number | null;
   vaapi_device?: string | null;
   tv_unmatched?: ("extras" | "specials" | "skip") | null;
   tv_rip_extras?: boolean | null;
@@ -1564,6 +1565,7 @@ export interface SettingsUpdate1 {
   transcode_encoder?: ("auto" | "vaapi" | "x265") | null;
   transcode_quality?: number | null;
   transcode_keep_original?: boolean | null;
+  transcode_parallel?: number | null;
   vaapi_device?: string | null;
   tv_unmatched?: ("extras" | "specials" | "skip") | null;
   tv_rip_extras?: boolean | null;
@@ -1777,6 +1779,7 @@ export interface SettingsView {
   transcode_encoder: "auto" | "vaapi" | "x265";
   transcode_quality: number;
   transcode_keep_original: boolean;
+  transcode_parallel: number;
   vaapi_device: string;
 }
 /**
