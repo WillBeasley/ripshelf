@@ -16,6 +16,9 @@ NOISE_TOKENS = {
     "DISC", "DISK", "DVD", "DVD5", "DVD9", "BD", "BD25", "BD50", "BD66", "BD100", "BLURAY",
     "BLU", "RAY", "UHD", "4K", "2160P", "1080P", "HD", "WS", "FS", "WIDESCREEN", "FULLSCREEN",
     "PAL", "NTSC", "UK", "US", "USA", "EU", "EUR", "GER", "FR", "R1", "R2", "R4", "RA", "RB",
+    # Release regions: WW is worldwide, INT/INTL international, SCAN Scandinavian.
+    "WW", "INT", "INTL", "NORDIC", "SCAN", "AU", "AUS", "JP", "JPN", "FRA", "ESP", "ITA", "NL", "BENELUX",
+    "KOR",
     "16X9", "4X3", "ANA", "ANAMORPHIC", "SE", "CE", "LE", "DTS", "AC3", "EXT", "EXTENDED", "DC",
 }
 # Multi-token phrases dropped wherever they appear.
