@@ -183,7 +183,7 @@ class TranscodeMixin:
         dst = src.with_suffix(".h265.mkv")
         cmd = transcode.command(self.s.ffmpeg, src, dst, info.video, crop, encoder, self.s.transcode_quality,
                                 self.s.vaapi_device)
-        what = f"{info.video.codec} → H.265 ({'GPU' if encoder == 'vaapi' else 'x265'})" + \
+        what = f"{info.video.codec} → H.265 ({transcode.ENCODER_NAMES.get(encoder, encoder)})" + \
             (f", cropping to {crop.w}×{crop.h}" if crop else "")
         self._event(job, "transcode", f"Title {idx}: {what}")
         self._set_step(job, f"Transcoding title {idx}{of}", what)

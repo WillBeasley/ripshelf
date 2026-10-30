@@ -106,7 +106,7 @@ import sys
 args = sys.argv[1:]
 if "-encoders" in args:
     print({ENCODERS!r}); sys.exit(0)
-enc = args[args.index("-c:v") + 1]
+enc = args[next(i for i, a in enumerate(args) if a.startswith("-c:v")) + 1]
 if enc in {sorted(working)!r} and not ("main10" in args and enc == "hevc_vaapi"):
     sys.exit(0)
 print(f"[{{enc}} @ 0x1] Cannot open {{enc}}", file=sys.stderr); sys.exit(1)

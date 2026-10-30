@@ -16,6 +16,7 @@ What it does, per ripped file:
 from __future__ import annotations
 
 import asyncio
+import glob
 import json
 import logging
 import os
@@ -87,7 +88,7 @@ class Crop:
 class Plan:
     transcode: bool
     crop: Crop | None = None
-    encoder: str | None = None  # "vaapi" | "x265"
+    encoder: str | None = None  # one of ENCODERS
     reasons: list[str] = field(default_factory=list)
     crop_mode: str = "off"  # transcode_crop, or "off" where this kind of disc isn't cropped
     codec_wanted: bool = False  # the codec is on the list (else it's only re-encoded to crop)
@@ -209,36 +210,78 @@ def plan(info: MediaInfo, s, disc_kind: str | None, encoder: str) -> Plan:
     return Plan(True, encoder=encoder, reasons=reasons, crop_mode=crop_mode, codec_wanted=wanted)
 
 
+# Auto tries the GPU encoders in this order, each with a short test encode, and
+# falls back to x265 when none works.
+AUTO_ORDER = ("qsv", "vaapi", "nvenc")
+ENCODERS = (*AUTO_ORDER, "x265")
+ENCODER_NAMES = {"qsv": "GPU, Intel Quick Sync", "vaapi": "GPU, VAAPI", "nvenc": "GPU, NVIDIA NVENC",
+                 "x265": "CPU, x265"}
+
+
+def hw_args(encoder: str, device: str) -> list[str]:
+    """The options before -i that open the GPU. QSV goes through VAAPI so it uses the chosen render node."""
+    if encoder == "vaapi":
+        return ["-init_hw_device", f"vaapi=va:{device}", "-filter_hw_device", "va"]
+    if encoder == "qsv":
+        return ["-init_hw_device", f"vaapi=va:{device}", "-init_hw_device", "qsv=qs@va", "-filter_hw_device", "qs"]
+    return []
+
+
+def encode_args(encoder: str, ten_bit: bool, quality: int, filters: list[str], vi: str = "0",
+                codec: str = "hevc") -> list[str]:
+    """The filter and encoder options for output video stream vi. Constant QP on the GPUs, CRF on x265."""
+    filters = list(filters)
+    profile = [f"-profile:v:{vi}", "main10" if ten_bit else "main"] if codec == "hevc" else []
+    if encoder == "x265":
+        out = [f"-c:v:{vi}", "libx265", "-preset", "medium", "-crf", str(quality),
+               "-pix_fmt", "yuv420p10le" if ten_bit else "yuv420p", "-x265-params", "log-level=error"]
+    elif encoder == "vaapi":
+        filters += ["format=p010" if ten_bit else "format=nv12", "hwupload"]
+        out = [f"-c:v:{vi}", f"{codec}_vaapi", "-rc_mode", "CQP", "-qp", str(quality), *profile]
+    elif encoder == "qsv":
+        filters += ["format=p010" if ten_bit else "format=nv12", "hwupload=extra_hw_frames=64"]
+        # -q selects constant QP (without it, global_quality would mean ICQ).
+        out = [f"-c:v:{vi}", f"{codec}_qsv", f"-q:v:{vi}", str(quality), *profile]
+    elif encoder == "nvenc":
+        filters += ["format=p010le" if ten_bit else "format=yuv420p"]
+        out = [f"-c:v:{vi}", f"{codec}_nvenc", "-preset", "p5", "-rc", "constqp", "-qp", str(quality), *profile]
+    else:
+        raise ValueError(f"unknown encoder {encoder!r}")
+    return [*([f"-filter:v:{vi}", ",".join(filters)] if filters else []), *out]
+
+
+def trial_command(ffmpeg: str, encoder: str, device: str | None, codec: str = "hevc", ten_bit: bool = False) -> list[str]:
+    """A fraction of a second of black, encoded the way a transcode would."""
+    return [ffmpeg, "-v", "error", *hw_args(encoder, device or ""), "-f", "lavfi",
+            "-i", "color=black:s=320x240:d=0.2", *encode_args(encoder, ten_bit, 24, [], codec=codec),
+            "-f", "null", "-"]
+
+
+def _usable(encoder: str, device: str) -> bool:
+    if encoder == "nvenc":
+        return bool(glob.glob("/dev/nvidia[0-9]*"))
+    return os.path.exists(device)
+
+
 async def pick_encoder(ffmpeg: str, s) -> str:
-    """'vaapi' when the GPU can encode HEVC, else 'x265'."""
-    if s.transcode_encoder in ("vaapi", "x265"):
+    """The encoder chosen in Settings, or with auto the first in AUTO_ORDER whose test encode works."""
+    if s.transcode_encoder != "auto":
         return s.transcode_encoder
-    if not os.path.exists(s.vaapi_device):
-        return "x265"
-    rc, _, _ = await _run([ffmpeg, "-v", "error", "-init_hw_device", f"vaapi=va:{s.vaapi_device}",
-                           "-filter_hw_device", "va", "-f", "lavfi", "-i", "color=black:s=256x144:d=0.2",
-                           "-vf", "format=nv12,hwupload", "-c:v", "hevc_vaapi", "-f", "null", "-"], timeout=30)
-    return "vaapi" if rc == 0 else "x265"
+    for enc in AUTO_ORDER:
+        if _usable(enc, s.vaapi_device):
+            rc, _, _ = await _run(trial_command(ffmpeg, enc, s.vaapi_device), timeout=30)
+            if rc == 0:
+                return enc
+    return "x265"
 
 
 def command(ffmpeg: str, src: Path, dst: Path, video: VideoInfo, crop: Crop | None, encoder: str,
-            quality: int, vaapi_device: str) -> list[str]:
+            quality: int, device: str) -> list[str]:
     """The ffmpeg command. Re-encode the first video stream, copy everything else."""
-    filters = [crop.filter()] if crop else []
-    cmd = [ffmpeg, "-hide_banner", "-nostdin", "-y", "-v", "error", "-progress", "pipe:1", "-nostats"]
-    if encoder == "vaapi":
-        cmd += ["-init_hw_device", f"vaapi=va:{vaapi_device}", "-filter_hw_device", "va"]
-    cmd += ["-i", str(src), "-map", "0", "-c", "copy", "-map_metadata", "0", "-map_chapters", "0"]
-    vi = "0"  # first video stream in the output
-    if encoder == "vaapi":
-        filters += ["format=p010" if video.ten_bit else "format=nv12", "hwupload"]
-        cmd += [f"-filter:v:{vi}", ",".join(filters), f"-c:v:{vi}", "hevc_vaapi", "-rc_mode", "CQP",
-                "-qp", str(quality), f"-profile:v:{vi}", "main10" if video.ten_bit else "main"]
-    else:
-        if filters:
-            cmd += [f"-filter:v:{vi}", ",".join(filters)]
-        cmd += [f"-c:v:{vi}", "libx265", "-preset", "medium", "-crf", str(quality),
-                "-pix_fmt", "yuv420p10le" if video.ten_bit else "yuv420p", "-x265-params", "log-level=error"]
+    cmd = [ffmpeg, "-hide_banner", "-nostdin", "-y", "-v", "error", "-progress", "pipe:1", "-nostats",
+           *hw_args(encoder, device),
+           "-i", str(src), "-map", "0", "-c", "copy", "-map_metadata", "0", "-map_chapters", "0",
+           *encode_args(encoder, video.ten_bit, quality, [crop.filter()] if crop else [])]
     return [*cmd, str(dst)]
 
 

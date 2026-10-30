@@ -769,7 +769,7 @@ export interface Hardware {
   /**
    * what ripshelf transcodes with now
    */
-  encoder: "vaapi" | "x265";
+  encoder: "qsv" | "vaapi" | "nvenc" | "x265";
   encoder_note: string;
   checked_at: number;
 }
@@ -1448,7 +1448,7 @@ export interface SettingsUpdate {
   transcode_sources?: {
     [k: string]: TranscodeSource;
   } | null;
-  transcode_encoder?: ("auto" | "vaapi" | "x265") | null;
+  transcode_encoder?: ("auto" | "qsv" | "vaapi" | "nvenc" | "x265") | null;
   transcode_quality?: number | null;
   transcode_keep_original?: boolean | null;
   transcode_parallel?: number | null;
@@ -1562,7 +1562,7 @@ export interface SettingsUpdate1 {
   transcode_sources?: {
     [k: string]: TranscodeSource;
   } | null;
-  transcode_encoder?: ("auto" | "vaapi" | "x265") | null;
+  transcode_encoder?: ("auto" | "qsv" | "vaapi" | "nvenc" | "x265") | null;
   transcode_quality?: number | null;
   transcode_keep_original?: boolean | null;
   transcode_parallel?: number | null;
@@ -1776,7 +1776,7 @@ export interface SettingsView {
   transcode_sources: {
     [k: string]: TranscodeSource;
   };
-  transcode_encoder: "auto" | "vaapi" | "x265";
+  transcode_encoder: "auto" | "qsv" | "vaapi" | "nvenc" | "x265";
   transcode_quality: number;
   transcode_keep_original: boolean;
   transcode_parallel: number;

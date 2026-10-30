@@ -59,7 +59,7 @@ A Pi with USB drives can be a rip-only worker. It rips, the controller transcode
 
 [raspberry-pi.md](raspberry-pi.md) covers setting one up, from the OS to a first rip.
 
-- **Image.** The prebuilt image includes arm64, so `docker compose pull` on the Pi gets the right one. To build it on the Pi instead, see [building.md](building.md). MakeMKV ships an arm64 `makemkvcon`, and everything else has arm64 builds. The Intel VAAPI driver is skipped there.
+- **Image.** The prebuilt image includes arm64, so `docker compose pull` on the Pi gets the right one. To build it on the Pi instead, see [building.md](building.md). MakeMKV ships an arm64 `makemkvcon`, and everything else has arm64 builds. The Intel media driver and Quick Sync runtime are skipped there.
 - **Devices.** Leave out `/dev/dri`, because a worker never transcodes.
 - **Hardware.** Use a powered USB hub for several drives, and an SSD for scratch with about 100 GB free (one UHD rip).
 - **Pi as the controller.** Turn transcoding off in Settings. A Pi 5 has no hardware HEVC encoder, so x265 would take hours per film.

@@ -79,7 +79,7 @@ The container restarted mid-rip, because of an update, Watchtower or a reboot. R
 
 ## Transcoding uses the CPU, or fails
 
-Settings → Transcoding lists the GPUs and the ffmpeg hardware encoders that work in the container, each tested with a short encode. For an Intel or AMD GPU, pass `/dev/dri` into the container and add the host's render group (`getent group render`) to `group_add`. A job's Transcode log has the ffmpeg command and its errors.
+Settings → Transcoding lists the GPUs and the ffmpeg hardware encoders that work in the container, each tested with a short encode. For an Intel or AMD GPU, pass `/dev/dri` into the container and add the host's render group (`getent group render`) to `group_add`. A job's Transcode log has the ffmpeg command and its errors. With several GPUs, pick the one for Quick Sync and VAAPI under Settings → Transcoding; Auto tries Quick Sync, then VAAPI, then NVENC on it and uses the first that works. If Quick Sync fails with `unsupported (-3)` on a 12th gen or newer Intel CPU, the image is older than the one that added the oneVPL runtime (`libmfx-gen1.2`); pull a newer one.
 
 ## Still stuck?
 

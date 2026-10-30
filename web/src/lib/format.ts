@@ -92,3 +92,11 @@ const PROVIDERS: Record<string, string> = {
 export function via(providers: string[] | null | undefined): string {
 	return providers?.length ? `via ${providers.map((p) => PROVIDERS[p] ?? p).join(' · ')}` : '';
 }
+
+/** What a transcode ran on, by ripshelf's encoder name. */
+export const ENCODER_NAMES: Record<string, string> = {
+	qsv: 'GPU, Quick Sync',
+	vaapi: 'GPU, VAAPI',
+	nvenc: 'GPU, NVENC',
+	x265: 'x265'
+};

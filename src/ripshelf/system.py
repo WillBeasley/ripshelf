@@ -28,8 +28,10 @@ HW_METHODS = {"vaapi": "VAAPI", "qsv": "Intel Quick Sync", "nvenc": "NVIDIA NVEN
 # A method is only tried when a GPU from its vendor is passed in.
 METHOD_VENDOR = {"qsv": "Intel", "nvenc": "NVIDIA", "amf": "AMD"}
 TESTED_CODECS = {"hevc", "h264", "av1"}
-# ripshelf itself encodes with these; others are shown but not used yet.
-USED_METHODS = {"vaapi"}
+# ripshelf can transcode with these (transcode.AUTO_ORDER); AMF is only shown.
+RIPSHELF_METHODS = set(transcode.AUTO_ORDER)
+# These open a /dev/dri render node, so each one is tested on every node.
+NODE_METHODS = {"vaapi", "qsv"}
 
 
 def folders(s) -> list[tuple[str, Path]]:
@@ -131,14 +133,10 @@ def parse_encoders(text: str) -> list[tuple[str, str, str]]:
 
 
 def _test_cmd(ffmpeg: str, codec: str, method: str, device: str | None, ten_bit: bool = False) -> list[str]:
-    src = ["-f", "lavfi", "-i", "color=black:s=320x240:d=0.2"]
-    enc = ["-c:v", f"{codec}_{method}", "-f", "null", "-"]
-    if method == "vaapi":
-        fmt = "p010" if ten_bit else "nv12"
-        profile = ["-profile:v", "main10"] if ten_bit else []
-        return [ffmpeg, "-v", "error", "-init_hw_device", f"vaapi=va:{device}", "-filter_hw_device", "va",
-                *src, "-vf", f"format={fmt},hwupload", *enc[:2], *profile, *enc[2:]]
-    return [ffmpeg, "-v", "error", *src, "-vf", "format=nv12", *enc]
+    if method in RIPSHELF_METHODS:
+        return transcode.trial_command(ffmpeg, method, device, codec, ten_bit)
+    return [ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=black:s=320x240:d=0.2", "-vf", "format=nv12",
+            "-c:v", f"{codec}_{method}", "-f", "null", "-"]
 
 
 def _first_error(err: bytes) -> str | None:
@@ -153,9 +151,8 @@ def _first_error(err: bytes) -> str | None:
 async def _test(ffmpeg: str, codec: str, method: str, description: str, device: str | None) -> HwEncoder:
     rc, _, err = await transcode._run(_test_cmd(ffmpeg, codec, method, device), timeout=TEST_TIMEOUT_S)
     enc = HwEncoder(name=f"{codec}_{method}", codec=codec, method=HW_METHODS[method], device=device,
-                    description=description, works=rc == 0, error=None if rc == 0 else _first_error(err),
-                    used_by_ripshelf=method in USED_METHODS and codec == "hevc")
-    if rc == 0 and method == "vaapi" and codec == "hevc":
+                    description=description, works=rc == 0, error=None if rc == 0 else _first_error(err))
+    if rc == 0 and method in RIPSHELF_METHODS and codec == "hevc":
         rc10, _, _ = await transcode._run(_test_cmd(ffmpeg, codec, method, device, ten_bit=True),
                                           timeout=TEST_TIMEOUT_S)
         enc.ten_bit = rc10 == 0
@@ -179,11 +176,15 @@ async def hardware(s, dev_root: Path = Path("/dev"), sys_root: Path = Path("/sys
     vendors = {d.vendor for d in devs}
     tests, skipped = [], []
     for codec, method, desc in parse_encoders(out.decode(errors="replace")):
-        if method == "vaapi":
+        if method in NODE_METHODS:
             # One test per GPU, because each render node is a separate device.
-            tests += [_test(s.ffmpeg, codec, method, desc, n) for n in nodes]
+            mine = [d.path for d in devs if "renderD" in d.path
+                    and METHOD_VENDOR.get(method, d.vendor) == d.vendor]
+            tests += [_test(s.ffmpeg, codec, method, desc, n) for n in mine]
             if not nodes:
                 skipped.append(_skipped(codec, method, desc, "No /dev/dri render node passed in"))
+            elif not mine:
+                skipped.append(_skipped(codec, method, desc, f"No {METHOD_VENDOR[method]} GPU found"))
         elif METHOD_VENDOR[method] in vendors:
             tests.append(_test(s.ffmpeg, codec, method, desc, None))
         else:
@@ -191,12 +192,14 @@ async def hardware(s, dev_root: Path = Path("/dev"), sys_root: Path = Path("/sys
     encoders = sorted([*await asyncio.gather(*tests), *skipped],
                       key=lambda e: (not e.works, e.method, ["hevc", "h264", "av1"].index(e.codec)))
     chosen = await transcode.pick_encoder(s.ffmpeg, s)
-    if chosen == "vaapi":
-        note = f"H.265 on the GPU (VAAPI, {s.vaapi_device})"
-    elif s.transcode_encoder == "x265":
-        note = "H.265 on the CPU (x265), chosen in Settings"
-    else:
-        note = f"H.265 on the CPU (x265), because VAAPI did not work on {s.vaapi_device}"
+    for e in encoders:
+        e.used_by_ripshelf = e.name == f"hevc_{chosen}" and e.device in (None, s.vaapi_device)
+    where = f", {s.vaapi_device}" if chosen in NODE_METHODS else ""
+    note = f"H.265 ({transcode.ENCODER_NAMES[chosen]}{where})"
+    if s.transcode_encoder != "auto":
+        note += ", chosen in Settings"
+    elif chosen == "x265":
+        note += ", because no GPU encoder worked"
     return Hardware(devices=devs, encoders=encoders, ffmpeg_found=True, encoder=chosen, encoder_note=note,
                     checked_at=time.time())
 

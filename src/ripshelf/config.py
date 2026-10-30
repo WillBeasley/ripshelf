@@ -238,14 +238,16 @@ class Settings(BaseSettings):
     # bars are cropped, as {"bluray": {"transcode": true, "crop": false}}. Missing is
     # on, except transcoding UHD discs, which follows transcode_hdr (see transcode_source).
     transcode_sources: dict[Literal["dvd", "bluray", "uhd"], dict[Literal["transcode", "crop"], bool]] = {}
-    transcode_encoder: Literal["auto", "vaapi", "x265"] = "auto"
-    # VAAPI constant QP or x265 CRF. Lower is better and bigger.
+    # auto tries Quick Sync, VAAPI, then NVENC (transcode.AUTO_ORDER) and falls back to x265.
+    transcode_encoder: Literal["auto", "qsv", "vaapi", "nvenc", "x265"] = "auto"
+    # Constant QP on a GPU or x265 CRF. Lower is better and bigger.
     transcode_quality: int = Field(21, ge=10, le=40)
     # Keep the untouched rip next to the transcoded file (" - original").
     transcode_keep_original: bool = False
     # How many jobs transcode at once, across every drive and worker (workers
     # never transcode; the controller does). Each job does its files in turn.
     transcode_parallel: int = Field(1, ge=1, le=8)
+    # The render node Quick Sync and VAAPI use, when there is more than one GPU.
     vaapi_device: str = "/dev/dri/renderD128"
     # Pushover is off until both are set.
     pushover_user_key: SecretStr | None = None

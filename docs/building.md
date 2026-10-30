@@ -6,7 +6,7 @@ Build the Docker image from source, for development, another MakeMKV release, or
 
 You need a checkout of the code and Docker with buildx (included in current Docker). Podman works too, with `podman build` in place of `docker build`.
 
-The [Dockerfile](../Dockerfile) builds the web UI, builds MakeMKV's open-source part from source, adds MakeMKV's `makemkvcon`, then installs ripshelf. It builds for `linux/amd64` and `linux/arm64`. The Intel VAAPI driver, for transcoding on an Intel GPU, is only installed on amd64.
+The [Dockerfile](../Dockerfile) builds the web UI, builds MakeMKV's open-source part from source, adds MakeMKV's `makemkvcon`, then installs ripshelf. It builds for `linux/amd64` and `linux/arm64`. The Intel media driver and Quick Sync runtime, for transcoding on an Intel GPU, are only installed on amd64.
 
 ## Build and run it
 

@@ -1,6 +1,6 @@
 # ripshelf, the controller and embedded worker, with MakeMKV (CLI) built from source.
 # Build: docker build -t localhost/ripshelf:latest .   (docs/building.md)
-# Builds for linux/amd64 and linux/arm64; the Intel VAAPI driver is amd64 only.
+# Builds for linux/amd64 and linux/arm64; the Intel media driver and QSV runtime are amd64 only.
 
 FROM docker.io/library/node:22-bookworm-slim AS web
 WORKDIR /web
@@ -49,8 +49,10 @@ COPY --from=ffmpeg-lgpl /opt/sources /usr/share/doc/makemkv/source
 # RIPSHELF_ACCEPT_MAKEMKV_EULA=yes; until then ripshelf doesn't run MakeMKV. The
 # EULA text stays in /usr/share/doc/makemkv, as it requires when repackaged, and
 # the sources of the LGPL and GPL parts are kept in /usr/share/doc/makemkv/source.
-# Build deps are removed again; the runtime libraries stay. The Intel VAAPI driver
-# (non-free) is for hardware transcoding.
+# Build deps are removed again; the runtime libraries stay. The Intel media driver
+# (iHD, non-free) is for VAAPI and Quick Sync. Debian's ffmpeg reaches Quick Sync
+# through libmfx1, whose own runtime predates 12th gen (Alder Lake) and fails with
+# "unsupported (-3)" there; libmfx-gen1.2 is the oneVPL runtime it loads instead.
 RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
         /etc/apt/sources.list.d/debian.sources \
  && apt-get update \
@@ -61,7 +63,7 @@ RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firm
         vainfo default-jre-headless \
  && if [ "$(dpkg --print-architecture)" = amd64 ]; then \
         DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            intel-media-va-driver-non-free; fi \
+            intel-media-va-driver-non-free libmfx-gen1.2; fi \
  && mkdir /build && cd /build \
  && wget -q ${MAKEMKV_URL_BASE}/makemkv-oss-${MAKEMKV_VERSION}.tar.gz \
             ${MAKEMKV_URL_BASE}/makemkv-bin-${MAKEMKV_VERSION}.tar.gz \
