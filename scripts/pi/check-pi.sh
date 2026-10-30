@@ -215,9 +215,12 @@ if have docker; then
     if docker info >/dev/null 2>&1; then
         ok "docker daemon reachable as $(id -un)"
         docker compose version >/dev/null 2>&1 && ok "$(docker compose version)" || warn "no docker compose plugin"
-        docker image inspect localhost/ripshelf:latest >/dev/null 2>&1 \
-            && ok "image localhost/ripshelf:latest ($(docker image inspect -f '{{.Architecture}}' localhost/ripshelf:latest))" \
-            || info "no localhost/ripshelf:latest image built yet"
+        have_image=0
+        for img in ghcr.io/willbeasley/ripshelf:latest localhost/ripshelf:latest; do
+            docker image inspect "$img" >/dev/null 2>&1 \
+                && { ok "image $img ($(docker image inspect -f '{{.Architecture}}' "$img"))"; have_image=1; }
+        done
+        [ "$have_image" = 1 ] || info "no ripshelf image yet (docker compose pull fetches it)"
     else
         warn "docker installed but not usable as $(id -un) (in the docker group? logged in again?)"
     fi

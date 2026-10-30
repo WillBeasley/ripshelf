@@ -2,8 +2,6 @@
 
 Run ripshelf from the prebuilt image with Docker Compose, then set it up in the web UI.
 
-> **No image is published yet.** Until it is, [build it yourself](building.md).
-
 The image is `ghcr.io/willbeasley/ripshelf`, for `linux/amd64` and `linux/arm64` (a Raspberry Pi 5, for example), and Docker pulls the right one. It holds the controller, the embedded worker, MakeMKV (CLI), ffmpeg and the web UI. You don't need the source code.
 
 ## Install
@@ -29,8 +27,6 @@ The image is `ghcr.io/willbeasley/ripshelf`, for `linux/amd64` and `linux/arm64`
    To use another port, change the left-hand side of the `ports:` line, for example `"8480:8380"` for `http://<host>:8480`. Set the same address under Notifications so links in notifications work.
 
 By default films go to `./movies` and TV to `./tv` next to the compose file. To use an existing library, change the left-hand side of the `/movies` and `/tv` mounts (for example `/media/Movies:/movies`). Or mount one folder holding `Movies/` and `TV/` at `/library`, and delete the `RIPSHELF_MOVIES_DIR` and `RIPSHELF_TV_DIR` lines. Each folder must already exist. ripshelf never creates them, so an unmounted disk can't fill your system disk.
-
-If the package is private, run `docker login ghcr.io` once on each host that pulls (a GitHub token with `read:packages`).
 
 There's no login on the UI, so keep it on your LAN or VPN.
 

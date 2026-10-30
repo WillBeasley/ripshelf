@@ -75,9 +75,7 @@ Discs are identified from several sources, and each candidate gets a score and t
 
 ## Getting started
 
-The prebuilt image covers amd64 and arm64, so all you need is [compose.yaml](compose.yaml).
-
-> **No image is published yet.** It will be `ghcr.io/willbeasley/ripshelf`. Until then, [build the image yourself](docs/building.md).
+The prebuilt image, `ghcr.io/willbeasley/ripshelf`, covers amd64 and arm64, so all you need is [compose.yaml](compose.yaml).
 
 1. Copy [compose.yaml](compose.yaml) into an empty folder and change the lines marked `<--`. These are your user and group ids, your drives (each `/dev/srN` with its `/dev/sgN`), your folders, and `RIPSHELF_ACCEPT_MAKEMKV_EULA`, which you set to `yes` once you have read and accepted [MakeMKV's licence](#legal).
 2. Create the folders and start it:
