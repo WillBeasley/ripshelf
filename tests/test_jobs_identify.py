@@ -105,6 +105,7 @@ async def test_nothing_to_search_for(harness, keyed, monkeypatch, settings, mkv_
         assert any("generic" in e.message for e in h.db.events(job.id))
 
 
+@pytest.mark.slow
 async def test_search_identify_again_and_cache(harness, keyed):
     with respx.mock(assert_all_called=False) as router:
         mock_tmdb(router, [], {})

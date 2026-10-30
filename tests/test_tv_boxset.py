@@ -56,6 +56,7 @@ async def run_disc(h, label, monkeypatch, settings, mkv_script, runtimes, play_a
                                      and j.state == JobState.review and j.rip.state == "done"), None), 40)
 
 
+@pytest.mark.slow
 async def test_two_discs_continue_the_season(harness, keyed, settings, mkv_script, monkeypatch):
     with respx.mock(assert_all_called=False) as router:
         mock_show(router, "fawlty-towers")
@@ -82,6 +83,7 @@ async def test_two_discs_continue_the_season(harness, keyed, settings, mkv_scrip
     assert len(list(show.iterdir())) == 6
 
 
+@pytest.mark.slow
 async def test_same_disc_twice_shows_duplicates(harness, keyed, settings, mkv_script, monkeypatch):
     with respx.mock(assert_all_called=False) as router:
         mock_show(router, "fawlty-towers")
@@ -215,6 +217,7 @@ async def test_label_placed_disc_with_verified_order_confirms_itself(harness, au
     assert any("label says season 1, disc 1" in e for e in done.tv.auto_evidence)
 
 
+@pytest.mark.slow
 async def test_continuing_disc_confirms_itself(harness, auto, settings, mkv_script, monkeypatch):
     with respx.mock(assert_all_called=False) as router:
         mock_show(router, "fawlty-towers")

@@ -22,11 +22,12 @@ The simulated drives replay recorded MakeMKV logs of a UHD film, a DVD film, a T
 
 ```sh
 .venv/bin/ruff check src tests
-.venv/bin/pytest                       # about 5 minutes, add --cov for branch coverage
+.venv/bin/pytest -n 12                 # about 2 minutes in parallel, 11 without; add --cov for branch coverage
+.venv/bin/pytest -n 12 -m "not slow"   # without the dozen end-to-end tests that take 10 s or more
 (cd web && npm run check)              # svelte-check
 ```
 
-The tests need `ffmpeg` and `7z` (p7zip) on the PATH. They cover:
+The tests mostly wait on simulated rips, so `-n` can be about three times the number of cores. The transcode and TV tests need `ffmpeg` on the PATH and are skipped without it. They cover:
 
 - **Parsing, scoring and TMDB.** Recorded MakeMKV logs and TMDB responses in `tests/fixtures` (see its README).
 - **Pipeline.** Whole jobs on the fake drives, with stand-in makemkvcon scripts for crashes, hangs and bad output.

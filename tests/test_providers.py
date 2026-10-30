@@ -503,6 +503,7 @@ async def test_unknown_disc_and_titles_that_dont_fit(harness, settings, discdb):
     assert "TheDiscDB's titles don't match this scan, so its record isn't used" in events
 
 
+@pytest.mark.slow
 async def test_disc_database_maps_tv_episodes(harness, keyed, settings, discdb):
     sd = load("sarah-duck")
     discdb.match = DiscMatch(media=MediaKind.tv, title="Sarah & Duck", tmdb_id=sd["show"]["id"], titles=[

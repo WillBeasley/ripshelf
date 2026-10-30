@@ -68,6 +68,7 @@ async def test_worker_runs_close_tray(settings):
     await agent.client.aclose()
 
 
+@pytest.mark.slow
 async def test_stale_disc_status_after_eject_starts_no_job(harness, settings, monkeypatch):
     # A worker's drive status is up to a heartbeat old, so just after Eject it can still say
     # "disc". That must not start a new job on the disc that is leaving.
