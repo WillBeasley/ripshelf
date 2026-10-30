@@ -3,7 +3,8 @@
 	import { api } from '../api';
 	import type { Hardware } from '../api-types';
 
-	let hw = $state<Hardware | null>(null);
+	// Bindable, so Settings can offer the GPUs found here.
+	let { hw = $bindable(null) }: { hw?: Hardware | null } = $props();
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 	let showAll = $state(false);

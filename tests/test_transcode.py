@@ -151,6 +151,21 @@ def test_vaapi_command_ten_bit_with_crop():
     assert "-qp 21" in s and cmd[-1] == "out.mkv"
 
 
+def test_qsv_command_opens_the_chosen_node():
+    v = transcode.parse_probe(probe_json(pix="yuv420p10le")).video
+    s = " ".join(transcode.command("ffmpeg", Path("i"), Path("o"), v, None, "qsv", 22, "/dev/dri/renderD129"))
+    assert "-init_hw_device vaapi=va:/dev/dri/renderD129 -init_hw_device qsv=qs@va -filter_hw_device qs" in s
+    assert "format=p010,hwupload=extra_hw_frames=64" in s and "hevc_qsv -q:v:0 22" in s and "main10" in s
+
+
+def test_nvenc_command():
+    v = transcode.parse_probe(probe_json()).video
+    s = " ".join(transcode.command("ffmpeg", Path("i"), Path("o"), v, transcode.Crop(1920, 800, 0, 140),
+                                   "nvenc", 21, "/dev/dri/renderD128"))
+    assert "crop=1920:800:0:140,format=yuv420p" in s and "hevc_nvenc" in s and "-rc constqp -qp 21" in s
+    assert "init_hw_device" not in s
+
+
 def test_x265_command():
     v = transcode.parse_probe(probe_json()).video
     s = " ".join(transcode.command("ffmpeg", Path("i"), Path("o"), v, None, "x265", 20, "/dev/x"))
@@ -514,7 +529,7 @@ async def test_steps_while_transcoding(harness, tc_settings, steps):
     i = labels.index("Checking whether title 0 needs transcoding")
     assert labels[i:i + 3] == ["Checking whether title 0 needs transcoding", "Transcoding title 0",
                                "Checking the transcoded title 0"]
-    assert steps[i + 1][2].startswith("mpeg2video → H.265 (x265)")
+    assert steps[i + 1][2].startswith("mpeg2video → H.265 (CPU, x265)")
     assert steps[-1] == ("finalising", "Copying to library", f"{Path(done.destination).name} · transcoded to H.265")
     assert all(state == "transcoding" for state, _, _ in steps[:-1])
     assert done.step is None
@@ -566,3 +581,29 @@ async def test_a_cancelled_job_keeps_no_step(harness, settings):
         await h.m.cancel(job.id)
         h.m._set_step(h.job(job.id), "Copying to library")
         assert h.job(job.id).state == JobState.cancelled and h.job(job.id).step is None
+
+
+@posix_only
+async def test_pick_encoder_auto_takes_the_first_that_works(tmp_path, monkeypatch):
+    node = tmp_path / "renderD128"
+    node.touch()
+    tried = []
+    ffmpeg = tmp_path / "ffmpeg"
+
+    async def fake_run(cmd, timeout=0):
+        enc = cmd[next(i for i, a in enumerate(cmd) if a.startswith("-c:v")) + 1]
+        tried.append(enc)
+        return (0 if enc in works else 1), b"", b""
+
+    monkeypatch.setattr(transcode, "_run", fake_run)
+    monkeypatch.setattr(transcode.glob, "glob", lambda pattern: [])  # no NVIDIA GPU
+    s = settings(vaapi_device=str(node))
+    works = {"hevc_qsv", "hevc_vaapi"}
+    assert await transcode.pick_encoder(str(ffmpeg), s) == "qsv"
+    works = {"hevc_vaapi"}
+    tried.clear()
+    assert await transcode.pick_encoder(str(ffmpeg), s) == "vaapi" and tried == ["hevc_qsv", "hevc_vaapi"]
+    works = set()
+    tried.clear()
+    assert await transcode.pick_encoder(str(ffmpeg), s) == "x265" and "hevc_nvenc" not in tried
+    assert await transcode.pick_encoder(str(ffmpeg), settings(transcode_encoder="qsv")) == "qsv"

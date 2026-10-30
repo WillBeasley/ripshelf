@@ -48,7 +48,7 @@
 		transcode_codecs: 'vc1',
 		transcode_crop: true,
 		transcode_hdr: false,
-		transcode_encoder: 'auto' as 'auto' | 'vaapi' | 'x265',
+		transcode_encoder: 'auto' as 'auto' | 'qsv' | 'vaapi' | 'nvenc' | 'x265',
 		transcode_quality: 21,
 		transcode_keep_original: false
 	});
@@ -438,8 +438,12 @@
 						<label class="field">
 							Encoder
 							<select bind:value={f.transcode_encoder}>
-								<option value="auto">Automatic (the GPU if it works, else the CPU)</option>
-								{#if !tools?.windows}<option value="vaapi">GPU (VAAPI)</option>{/if}
+								<option value="auto">Automatic (the first GPU encoder that works, else the CPU)</option>
+								{#if !tools?.windows}
+									<option value="qsv">GPU (Intel Quick Sync)</option>
+									<option value="vaapi">GPU (VAAPI)</option>
+								{/if}
+								<option value="nvenc">GPU (NVIDIA NVENC)</option>
 								<option value="x265">CPU (x265)</option>
 							</select>
 						</label>

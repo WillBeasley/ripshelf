@@ -181,7 +181,7 @@ The tests' simulated UHD rips check that their scratch folder, under the temp fo
 
 ## Transcoding on a Pi
 
-With the encoder set to `auto` (the default), ripshelf uses VAAPI if a test HEVC encode works on `/dev/dri/renderD128`, else x265. A native Pi 5 has `/dev/dri/renderD128` (the v3d GPU), but VAAPI has no driver for it, so the test fails within a second and ripshelf uses x265. Nothing tries `hevc_v4l2m2m`, which Debian's ffmpeg lists but the Pi 5 can't do. Settings → Transcoding shows the result.
+With the encoder set to `auto` (the default), ripshelf uses the first of Quick Sync, VAAPI and NVENC whose test HEVC encode works (Quick Sync and VAAPI on `/dev/dri/renderD128`), else x265. A native Pi 5 has `/dev/dri/renderD128` (the v3d GPU), but VAAPI has no driver for it, so the tests fail within a second and ripshelf uses x265. Nothing tries `hevc_v4l2m2m`, which Debian's ffmpeg lists but the Pi 5 can't do. Settings → Transcoding shows the result.
 
 x265 (`-preset medium`) on a Pi 5's four Cortex-A76 cores is slow, roughly a few frames a second for 1080p, so many hours per film, and far longer for UHD. `scripts/pi/check-pi.sh --bench` times a short 1080p encode on the Pi. Real films encode slower than its synthetic picture. Unless the Pi has nothing else to do, either:
 

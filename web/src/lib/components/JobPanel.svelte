@@ -2,7 +2,7 @@
 	import type { JobDetail, JobEvent } from '../api-types';
 	import { api } from '../api';
 	import { Action } from '../actions.svelte';
-	import { duration, jobTitle, kindLabel, size, when } from '../format';
+	import { ENCODER_NAMES, duration, jobTitle, kindLabel, size, when } from '../format';
 	import { live } from '../live.svelte';
 	import { closeJob } from '../nav';
 	import ContributionPanel from './ContributionPanel.svelte';
@@ -181,7 +181,7 @@
 					{#each job.transcode.files as f (f.title_index)}
 						<li>
 							Title {f.title_index}: <strong>{f.action}</strong>
-							{#if f.source_codec}<span class="muted">({f.source_codec}{f.encoder ? ` → H.265, ${f.encoder === 'vaapi' ? 'GPU' : 'x265'}` : ''}{f.crop ? `, ${f.crop}` : ''})</span>{/if}
+							{#if f.source_codec}<span class="muted">({f.source_codec}{f.encoder ? ` → H.265, ${ENCODER_NAMES[f.encoder] ?? f.encoder}` : ''}{f.crop ? `, ${f.crop}` : ''})</span>{/if}
 							{#if f.size_before && f.size_after}<span class="muted"> · {Math.round((100 * f.size_after) / f.size_before)}% of the size</span>{/if}
 							{#if f.note}<div class="muted">{f.note}</div>{/if}
 						</li>

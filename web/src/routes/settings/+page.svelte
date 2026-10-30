@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type {
+		Hardware,
 		MakeMKVFile,
 		ProviderInfo,
 		ProviderSlot,
@@ -28,6 +29,8 @@
 	const importAct = new Action();
 
 	let view = $state<SettingsView | null>(null);
+	let hw = $state<Hardware | null>(null);
+	const renderNodes = $derived(hw?.devices.filter((d) => d.path.includes('renderD')) ?? []);
 	let saved = $state(false);
 	let importNote = $state<string | null>(null);
 
@@ -78,7 +81,7 @@
 		transcode_crop: 'when_transcoding' as 'off' | 'when_transcoding' | 'always',
 		transcode_hdr: false,
 		transcode_sources: {} as Record<string, TranscodeSource>,
-		transcode_encoder: 'auto' as 'auto' | 'vaapi' | 'x265',
+		transcode_encoder: 'auto' as 'auto' | 'qsv' | 'vaapi' | 'nvenc' | 'x265',
 		transcode_quality: 21,
 		transcode_keep_original: false,
 		transcode_parallel: 1,
@@ -725,8 +728,10 @@
 					<label class="field">
 						Encoder
 						<select bind:value={f.transcode_encoder} disabled={!f.transcode_enabled}>
-							<option value="auto">Auto (GPU if it works)</option>
+							<option value="auto">Auto (Quick Sync, VAAPI, NVENC, else CPU)</option>
+							<option value="qsv">GPU (Intel Quick Sync)</option>
 							<option value="vaapi">GPU (VAAPI)</option>
+							<option value="nvenc">GPU (NVIDIA NVENC)</option>
 							<option value="x265">CPU (x265)</option>
 						</select>
 					</label>
@@ -744,9 +749,21 @@
 				</p>
 				<label class="check"><input type="checkbox" bind:checked={f.transcode_keep_original} disabled={!f.transcode_enabled} /> Keep the original rip too (“… - original.mkv”)</label>
 				<label class="check"><input type="checkbox" bind:checked={f.transcode_hdr} disabled={!f.transcode_enabled} /> Also touch HDR and Dolby Vision sources</label>
-				<label class="field">GPU device <input bind:value={f.vaapi_device} disabled={!f.transcode_enabled} /></label>
+				<label class="field">
+					GPU for Quick Sync and VAAPI
+					{#if renderNodes.length > 1}
+						<select bind:value={f.vaapi_device} disabled={!f.transcode_enabled}>
+							{#if !renderNodes.some((d) => d.path === f.vaapi_device)}<option value={f.vaapi_device}>{f.vaapi_device}</option>{/if}
+							{#each renderNodes as d (d.path)}
+								<option value={d.path}>{d.path}{d.vendor ? ` (${[d.vendor, d.model].filter(Boolean).join(' ')})` : ''}</option>
+							{/each}
+						</select>
+					{:else}
+						<input bind:value={f.vaapi_device} disabled={!f.transcode_enabled} />
+					{/if}
+				</label>
 				<p class="small muted">Audio, subtitles, chapters and metadata are copied untouched. If a transcode fails, the rip goes to the library as it is.</p>
-				<HardwarePanel />
+				<HardwarePanel bind:hw />
 			</section>
 
 			<section class="card stack">

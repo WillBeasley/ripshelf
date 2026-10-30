@@ -25,7 +25,7 @@ Once a disc is ripped, its job leaves the drive card so the drive can take the n
 
 ## Transcoding
 
-Transcoding is optional, and on by default for VC-1 only. VC-1 is re-encoded to H.265 on the GPU (VAAPI) or the CPU (x265), with black bars cropped. HDR and UHD are left alone unless you say otherwise. Settings → Transcoding sets the codecs, cropping, encoder and quality, whether DVDs, Blu-rays and 4K UHDs are each transcoded and cropped (say, transcode Blu-rays but never crop them), and lists the GPUs and ffmpeg hardware encoders that work in the container (each tested with a short encode).
+Transcoding is optional, and on by default for VC-1 only. VC-1 is re-encoded to H.265 on the GPU (Intel Quick Sync, VAAPI or NVIDIA NVENC) or the CPU (x265), with black bars cropped. HDR and UHD are left alone unless you say otherwise. Settings → Transcoding sets the codecs, cropping, encoder and quality, whether DVDs, Blu-rays and 4K UHDs are each transcoded and cropped (say, transcode Blu-rays but never crop them), and lists the GPUs and ffmpeg hardware encoders that work in the container (each tested with a short encode).
 
 One job transcodes at a time by default, and the others wait under **Transcoding and copying**. **Transcodes at once** raises that, up to 8. It is one limit for the whole install, because workers never transcode: every rip comes back to the controller, which runs ffmpeg. A job still does its own files (a TV disc's episodes) one after another. One is right for x265, which already uses every CPU core; a GPU can often run two or three encodes side by side.
 

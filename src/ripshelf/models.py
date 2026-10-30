@@ -501,7 +501,7 @@ NotifyEvent = Literal["disc", "review", "exists", "done", "failed", "setup"]
 PushoverPriority = Annotated[int, Field(ge=-2, le=1)]
 TranscodeCrop = Literal["off", "when_transcoding", "always"]
 CatalogueSearch = Literal["off", "searxng"]
-TranscodeEncoder = Literal["auto", "vaapi", "x265"]
+TranscodeEncoder = Literal["auto", "qsv", "vaapi", "nvenc", "x265"]
 TranscodeSourceKind = Literal["dvd", "bluray", "uhd"]
 
 
@@ -886,7 +886,7 @@ class Hardware(BaseModel):
     devices: list[HwDevice]
     encoders: list[HwEncoder]
     ffmpeg_found: bool
-    encoder: Literal["vaapi", "x265"] = Field(description="what ripshelf transcodes with now")
+    encoder: Literal["qsv", "vaapi", "nvenc", "x265"] = Field(description="what ripshelf transcodes with now")
     encoder_note: str
     checked_at: float
 
