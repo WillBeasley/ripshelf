@@ -127,6 +127,14 @@ def test_transcode_sources_setting(client, settings):
     assert client.put("/api/settings", json={"transcode_sources": {"hddvd": {}}}).status_code == 422
 
 
+def test_transcode_parallel_setting(client, settings):
+    assert client.get("/api/settings").json()["transcode_parallel"] == 1
+    assert client.put("/api/settings", json={"transcode_parallel": 3}).json()["transcode_parallel"] == 3
+    assert settings.transcode_parallel == 3
+    for bad in (0, 9):
+        assert client.put("/api/settings", json={"transcode_parallel": bad}).status_code == 422
+
+
 def test_folders_from_settings(client, settings, tmp_path):
     films = tmp_path / "films"
     r = client.put("/api/settings", json={"library_dir": str(tmp_path / "lib2"), "movies_dir": str(films),

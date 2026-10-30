@@ -447,7 +447,8 @@ def settings_view(s: Settings) -> SettingsView:
         transcode_crop=s.transcode_crop, transcode_hdr=s.transcode_hdr,
         transcode_sources={k: s.transcode_source(k) for k in ("dvd", "bluray", "uhd")},
         transcode_encoder=s.transcode_encoder, transcode_quality=s.transcode_quality,
-        transcode_keep_original=s.transcode_keep_original, vaapi_device=s.vaapi_device,
+        transcode_keep_original=s.transcode_keep_original, transcode_parallel=s.transcode_parallel,
+        vaapi_device=s.vaapi_device,
         pushover_user_key_set=bool(s.pushover_user_key), pushover_app_token_set=bool(s.pushover_app_token),
         pushover_device=s.pushover_device,
         notify_events={e: integrations.Notifier(s).priority(e) for e in integrations.EVENTS},
@@ -488,6 +489,8 @@ async def put_settings(body: SettingsUpdate, request: Request):
         manager(request).write_default_key()
     if "disabled_drives" in plain or "setup_complete" in plain:
         manager(request).drives_toggled()
+    if "transcode_parallel" in plain:
+        await manager(request).transcode_limit_changed()
     manager(request).publish_status()
     return settings_view(s)
 

@@ -109,6 +109,7 @@ EDITABLE = {
     "transcode_encoder",
     "transcode_quality",
     "transcode_keep_original",
+    "transcode_parallel",
     "vaapi_device",
     "pushover_user_key",
     "pushover_app_token",
@@ -242,6 +243,9 @@ class Settings(BaseSettings):
     transcode_quality: int = Field(21, ge=10, le=40)
     # Keep the untouched rip next to the transcoded file (" - original").
     transcode_keep_original: bool = False
+    # How many jobs transcode at once, across every drive and worker (workers
+    # never transcode; the controller does). Each job does its files in turn.
+    transcode_parallel: int = Field(1, ge=1, le=8)
     vaapi_device: str = "/dev/dri/renderD128"
     # Pushover is off until both are set.
     pushover_user_key: SecretStr | None = None
