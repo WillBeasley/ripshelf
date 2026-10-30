@@ -169,15 +169,13 @@ then `sudo systemctl daemon-reload && sudo systemctl enable --now ripshelf`.
 scripts/pi/setup-pi.sh --tests
 ```
 
-runs what CI runs, which is `ruff check src tests`, `pytest -q` and `npm run check` in `web/`. To run them again by hand:
+runs the same checks as CI, which are `ruff check src tests`, `pytest -q` and `npm run check` in `web/`. To run them again by hand:
 
 ```sh
 .venv/bin/ruff check src tests && .venv/bin/pytest -q
 (cd web && npm run check)
 RIPSHELF_REAL_DRIVES=1 .venv/bin/pytest -q tests/test_drives.py   # also reads the real drives' sysfs
 ```
-
-The tests' simulated UHD rips check that their scratch folder, under the temp folder, has room for a real rip (just over 100 GB). Trixie can mount `/tmp` as a tmpfs in RAM, so setup-pi.sh points `TMPDIR` at `var/tmp` in the checkout when `/tmp` is short. By hand, run `mkdir -p var/tmp`, then `TMPDIR=$PWD/var/tmp .venv/bin/pytest -q`.
 
 ## Transcoding on a Pi
 

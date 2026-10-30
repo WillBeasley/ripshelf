@@ -83,6 +83,23 @@ def no_real_contributions(monkeypatch):
     monkeypatch.setattr(contribute.Contributor, "_post", guarded)
 
 
+@pytest.fixture(autouse=True)
+def roomy_disk(monkeypatch):
+    """Every disk has at least 1 TiB free. The fake discs claim titles of up to 60 GB, and the
+    scratch check before a rip would fail them on a small disk, such as a CI runner's. Tests
+    of low space set their own ``disk_usage``."""
+    import shutil
+
+    real = shutil.disk_usage
+
+    def roomy(path):
+        u = real(path)
+        free = max(u.free, 2**40)
+        return type(u)(max(u.total, u.used + free), u.used, free)
+
+    monkeypatch.setattr(shutil, "disk_usage", roomy)
+
+
 @pytest.fixture
 def settings(tmp_path: Path, monkeypatch) -> Settings:
     """Settings for a Manager on fake drives, everything under tmp_path."""
