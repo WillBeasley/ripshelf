@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..identify.label import drop_last_word
 from ..identify.tmdb import Tmdb, TmdbError, to_candidate
 from ..models import Candidate, DiscMatch, Evidence
 from . import enabled, label
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
 # A disc database's record of this disc is near-certain (people can still file a disc wrongly).
 DISC_MATCH_SCORE = 0.95
 FIND_FOR_TOP = 3
+# A search that finds nothing is retried a word shorter, down to this many words.
+MIN_QUERY_WORDS = 2
 
 
 def same(a: Candidate, b: Candidate) -> bool:
@@ -44,7 +47,27 @@ def merge(into: list[Candidate], got: list[Candidate]) -> list[Candidate]:
 
 
 async def search(s: Settings, queries: list[str], year: int | None) -> tuple[list[Candidate], list[tuple[str, str]]]:
-    """Candidates for the queries (unranked), and (level, note) on what each provider found."""
+    """Candidates for the queries (unranked), and (level, note) on what each provider found.
+
+    Labels can end in noise the cleaner doesn't know ("DIRTY_HARRY_XX"), and a
+    stray word makes the title searches find nothing. So when every provider
+    answered and none found anything, the first query is tried again without its
+    last word. Scoring still checks the title and runtime of whatever turns up.
+    """
+    out, notes = await _search(s, queries, year)
+    query = queries[0] if queries else ""
+    while not out and not any(level == "warning" for level, _ in notes):
+        query = drop_last_word(query)
+        if len(query.split()) < MIN_QUERY_WORDS:
+            break
+        notes.append(("info", f"Nothing found, so searching for “{query}” instead"))
+        got, more = await _search(s, [query], year)
+        out += got
+        notes += more
+    return out, notes
+
+
+async def _search(s: Settings, queries: list[str], year: int | None) -> tuple[list[Candidate], list[tuple[str, str]]]:
     names = [n for n in enabled(s, "movie") if n in ("tmdb", "omdb")]
     out: list[Candidate] = []
     notes: list[tuple[str, str]] = []

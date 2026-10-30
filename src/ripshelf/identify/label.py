@@ -16,6 +16,9 @@ NOISE_TOKENS = {
     "DISC", "DISK", "DVD", "DVD5", "DVD9", "BD", "BD25", "BD50", "BD66", "BD100", "BLURAY",
     "BLU", "RAY", "UHD", "4K", "2160P", "1080P", "HD", "WS", "FS", "WIDESCREEN", "FULLSCREEN",
     "PAL", "NTSC", "UK", "US", "USA", "EU", "EUR", "GER", "FR", "R1", "R2", "R4", "RA", "RB",
+    # Release regions: WW is worldwide, INT/INTL international, SCAN Scandinavian.
+    "WW", "INT", "INTL", "NORDIC", "SCAN", "AU", "AUS", "JP", "JPN", "FRA", "ESP", "ITA", "NL", "BENELUX",
+    "KOR",
     "16X9", "4X3", "ANA", "ANAMORPHIC", "SE", "CE", "LE", "DTS", "AC3", "EXT", "EXTENDED", "DC",
 }
 # Multi-token phrases dropped wherever they appear.
@@ -56,11 +59,16 @@ class ParsedLabel:
         words = self.title.split()
         # For truncated labels, also try without the last (possibly cut) word.
         if len(self.raw) >= 30 and len(words) > 2:
-            words = words[:-1]
-            while len(words) > 1 and words[-1].lower() in SMALL_WORDS:
-                words = words[:-1]
-            out.append(" ".join(words))
+            out.append(drop_last_word(self.title))
         return out
+
+
+def drop_last_word(query: str) -> str:
+    """The query without its last word, and any small words left dangling ("of the")."""
+    words = query.split()[:-1]
+    while len(words) > 1 and words[-1].lower() in SMALL_WORDS:
+        words = words[:-1]
+    return " ".join(words)
 
 
 def title_case(s: str) -> str:
