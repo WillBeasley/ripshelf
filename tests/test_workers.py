@@ -15,7 +15,7 @@ from pydantic import SecretStr
 
 from ripshelf.config import Settings
 from ripshelf.dev.fake import FakeDrives
-from ripshelf.main import create_app
+from ripshelf.main import begin_shutdown, create_app
 from ripshelf.workers import agent as agentmod
 from ripshelf.workers import hub as hubmod
 from ripshelf.workers.agent import Agent, ControllerGone
@@ -46,6 +46,7 @@ def controller(settings):
         time.sleep(0.05)
     port = srv.servers[0].sockets[0].getsockname()[1]
     yield f"http://127.0.0.1:{port}", app
+    begin_shutdown(app)  # so the workers' long-polls end now, not at uvicorn's timeout
     srv.should_exit = True
     t.join(10)
 
@@ -332,6 +333,7 @@ def flaky_client(url: str, token: str = TOKEN):
     return client, Flaky
 
 
+@pytest.mark.slow
 async def test_short_outage_mid_rip_ends_nothing(controller, tmp_path, monkeypatch):
     url, app = controller
     monkeypatch.setenv("RIPSHELF_FAKE_RIP_SECONDS", "6")
