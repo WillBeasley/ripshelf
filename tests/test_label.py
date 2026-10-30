@@ -17,6 +17,8 @@ from ripshelf.identify.label import clean_bdmt_title, name_differs_from_label, p
         ("INCEPTION_UHD", "Inception", None, None),
         ("AVATAR_WS_PAL", "Avatar", None, None),
         ("LORD_OF_THE_RINGS", "Lord of the Rings", None, None),
+        ("DIRTY_HARRY_WW", "Dirty Harry", None, None),
+        ("HEAT_INTL_NORDIC", "Heat", None, None),
     ],
 )
 def test_parse_label(label, title, year, disc):
