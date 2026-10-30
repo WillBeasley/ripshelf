@@ -150,6 +150,10 @@ coverage==7.17.0 \
     --hash=sha256:f8bc2cd4c6aa58be1ca243fb8cddb6c3c42031fe4403991ad9cf2b3baed03d9f \
     --hash=sha256:fb5745048ee20f796b0e3ab61831049e749acff188563e2af32f58ede957ac1b
     # via pytest-cov
+execnet==2.1.2 \
+    --hash=sha256:63d83bfdd9a23e35b9c6a3261412324f964c2ec8dcd8d3c6916ee9373e0befcd \
+    --hash=sha256:67fba928dd5a544b783f6056f449e5e3931a5c378b128bc18501f7ea79e296ec
+    # via pytest-xdist
 fastapi==0.162.0 \
     --hash=sha256:3785963de305dd09912426cb81f2d230fce98ab3521cdfe97265c8d14983128c \
     --hash=sha256:6a22c1e2e6e32e0633ee7e170f00009a29b8228b16feb219ee42f32fd8d88a8f
@@ -479,6 +483,7 @@ pytest==9.2.0 \
     #   ripshelf (pyproject.toml)
     #   pytest-asyncio
     #   pytest-cov
+    #   pytest-xdist
 pytest-asyncio==1.4.1 \
     --hash=sha256:507afa78ec77c6661164ef1a2368bc7820383fd1a14b2a7f813de8b5a92949cc \
     --hash=sha256:e8266eb094e5ee9ffdb2068c9836f33e209ea77a970eb846933d416b5602669b
@@ -486,6 +491,10 @@ pytest-asyncio==1.4.1 \
 pytest-cov==7.1.0 \
     --hash=sha256:30674f2b5f6351aa09702a9c8c364f6a01c27aae0c1366ae8016160d1efc56b2 \
     --hash=sha256:a0461110b7865f9a271aa1b51e516c9a95de9d696734a2f71e3e78f46e1d4678
+    # via ripshelf (pyproject.toml)
+pytest-xdist==3.8.0 \
+    --hash=sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88 \
+    --hash=sha256:7e578125ec9bc6050861aa93f2d59f1d8d085595d6551c2c90b6f4fad8d3a9f1
     # via ripshelf (pyproject.toml)
 python-dotenv==1.2.4 \
     --hash=sha256:42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc \

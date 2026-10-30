@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+import pytest
 from fastapi.testclient import TestClient
 
 from ripshelf import applog
@@ -16,6 +17,7 @@ from .conftest import until
 PM = "/dev/fake-sr1"
 
 
+@pytest.mark.slow
 async def test_delete_finished_job_keeps_library_and_disc_cache(harness, settings):
     async with harness(PM) as h:
         job = await h.wait_job(lambda j: j.state == JobState.review)

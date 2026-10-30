@@ -28,6 +28,7 @@ def keyed(settings):
     return settings
 
 
+@pytest.mark.slow
 async def test_sarah_and_duck_compilation_end_to_end(harness, keyed, settings):
     with respx.mock(assert_all_called=False) as router:
         mock_show(router, "sarah-duck")
@@ -179,6 +180,7 @@ async def test_unmatched_titles(harness, keyed, settings, setting, where):
             assert names[0].startswith("Sarah & Duck - S00E09")  # after TMDB's 8 specials
 
 
+@pytest.mark.slow
 async def test_tv_api(settings, keyed):
     from fastapi.testclient import TestClient
 

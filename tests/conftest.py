@@ -30,6 +30,11 @@ needs_unix_permissions = pytest.mark.skipif(
     sys.platform == "win32" or os.geteuid() == 0, reason="needs POSIX permissions as a normal user")
 
 
+def pytest_collection_modifyitems(items):
+    """The slow tests go first, so that in a parallel run they overlap the quick ones."""
+    items.sort(key=lambda item: item.get_closest_marker("slow") is None)
+
+
 @pytest.fixture
 def fixture_text():
     def load(name: str) -> str:

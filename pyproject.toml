@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-cov>=5", "respx>=0.21", "ruff>=0.6", "pyyaml>=6"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-cov>=5", "pytest-xdist>=3.6", "respx>=0.21", "ruff>=0.6", "pyyaml>=6"]
 
 [project.scripts]
 ripshelf = "ripshelf.main:run"
@@ -34,6 +34,8 @@ ripshelf = ["static/**/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# The slow tests run first (see conftest.py), so a parallel run (-n) finishes evenly.
+markers = ["slow: an end-to-end test that takes ten seconds or more; -m 'not slow' skips them"]
 
 [tool.ruff]
 line-length = 100

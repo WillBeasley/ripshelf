@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from ripshelf.bus import EventBus
 from ripshelf.config import Settings
 from ripshelf.db import Database
@@ -48,6 +50,7 @@ async def test_review_confirm_finalise(settings: Settings):
         db.close()
 
 
+@pytest.mark.slow
 async def test_same_disc_again_is_recognised_from_cache(settings: Settings):
     m, db, backend = await run_manager(settings, {"/dev/fake-sr1"})
     try:

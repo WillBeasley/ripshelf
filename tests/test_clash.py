@@ -240,6 +240,7 @@ async def test_eject_to_check_and_the_same_disc_carries_on(harness, keyed, setti
             assert any("Same disc back" in e.message for e in h.db.events(job.id))
 
 
+@pytest.mark.slow
 async def test_eject_to_check_and_a_different_disc_ends_the_job(harness, keyed, settings):
     put(film(settings))
     with respx.mock(assert_all_called=False) as router:
@@ -281,6 +282,7 @@ async def test_identify_again_from_a_held_clash_then_rips(harness, keyed, settin
 # --- eject to check during TV review ----------------------------------------------------------
 
 
+@pytest.mark.slow
 async def test_tv_check_mid_rip_keeps_finished_titles_and_rips_the_rest(harness, settings, monkeypatch):
     from .test_tv_pipeline import SD
 
