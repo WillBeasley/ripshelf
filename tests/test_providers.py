@@ -444,17 +444,17 @@ async def test_films_merges_tmdb_and_omdb(keyed):
 @respx.mock
 async def test_films_retries_a_word_shorter_when_nothing_is_found(keyed):
     def search(request):
-        found = request.url.params["query"] == "Dirty Harry"
+        found = request.url.params["query"] == "Dusty Hal"
         return httpx.Response(200, json={"results": [
-            {"id": 984, "title": "Dirty Harry", "release_date": "1971-12-22"}] if found else []})
+            {"id": 984, "title": "Dusty Hal", "release_date": "1971-12-22"}] if found else []})
 
     route = respx.get(f"{TMDB}/search/movie").mock(side_effect=search)
     respx.get(f"{TMDB}/movie/984").mock(return_value=httpx.Response(200, json={"id": 984, "runtime": 102}))
-    got, notes = await films.search(keyed, ["Dirty Harry Xx Yy"], None)
-    assert [c.title for c in got] == ["Dirty Harry"]
+    got, notes = await films.search(keyed, ["Dusty Hal Xx Yy"], None)
+    assert [c.title for c in got] == ["Dusty Hal"]
     assert [r.request.url.params["query"] for r in route.calls] == [
-        "Dirty Harry Xx Yy", "Dirty Harry Xx", "Dirty Harry"]
-    assert ("info", "Nothing found, so searching for “Dirty Harry” instead") in notes
+        "Dusty Hal Xx Yy", "Dusty Hal Xx", "Dusty Hal"]
+    assert ("info", "Nothing found, so searching for “Dusty Hal” instead") in notes
     # Never down to one word, which would match far too much.
     got, _ = await films.search(keyed, ["Nothing At All Xx"], None)
     assert got == [] and [r.request.url.params["query"] for r in route.calls[3:]] == [
@@ -464,7 +464,7 @@ async def test_films_retries_a_word_shorter_when_nothing_is_found(keyed):
 @respx.mock
 async def test_films_does_not_retry_when_a_provider_failed(keyed):
     route = respx.get(f"{TMDB}/search/movie").mock(return_value=httpx.Response(401))
-    got, notes = await films.search(keyed, ["Dirty Harry Xx"], None)
+    got, notes = await films.search(keyed, ["Dusty Hal Xx"], None)
     assert got == [] and len(route.calls) == 1 and notes == [("warning", "TMDB rejected the API key")]
 
 
