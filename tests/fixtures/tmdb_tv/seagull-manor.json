@@ -1,11 +1,11 @@
 {
- "query": "Fawlty Towers",
+ "query": "Seagull Manor",
  "search": {
   "results": [
    {
     "id": 2207,
-    "name": "Fawlty Towers",
-    "original_name": "Fawlty Towers",
+    "name": "Seagull Manor",
+    "original_name": "Seagull Manor",
     "first_air_date": "1975-09-19",
     "genre_ids": [
      35
@@ -21,8 +21,8 @@
  },
  "show": {
   "id": 2207,
-  "name": "Fawlty Towers",
-  "original_name": "Fawlty Towers",
+  "name": "Seagull Manor",
+  "original_name": "Seagull Manor",
   "first_air_date": "1975-09-19",
   "episode_run_time": [
    30
@@ -58,42 +58,42 @@
     {
      "season_number": 1,
      "episode_number": 1,
-     "name": "A Touch of Class",
+     "name": "A Hint of Style",
      "runtime": 30,
      "air_date": "1975-09-19"
     },
     {
      "season_number": 1,
      "episode_number": 2,
-     "name": "The Builders",
+     "name": "The Plumbers",
      "runtime": 28,
      "air_date": "1975-09-26"
     },
     {
      "season_number": 1,
      "episode_number": 3,
-     "name": "The Wedding Party",
+     "name": "The Birthday Picnic",
      "runtime": 33,
      "air_date": "1975-10-03"
     },
     {
      "season_number": 1,
      "episode_number": 4,
-     "name": "The Hotel Inspectors",
+     "name": "The Inn Critics",
      "runtime": 29,
      "air_date": "1975-10-10"
     },
     {
      "season_number": 1,
      "episode_number": 5,
-     "name": "Gourmet Night",
+     "name": "Banquet Tapuw",
      "runtime": 29,
      "air_date": "1975-10-17"
     },
     {
      "season_number": 1,
      "episode_number": 6,
-     "name": "The Germans",
+     "name": "The Tourists",
      "runtime": 31,
      "air_date": "1975-10-24"
     }
@@ -105,42 +105,42 @@
     {
      "season_number": 2,
      "episode_number": 1,
-     "name": "Communication Problems",
+     "name": "Pusutefuzisam Sovavidu",
      "runtime": 31,
      "air_date": "1979-02-19"
     },
     {
      "season_number": 2,
      "episode_number": 2,
-     "name": "The Psychiatrist",
+     "name": "The Zevuwohituge",
      "runtime": 36,
      "air_date": "1979-02-26"
     },
     {
      "season_number": 2,
      "episode_number": 3,
-     "name": "Waldorf Salad",
+     "name": "Zekalaw Raser",
      "runtime": 32,
      "air_date": "1979-03-05"
     },
     {
      "season_number": 2,
      "episode_number": 4,
-     "name": "The Kipper and the Corpse",
+     "name": "The Gemodo and the Sekevi",
      "runtime": 32,
      "air_date": "1979-03-12"
     },
     {
      "season_number": 2,
      "episode_number": 5,
-     "name": "The Anniversary",
+     "name": "The Suhosogazof",
      "runtime": 29,
      "air_date": "1979-03-26"
     },
     {
      "season_number": 2,
      "episode_number": 6,
-     "name": "Basil the Rat",
+     "name": "Mazos the Wuz",
      "runtime": 34,
      "air_date": "1979-10-25"
     }

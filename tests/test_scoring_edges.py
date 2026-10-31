@@ -41,22 +41,22 @@ def test_pal_speedup_edges():
 
 
 def test_pal_evidence_mentions_speedup():
-    disc = DiscFacts(names=["Heat"], main_duration_s=96 * 60, pal=True)
-    c = score_candidate(Candidate(title="Heat", runtime=100), disc)
+    disc = DiscFacts(names=["Ember"], main_duration_s=96 * 60, pal=True)
+    c = score_candidate(Candidate(title="Ember", runtime=100), disc)
     assert any("PAL" in e.text for e in c.evidence)
 
 
 def test_scores_are_rounded_to_three_places():
-    disc = DiscFacts(names=["Heat"], main_duration_s=100 * 60)
+    disc = DiscFacts(names=["Ember"], main_duration_s=100 * 60)
     for rt in range(80, 121):
-        c = score_candidate(Candidate(title="Heat", runtime=rt), disc)
+        c = score_candidate(Candidate(title="Ember", runtime=rt), disc)
         assert c.score == round(c.score, 3)
 
 
 def test_near_threshold():
     # Find a runtime gap that lands just under and just over the line.
-    disc = DiscFacts(names=["Heat"], main_duration_s=6000)
-    scores = {rt: score_candidate(Candidate(title="Heat", runtime=rt), disc).score for rt in range(100, 120)}
+    disc = DiscFacts(names=["Ember"], main_duration_s=6000)
+    scores = {rt: score_candidate(Candidate(title="Ember", runtime=rt), disc).score for rt in range(100, 120)}
     below = [s for s in scores.values() if s < THRESHOLD]
     above = [s for s in scores.values() if s >= THRESHOLD]
     assert below and above
@@ -65,58 +65,58 @@ def test_near_threshold():
 
 
 def test_exact_tie_never_auto_confirms():
-    disc = DiscFacts(names=["Heat"], main_duration_s=100 * 60)
-    ranked = rank([Candidate(title="Heat", runtime=100, vote_count=10),
-                   Candidate(title="Heat", runtime=100, vote_count=12)], disc)
+    disc = DiscFacts(names=["Ember"], main_duration_s=100 * 60)
+    ranked = rank([Candidate(title="Ember", runtime=100, vote_count=10),
+                   Candidate(title="Ember", runtime=100, vote_count=12)], disc)
     assert all(c.score < THRESHOLD for c in ranked)
     assert ranked[0].vote_count == 12  # ties ordered by votes
 
 
 def test_tie_with_far_better_known_film_auto_confirms():
-    disc = DiscFacts(names=["Heat"], main_duration_s=170 * 60)
-    ranked = rank([Candidate(title="Heat", year=1986, runtime=101, vote_count=60),
-                   Candidate(title="Heat", year=1995, runtime=170, vote_count=7000),
-                   Candidate(title="Heat", year=2013, runtime=170, vote_count=40)], disc)
+    disc = DiscFacts(names=["Ember"], main_duration_s=170 * 60)
+    ranked = rank([Candidate(title="Ember", year=1986, runtime=101, vote_count=60),
+                   Candidate(title="Ember", year=1995, runtime=170, vote_count=7000),
+                   Candidate(title="Ember", year=2013, runtime=170, vote_count=40)], disc)
     assert ranked[0].year == 1995 and ranked[0].score >= THRESHOLD
     assert any("better known" in e.text for e in ranked[0].evidence)
 
 
 def test_tie_without_votes_flags_both():
-    disc = DiscFacts(names=["Heat"], main_duration_s=None)
-    ranked = rank([Candidate(title="Heat", year=1995), Candidate(title="Heat", year=2013)], disc)
+    disc = DiscFacts(names=["Ember"], main_duration_s=None)
+    ranked = rank([Candidate(title="Ember", year=1995), Candidate(title="Ember", year=2013)], disc)
     assert all(any("almost as high" in e.text for e in c.evidence) for c in ranked)
 
 
 def test_rank_empty_and_single():
     assert rank([], DiscFacts()) == []
-    one = rank([Candidate(title="Heat", runtime=170)], DiscFacts(names=["Heat"], main_duration_s=170 * 60))
+    one = rank([Candidate(title="Ember", runtime=170)], DiscFacts(names=["Ember"], main_duration_s=170 * 60))
     assert one[0].score >= THRESHOLD
 
 
 def test_no_disc_names():
-    c = score_candidate(Candidate(title="Heat", runtime=170), DiscFacts(main_duration_s=170 * 60))
+    c = score_candidate(Candidate(title="Ember", runtime=170), DiscFacts(main_duration_s=170 * 60))
     assert c.score < THRESHOLD
     assert c.evidence[0].ok is False
 
 
 def test_original_title_matches():
-    disc = DiscFacts(names=["Amelie"], main_duration_s=122 * 60)
-    c = score_candidate(Candidate(title="Le Fabuleux Destin d'Amélie Poulain", original_title="Amélie",
+    disc = DiscFacts(names=["Elodie"], main_duration_s=122 * 60)
+    c = score_candidate(Candidate(title="Le Merveilleux Été d'Élodie Marchand", original_title="Élodie",
                                   runtime=122), disc)
     assert c.score >= THRESHOLD
 
 
 def test_year_one_off_is_partial():
-    disc = DiscFacts(names=["Heat"], main_duration_s=170 * 60, label_year=1996)
-    c = score_candidate(Candidate(title="Heat", year=1995, runtime=170), disc)
+    disc = DiscFacts(names=["Ember"], main_duration_s=170 * 60, label_year=1996)
+    c = score_candidate(Candidate(title="Ember", year=1995, runtime=170), disc)
     assert any("one off" in e.text for e in c.evidence)
 
 
 def test_normalise_and_similarity_edges():
-    assert normalise("The  Wild—Robot!") == "wild robot"
-    assert title_similarity("", "Heat") == 0.0
+    assert normalise("The  Brass—Heron!") == "brass heron"
+    assert title_similarity("", "Ember") == 0.0
     assert title_similarity("!!!", "???") == 0.0
-    assert title_similarity("Amélie", "Amelie") == 1.0
+    assert title_similarity("Élodie", "Elodie") == 1.0
 
 
 def test_fmt_duration():
@@ -125,23 +125,23 @@ def test_fmt_duration():
 
 
 def test_non_latin_titles_match_themselves():
-    assert title_similarity("千と千尋の神隠し", "千と千尋の神隠し") == 1.0
-    assert title_similarity("Léon", "Leon") == 1.0
-    disc = DiscFacts(names=["千と千尋の神隠し"], main_duration_s=125 * 60)
-    assert score_candidate(Candidate(title="Spirited Away", original_title="千と千尋の神隠し",
+    assert title_similarity("星降る町の灯台", "星降る町の灯台") == 1.0
+    assert title_similarity("Rémy", "Remy") == 1.0
+    disc = DiscFacts(names=["星降る町の灯台"], main_duration_s=125 * 60)
+    assert score_candidate(Candidate(title="Starfall Lighthouse", original_title="星降る町の灯台",
                                      runtime=125), disc).score >= THRESHOLD
 
 
 def test_extended_cut_runtime():
     from ripshelf.identify.label import parse_label
 
-    assert parse_label("LOTR_FOTR_EXT_D1").extended and parse_label("ALIEN_DIRECTORS_CUT").extended
-    assert not parse_label("PRACTICAL_MAGIC").extended
-    disc = DiscFacts(names=["The Lord of the Rings: The Fellowship of the Ring"], main_duration_s=208 * 60)
-    fotr = Candidate(title="The Lord of the Rings: The Fellowship of the Ring", runtime=179)
-    rotk = Candidate(title="The Lord of the Rings: The Return of the King", runtime=201)
+    assert parse_label("KOTL_GOTL_EXT_D1").extended and parse_label("STOWAWAY_DIRECTORS_CUT").extended
+    assert not parse_label("MOONLIT_ORCHARD").extended
+    disc = DiscFacts(names=["The Keeper of the Lanterns: The Guild of the Lantern"], main_duration_s=208 * 60)
+    fotr = Candidate(title="The Keeper of the Lanterns: The Guild of the Lantern", runtime=179)
+    rotk = Candidate(title="The Keeper of the Lanterns: The Return of the Warden", runtime=201)
     ranked = rank([rotk, fotr], disc)
-    assert ranked[0].title.endswith("Fellowship of the Ring")
+    assert ranked[0].title.endswith("Guild of the Lantern")
     assert any("probably an extended cut" in e.text for e in ranked[0].evidence)
     labelled = score_candidate(fotr.model_copy(), disc.model_copy(update={"extended": True}))
     plain = score_candidate(fotr.model_copy(), disc)

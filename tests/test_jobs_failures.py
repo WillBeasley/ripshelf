@@ -13,9 +13,9 @@ from ripshelf.models import TRANSITIONS, Candidate, JobState, Problem, RipState
 
 from .conftest import needs_unix_permissions, until
 
-PM = "/dev/fake-sr1"  # Practical Magic DVD
+PM = "/dev/fake-sr1"  # Moonlit Orchard DVD
 HANG = "/dev/fake-sr3"  # scan never finishes
-MANUAL = Candidate(source="manual", title="Practical Magic", year=1998)
+MANUAL = Candidate(source="manual", title="Moonlit Orchard", year=1998)
 
 
 async def test_disc_removed_mid_scan(harness):
@@ -240,7 +240,7 @@ async def confirm_and_wait(h, state=JobState.failed):
 
 
 async def test_destination_exists_is_never_overwritten(harness, settings):
-    dest = settings.library_dir / "Movies/Practical Magic (1998)/Practical Magic (1998).mkv"
+    dest = settings.library_dir / "Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv"
     dest.parent.mkdir(parents=True)
     dest.write_bytes(b"precious")
     async with harness(PM) as h:
@@ -286,7 +286,7 @@ async def test_copy_failure_leaves_no_partial(harness, settings, monkeypatch):
     async with harness(PM) as h:
         job = await confirm_and_wait(h)
         assert job.problem.code == "copy_failed" and "No space" in job.problem.message
-        folder = settings.library_dir / "Movies/Practical Magic (1998)"
+        folder = settings.library_dir / "Movies/Moonlit Orchard (1998)"
         assert not any(p.name.endswith(".partial") for p in folder.rglob("*"))
         # Free space and retry, and it completes.
         monkeypatch.setattr(library, "copy_verified", real_copy)

@@ -135,10 +135,10 @@ def test_status_and_tray_commands(fake):
 
 
 async def test_disc_identity(fake):
-    fake.w.volumes["G:"] = ("THE_WILD_ROBOT", "9243-854A", "UDF")
+    fake.w.volumes["G:"] = ("THE_BRASS_HERON", "9243-854A", "UDF")
     ident = await fake.disc_identity("G:")
     assert (ident.label, ident.uuid, ident.fs_type, ident.size_bytes) == (
-        "THE_WILD_ROBOT", "9243-854A", "udf", 100_100_014_080)
+        "THE_BRASS_HERON", "9243-854A", "udf", 100_100_014_080)
 
 
 def test_parse_device_descriptor():

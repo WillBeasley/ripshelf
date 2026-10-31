@@ -21,7 +21,7 @@ PM = "/dev/fake-sr1"
 async def test_delete_finished_job_keeps_library_and_disc_cache(harness, settings):
     async with harness(PM) as h:
         job = await h.wait_job(lambda j: j.state == JobState.review)
-        await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+        await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
         done = await h.wait_job(lambda j: j.state == JobState.done)
         work = h.m.work_dir(done)
         assert work.exists()
@@ -35,7 +35,7 @@ async def test_delete_finished_job_keeps_library_and_disc_cache(harness, setting
         assert JobsDeleted(ids=[done.id]).model_dump_json() in seen
         assert h.m.drives["fake-ihas122"].job_id is None
         # The film stays in the library and the disc is still recognised.
-        assert (settings.library_dir / "Movies/Practical Magic (1998)/Practical Magic (1998).mkv").exists()
+        assert (settings.library_dir / "Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv").exists()
         h.backend.insert(PM)
         again = await until(lambda: next(iter(h.db.list_jobs()), None))
         again = await h.wait_job(lambda j: j.id == again.id and j.identity is not None)

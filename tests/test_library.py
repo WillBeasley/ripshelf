@@ -36,8 +36,8 @@ from ripshelf.library import (
     ("nul", "nul_"),
     ("Com1.txt", "Com1.txt_"),
     ("Console", "Console"),
-    ("Amélie", "Amélie"),
-    ("千と千尋の神隠し", "千と千尋の神隠し"),
+    ("Élodie", "Élodie"),
+    ("星降る町の灯台", "星降る町の灯台"),
 ])
 def test_safe_name(raw, want):
     assert safe_name(raw) == want
@@ -57,8 +57,8 @@ def test_movie_paths_cannot_escape_the_library(tmp_path):
 
 
 def test_movie_paths_naming(tmp_path):
-    folder, dest = movie_paths(tmp_path / "Movies", "The Wild Robot", 2024, uhd=True)
-    assert dest == tmp_path / "Movies/The Wild Robot (2024)/The Wild Robot (2024) - 2160p.mkv"
+    folder, dest = movie_paths(tmp_path / "Movies", "The Brass Heron", 2024, uhd=True)
+    assert dest == tmp_path / "Movies/The Brass Heron (2024)/The Brass Heron (2024) - 2160p.mkv"
     _, dest = movie_paths(tmp_path / "Movies", "Untitled", None, uhd=False)
     assert dest.name == "Untitled.mkv"
 
@@ -283,7 +283,7 @@ async def test_finalise_shows_the_copy_then_the_check(harness, monkeypatch):
     async with harness("/dev/fake-sr1") as h:
         job = await h.wait_job(lambda j: j.state == JobState.review)
         with h.bus.subscribe() as q:
-            await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+            await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
             await h.wait_job(lambda j: j.state == JobState.done)
             seen = []
             while not q.empty():

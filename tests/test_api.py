@@ -54,10 +54,10 @@ def test_disc_to_library_through_the_api(client, settings):
     assert client.get(f"/api/jobs/{job['id']}/log?kind=scan").json()
     assert client.get(f"/api/jobs/{job['id']}/log?kind=transcode").json() == []
     r = client.post(f"/api/jobs/{job['id']}/confirm",
-                    json={"candidate": {"title": "Practical Magic", "year": 1998, "source": "manual"}})
+                    json={"candidate": {"title": "Moonlit Orchard", "year": 1998, "source": "manual"}})
     assert r.status_code == 200, r.text
     done = wait(client, lambda j: j["state"] == "done")
-    assert Path(done["destination"]).parts[-2:] == ("Practical Magic (1998)", "Practical Magic (1998).mkv")
+    assert Path(done["destination"]).parts[-2:] == ("Moonlit Orchard (1998)", "Moonlit Orchard (1998).mkv")
     # Confirming again, when it's not waiting for an identity any more.
     r = client.post(f"/api/jobs/{job['id']}/confirm", json={"candidate": {"title": "X"}})
     assert r.status_code == 409
@@ -99,7 +99,7 @@ def test_bad_query_values(client):
 def test_search_without_key(client):
     client.post("/api/dev/insert/fake-ihas122")
     job = wait(client, lambda j: j["state"] == "review")
-    r = client.post(f"/api/jobs/{job['id']}/search", json={"query": "Practical Magic"})
+    r = client.post(f"/api/jobs/{job['id']}/search", json={"query": "Moonlit Orchard"})
     assert r.status_code == 409 and "TMDB" in r.json()["detail"]
 
 

@@ -157,10 +157,10 @@ def test_sbin_fallback(tmp_path, monkeypatch):
 async def test_disc_identity_parses_blkid(sysfs, tmp_path):
     sysfs({"sr0": {"size": "10"}})
     blkid = tmp_path / "blkid"
-    blkid.write_text("#!/bin/sh\necho LABEL=THE_WILD_ROBOT\necho UUID=abc\necho TYPE=udf\necho junk\n")
+    blkid.write_text("#!/bin/sh\necho LABEL=THE_BRASS_HERON\necho UUID=abc\necho TYPE=udf\necho junk\n")
     blkid.chmod(0o755)
     ident = await SysfsDrives(blkid=str(blkid)).disc_identity("/dev/sr0")
-    assert (ident.label, ident.uuid, ident.fs_type) == ("THE_WILD_ROBOT", "abc", "udf")
+    assert (ident.label, ident.uuid, ident.fs_type) == ("THE_BRASS_HERON", "abc", "udf")
 
 
 @pytest.mark.skipif(not os.environ.get("RIPSHELF_REAL_DRIVES"), reason="set RIPSHELF_REAL_DRIVES=1 to read real sysfs")

@@ -12,16 +12,16 @@ from pydantic import SecretStr
 from ripshelf.models import Candidate, JobState, RipState, TitleRole
 
 from .conftest import until
-from .test_jobs_identify import mock_tmdb, practical_magic
+from .test_jobs_identify import mock_tmdb, moonlit_orchard
 from .test_tv_pipeline import CASE_ORDER, SD
 from .tvfix import mock_show
 
 PM = "/dev/fake-sr1"
-MANUAL = Candidate(source="manual", title="Practical Magic", year=1998)
+MANUAL = Candidate(source="manual", title="Moonlit Orchard", year=1998)
 
 
 def film(settings) -> Path:
-    return settings.library_dir / "Movies/Practical Magic (1998)/Practical Magic (1998).mkv"
+    return settings.library_dir / "Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv"
 
 
 def put(path: Path, data: bytes = b"old film") -> Path:
@@ -39,7 +39,7 @@ def keyed(settings):
 async def test_auto_confirmed_film_already_there_holds_the_rip(harness, keyed, settings):
     old = put(film(settings))
     with respx.mock(assert_all_called=False) as router:
-        practical_magic(router)
+        moonlit_orchard(router)
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.clash)
             await asyncio.sleep(0.5)
@@ -48,7 +48,7 @@ async def test_auto_confirmed_film_already_there_holds_the_rip(harness, keyed, s
             assert not any(settings.scratch_dir.rglob("*.mkv"))
             [f] = job.clash.files
             assert f.path == str(old) and f.size_bytes == len(b"old film") and not job.clash.proposed
-            assert any("Already in the library: Practical Magic (1998).mkv" in e.message for e in h.db.events(job.id))
+            assert any("Already in the library: Moonlit Orchard (1998).mkv" in e.message for e in h.db.events(job.id))
             # Skip means cancelled and ejected, with no rip at all.
             await h.m.resolve_clash(job.id, "skip")
             assert h.job(job.id).state == JobState.cancelled
@@ -59,7 +59,7 @@ async def test_auto_confirmed_film_already_there_holds_the_rip(harness, keyed, s
 async def test_overwrite_rips_and_replaces_only_after_verifying(harness, keyed, settings):
     old = put(film(settings))
     with respx.mock(assert_all_called=False) as router:
-        practical_magic(router)
+        moonlit_orchard(router)
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.clash)
             await h.m.resolve_clash(job.id, "overwrite")
@@ -78,7 +78,7 @@ async def test_failed_overwrite_keeps_the_old_file(harness, keyed, settings, mon
 
     monkeypatch.setattr(library, "copy_verified", broken)
     with respx.mock(assert_all_called=False) as router:
-        practical_magic(router)
+        moonlit_orchard(router)
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.clash)
             await h.m.resolve_clash(job.id, "overwrite")
@@ -89,12 +89,12 @@ async def test_failed_overwrite_keeps_the_old_file(harness, keyed, settings, mon
 async def test_keep_both_saves_an_emby_version(harness, keyed, settings):
     old = put(film(settings))
     with respx.mock(assert_all_called=False) as router:
-        practical_magic(router)
+        moonlit_orchard(router)
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.clash)
             await h.m.resolve_clash(job.id, "keep_both")
             done = await h.wait_job(lambda j: j.state == JobState.done)
-    new = old.parent / "Practical Magic (1998) - DVD.mkv"
+    new = old.parent / "Moonlit Orchard (1998) - DVD.mkv"
     assert done.destination == str(new) and new.stat().st_size > 0 and old.read_bytes() == b"old film"
 
 
@@ -104,13 +104,13 @@ async def test_strong_best_guess_in_review_is_checked_before_ripping(harness, se
     settings.auto_confirm_threshold = 1.0
     put(film(settings))
     with respx.mock(assert_all_called=False) as router:
-        mock_tmdb(router, [{"id": 6435, "title": "Practical Magic", "release_date": "1998-10-16"}],
+        mock_tmdb(router, [{"id": 6435, "title": "Moonlit Orchard", "release_date": "1998-10-16"}],
                   {"6435": {"runtime": 109}})  # a few minutes off, so scores below 1
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.clash)
             assert job.clash.proposed and job.identity is None and job.rip.state == RipState.pending
             # It isn't that film after all, so confirming another one starts the rip.
-            await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=2001))
+            await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=2001))
             await h.wait_job(lambda j: j.state == JobState.done)
 
 
@@ -149,10 +149,10 @@ async def test_a_file_appearing_during_the_copy_is_never_overwritten(harness, se
 
 async def test_tv_partial_clash_skips_only_the_clashing_episode(harness, settings):
     settings.tmdb_api_key = SecretStr("k")
-    clash = put(settings.library_dir / "TV/Sarah & Duck (2013)/Season 03/Sarah & Duck - S03E28 - Pillow Fill.mkv",
+    clash = put(settings.library_dir / "TV/Pippa & Goose (2013)/Season 03/Pippa & Goose - S03E28 - Cushion Stuff.mkv",
                 b"keep")
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done", timeout=60)
             await h.m.tv_match_text(job.id, CASE_ORDER)
@@ -190,13 +190,13 @@ def test_exists_notification_defaults_on_even_for_old_settings(settings):
 
 
 @pytest.mark.parametrize("label, name, kind, want", [
-    ("BLADE_RUNNER_DIRECTORS_CUT", None, "bluray", "Director's Cut"),
-    ("ALIEN_DC", None, "dvd", "Director's Cut"),
-    ("LOTR_EXT_DISC1", None, "bluray", "Extended"),
+    ("GLASS_HUNTER_DIRECTORS_CUT", None, "bluray", "Director's Cut"),
+    ("STOWAWAY_DC", None, "dvd", "Director's Cut"),
+    ("KOTL_EXT_DISC1", None, "bluray", "Extended"),
     ("FILM", "Film - Theatrical Edition", "bluray", "Theatrical"),
-    ("THE_WILD_ROBOT", None, "uhd", "2160p"),
-    ("PRACTICAL_MAGIC", None, "bluray", "1080p"),
-    ("PRACTICAL_MAGIC", None, "dvd", "DVD"),
+    ("THE_BRASS_HERON", None, "uhd", "2160p"),
+    ("MOONLIT_ORCHARD", None, "bluray", "1080p"),
+    ("MOONLIT_ORCHARD", None, "dvd", "DVD"),
     ("ODD_THING", None, None, "Odd Thing"),
 ])
 def test_keep_both_version_label(label, name, kind, want):
@@ -211,12 +211,12 @@ def test_keep_both_version_label(label, name, kind, want):
 
 async def test_keep_both_name_is_offered_and_numbered_if_taken(harness, keyed, settings):
     put(film(settings))
-    put(film(settings).parent / "Practical Magic (1998) - DVD.mkv")
+    put(film(settings).parent / "Moonlit Orchard (1998) - DVD.mkv")
     with respx.mock(assert_all_called=False) as router:
-        practical_magic(router)
+        moonlit_orchard(router)
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.clash)
-            assert job.clash.keep_both_name == "Practical Magic (1998) - DVD 2.mkv"
+            assert job.clash.keep_both_name == "Moonlit Orchard (1998) - DVD 2.mkv"
 
 
 # --- eject to check -------------------------------------------------------------------------
@@ -225,7 +225,7 @@ async def test_keep_both_name_is_offered_and_numbered_if_taken(harness, keyed, s
 async def test_eject_to_check_and_the_same_disc_carries_on(harness, keyed, settings):
     put(film(settings))
     with respx.mock(assert_all_called=False) as router:
-        practical_magic(router)
+        moonlit_orchard(router)
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.clash)
             checking = await h.m.check_disc(job.id)
@@ -244,7 +244,7 @@ async def test_eject_to_check_and_the_same_disc_carries_on(harness, keyed, setti
 async def test_eject_to_check_and_a_different_disc_ends_the_job(harness, keyed, settings):
     put(film(settings))
     with respx.mock(assert_all_called=False) as router:
-        practical_magic(router)
+        moonlit_orchard(router)
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.clash)
             await h.m.check_disc(job.id)
@@ -270,7 +270,7 @@ async def test_eject_to_check_is_refused_mid_rip_and_when_not_waiting(harness, s
 async def test_identify_again_from_a_held_clash_then_rips(harness, keyed, settings):
     put(film(settings))
     with respx.mock(assert_all_called=False) as router:
-        practical_magic(router)
+        moonlit_orchard(router)
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.clash and j.rip.state == RipState.pending)
             film(settings).unlink()  # it was a mistake, and removed from the library meanwhile
@@ -316,7 +316,7 @@ async def test_tv_confirm_with_the_disc_out_needs_every_mapped_title(harness, se
     settings.tmdb_api_key = SecretStr("k")
     settings.auto_eject = False
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done", timeout=60)
             await h.m.tv_match_text(job.id, CASE_ORDER)
@@ -334,7 +334,7 @@ async def test_tv_confirm_with_the_disc_out_and_titles_missing_is_refused(harnes
     settings.tmdb_api_key = SecretStr("k")
     settings.auto_eject = False
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == RipState.running
                                    and j.tv and j.tv.show, timeout=60)

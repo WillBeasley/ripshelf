@@ -21,7 +21,7 @@ async def test_disabled_drive_gets_no_job_and_no_actions(harness, settings):
     async with harness(PM) as h:
         d = h.m.drives[ID]
         await until(lambda: d.identified)
-        assert d.label == "PRACTICAL_MAGIC" and h.m.drive_view(d).disc_label == "PRACTICAL_MAGIC"
+        assert d.label == "MOONLIT_ORCHARD" and h.m.drive_view(d).disc_label == "MOONLIT_ORCHARD"
         assert h.db.list_jobs() == []
         for action in (h.m.rescan_drive(ID), h.m.close_tray(ID), h.m.eject(ID)):
             with pytest.raises(ValueError, match="disabled"):
@@ -82,7 +82,7 @@ def test_default_cap_is_short():
 
 async def test_waiting_message_names_the_drive(harness, settings, mkv_script):
     # sr1's scan never opens its disc, so sr2 waits at the gate.
-    settings.makemkvcon = mkv_script(info="import time; time.sleep(30) if 'sr1' in args[1] else replay('scan-dvd-practical-magic.log')")
+    settings.makemkvcon = mkv_script(info="import time; time.sleep(30) if 'sr1' in args[1] else replay('scan-dvd-moonlit-orchard.log')")
     async with harness(PM) as h:
         await h.wait_job(lambda j: j.state == JobState.scanning)
         h.backend.insert("/dev/fake-sr0")
@@ -93,7 +93,7 @@ async def test_waiting_message_names_the_drive(harness, settings, mkv_script):
 
 
 async def test_missing_java_is_a_setup_problem(harness, settings):
-    # The Wild Robot's real scan log has MSG 3345 (no Java runtime).
+    # The Brass Heron's real scan log has MSG 3345 (no Java runtime).
     async with harness("/dev/fake-sr2") as h:
         job = await h.wait_job(lambda j: j.state not in (JobState.detected, JobState.scanning), timeout=60)
         assert any("no Java runtime" in e.message for e in h.db.events(job.id))
@@ -105,7 +105,7 @@ async def test_no_jobs_until_the_setup_is_finished(harness, settings):
     async with harness(PM) as h:
         d = h.m.drives[ID]
         await until(lambda: d.identified)
-        assert d.label == "PRACTICAL_MAGIC" and h.db.list_jobs() == []  # shown, not ripped
+        assert d.label == "MOONLIT_ORCHARD" and h.db.list_jobs() == []  # shown, not ripped
         with pytest.raises(ValueError, match="setup"):
             await h.m.rescan_drive(ID)
         settings.setup_complete = True  # the setup page's Finish (or Skip)

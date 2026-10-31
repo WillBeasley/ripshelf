@@ -19,8 +19,8 @@ from ripshelf.models import Candidate, DriveStatus, JobState
 
 from .conftest import until
 
-PM = "/dev/fake-sr1"  # PRACTICAL_MAGIC, 1:39:43 PAL DVD
-ROBOT = "/dev/fake-sr2"  # THE_WILD_ROBOT UHD, bdmt "The Wild Robot"
+PM = "/dev/fake-sr1"  # MOONLIT_ORCHARD, 1:39:43 PAL DVD
+ROBOT = "/dev/fake-sr2"  # THE_BRASS_HERON UHD, bdmt "The Brass Heron"
 TMDB_FIX = Path(__file__).parent / "fixtures" / "tmdb"
 EMBY = "http://emby.test"
 
@@ -31,11 +31,11 @@ def mock_tmdb(router, results, details):
         router.get(f"{API}/movie/{tid}").mock(return_value=httpx.Response(200, json={"id": int(tid), **d}))
 
 
-def practical_magic(router):
+def moonlit_orchard(router):
     mock_tmdb(router, [
-        {"id": 6435, "title": "Practical Magic", "release_date": "1998-10-16", "vote_count": 2500,
+        {"id": 6435, "title": "Moonlit Orchard", "release_date": "1998-10-16", "vote_count": 2500,
          "poster_path": "/pm.jpg"},
-        {"id": 9000401, "title": "The Making of Practical Magic", "release_date": "1998-12-01",
+        {"id": 9000401, "title": "The Making of Moonlit Orchard", "release_date": "1998-12-01",
          "genre_ids": [99]},
     ], {"6435": {"runtime": 104}, "9000401": {"runtime": 22}})
 
@@ -48,7 +48,7 @@ def keyed(settings):
 
 async def test_auto_confirm_from_tmdb_with_pal_runtime(harness, keyed):
     with respx.mock(assert_all_called=False) as router:
-        practical_magic(router)
+        moonlit_orchard(router)
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.done)
     assert job.identity.tmdb_id == 6435 and job.identity_source == "auto"
@@ -60,13 +60,13 @@ async def test_auto_confirm_from_tmdb_with_pal_runtime(harness, keyed):
 
 
 async def test_uhd_uses_bdmt_title_and_names_2160p(harness, keyed):
-    f = json.loads((TMDB_FIX / "wild-robot.json").read_text())
+    f = json.loads((TMDB_FIX / "brass-heron.json").read_text())
     with respx.mock(assert_all_called=False) as router:
         mock_tmdb(router, f["results"], f["details"])
         async with harness(ROBOT) as h:
             job = await h.wait_job(lambda j: j.state == JobState.done)
-    assert job.disc.name == "The Wild Robot" and job.identity.tmdb_id == 1184918
-    assert job.destination.endswith("The Wild Robot (2024) - 2160p.mkv")
+    assert job.disc.name == "The Brass Heron" and job.identity.tmdb_id == 1184918
+    assert job.destination.endswith("The Brass Heron (2024) - 2160p.mkv")
 
 
 async def test_tmdb_down_goes_to_review_with_a_warning(harness, keyed):
@@ -86,7 +86,7 @@ async def test_generic_label_falls_back_to_makemkv_disc_name(harness, keyed, mon
         search = router.get(f"{API}/search/movie").mock(return_value=httpx.Response(200, json={"results": []}))
         async with harness(PM) as h:
             await h.wait_job(lambda j: j.state == JobState.review)
-    assert search.calls[0].request.url.params["query"] == "Practical Magic"
+    assert search.calls[0].request.url.params["query"] == "Moonlit Orchard"
 
 
 async def test_nothing_to_search_for(harness, keyed, monkeypatch, settings, mkv_script):
@@ -111,8 +111,8 @@ async def test_search_identify_again_and_cache(harness, keyed):
         mock_tmdb(router, [], {})
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done")
-            practical_magic(router)
-            found = await h.m.search(job.id, "Practical Magic", 1998)
+            moonlit_orchard(router)
+            found = await h.m.search(job.id, "Moonlit Orchard", 1998)
             assert found[0].tmdb_id == 6435
             assert h.job(job.id).candidates[0].tmdb_id == 6435
             await h.m.confirm(job.id, found[0])
@@ -146,13 +146,13 @@ async def test_identify_again_from_review_and_after_failure(harness, keyed, sett
             await h.m.identify_again(job.id)
             await h.wait_job(lambda j: j.state == JobState.review)
             # Already in the library -> a decision is needed; confirming a different film resolves it.
-            dest = settings.library_dir / "Movies/Practical Magic (1998)/Practical Magic (1998).mkv"
+            dest = settings.library_dir / "Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv"
             dest.parent.mkdir(parents=True)
             dest.write_bytes(b"old")
-            await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+            await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
             held = await h.wait_job(lambda j: j.state == JobState.clash)
             assert [f.path for f in held.clash.files] == [str(dest)]
-            await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1999))
+            await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1999))
             done = await h.wait_job(lambda j: j.state == JobState.done)
             assert "(1999)" in done.destination and dest.read_bytes() == b"old"
 
@@ -168,7 +168,7 @@ async def test_notifications_and_emby(harness, settings):
         emby = router.post(f"{EMBY}/Library/Media/Updated").mock(return_value=httpx.Response(204))
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review)
-            await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+            await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
             await h.wait_job(lambda j: j.state == JobState.done)
             await until(lambda: po.call_count >= 2)
             # Never twice for the same kind.
@@ -179,7 +179,7 @@ async def test_notifications_and_emby(harness, settings):
     assert bodies[0]["url"] == f"http://rip.lan:8380/review?job={job.id}"
     assert emby.call_count == 1
     path = json.loads(emby.calls[0].request.content)["Updates"][0]["Path"]
-    assert path == "/media/Movies/Practical Magic (1998)/Practical Magic (1998).mkv"
+    assert path == "/media/Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv"
     assert emby.calls[0].request.headers["X-Emby-Token"] == "ek"
 
 
@@ -203,7 +203,7 @@ async def test_emby_failure_is_a_warning_not_a_failure(harness, settings):
         router.post(f"{EMBY}/Library/Media/Updated").mock(side_effect=httpx.ConnectError("x"))
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review)
-            await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+            await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
             await h.wait_job(lambda j: j.state == JobState.done)
             assert any("Emby refresh failed" in e.message for e in h.db.events(job.id))
 

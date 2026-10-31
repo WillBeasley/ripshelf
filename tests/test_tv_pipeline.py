@@ -15,9 +15,9 @@ from ripshelf.models import EpisodeRef, JobState, MediaKind, TitleMapUpdate, Tit
 from .conftest import until
 from .tvfix import mock_show
 
-SD = "/dev/fake-sr0"  # SARAH_&_DUCK_BROLLY_BUS has a play-all + 10 x 7:01
-CASE_ORDER = ("Brolly Bus, Rainbow Race, Hair Cut, Arcade Dance Off, Mars as Moon, Donkey Jump, "
-              "Castle Scribbling, Haber Dasher, Cloud Jam, Pillow Fill")
+SD = "/dev/fake-sr0"  # PIPPA_&_GOOSE_KITE_TRAM has a play-all + 10 x 7:01
+CASE_ORDER = ("Kite Tram, Puddle Dash, Beard Trim, Seaside Jig Off, Venus as Comet, Pony Hop, "
+              "Tower Doodling, Button Maker, Fog Knot, Cushion Stuff")
 TMDB_EPISODES = [34, 26, 21, 23, 24, 25, 29, 37, 30, 28]  # all season 3, looked up on TMDB
 HAS_FFMPEG = shutil.which("ffmpeg") is not None
 
@@ -29,18 +29,18 @@ def keyed(settings):
 
 
 @pytest.mark.slow
-async def test_sarah_and_duck_compilation_end_to_end(harness, keyed, settings):
+async def test_pippa_and_goose_compilation_end_to_end(harness, keyed, settings):
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done", timeout=60)
             assert job.media == MediaKind.tv
             plan = job.tv
-            assert plan.show.name == "Sarah & Duck" and plan.compilation
+            assert plan.show.name == "Pippa & Goose" and plan.compilation
             roles = {m.title_index: m.role for m in plan.mapping}
             assert roles[0] == TitleRole.play_all
             assert [i for i, r in roles.items() if r == TitleRole.episode] == list(range(1, 11))
-            # Named after its first episode, so title 1 is already Brolly Bus.
+            # Named after its first episode, so title 1 is already Kite Tram.
             first = next(m for m in plan.mapping if m.title_index == 1)
             assert first.episodes == [EpisodeRef(season=3, episode=34)]
             assert not plan.consistent  # the other nine still need episodes
@@ -57,10 +57,10 @@ async def test_sarah_and_duck_compilation_end_to_end(harness, keyed, settings):
 
             await h.m.tv_confirm(job.id, [])
             done = await h.wait_job(lambda j: j.state == JobState.done)
-    show = settings.library_dir / "TV" / "Sarah & Duck (2013)"
+    show = settings.library_dir / "TV" / "Pippa & Goose (2013)"
     files = sorted(p.name for p in (show / "Season 03").iterdir())
-    assert files[0] == "Sarah & Duck - S03E21 - Hair Cut.mkv"
-    assert "Sarah & Duck - S03E34 - Brolly Bus.mkv" in files and len(files) == 10
+    assert files[0] == "Pippa & Goose - S03E21 - Beard Trim.mkv"
+    assert "Pippa & Goose - S03E34 - Kite Tram.mkv" in files and len(files) == 10
     meta = json.loads(next((show / ".disc").glob("*/disc.json")).read_text())
     assert meta["compilation"] and meta["titles"]["1"]["episodes"] == ["S03E34"]
     assert meta["titles"]["0"]["role"] == "play_all"
@@ -70,7 +70,7 @@ async def test_sarah_and_duck_compilation_end_to_end(harness, keyed, settings):
 
 async def test_collection_grid_after_compilation(harness, keyed):
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done", timeout=60)
             await h.m.tv_match_text(job.id, CASE_ORDER)
@@ -84,7 +84,7 @@ async def test_collection_grid_after_compilation(harness, keyed):
 
 async def test_confirm_blocked_until_consistent(harness, keyed):
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review, timeout=60)
             with pytest.raises(ValueError, match="marked as an episode but has none"):
@@ -104,7 +104,7 @@ async def test_confirm_blocked_until_consistent(harness, keyed):
 async def test_box_set_mode_maps_a_run(harness, keyed):
     """The same disc treated as season 3 from episode 21, a consecutive run."""
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review, timeout=60)
             job = await h.m.tv_propose(job.id, 46866, season=3, disc_number=None, start_episode=21,
@@ -120,11 +120,11 @@ async def test_no_tmdb_key_still_reviews(harness):
         assert job.media == MediaKind.tv and job.tv.show is None
         assert "pick the show" in job.tv.problems or not job.tv.consistent
         with pytest.raises(ValueError, match="TMDB"):
-            await h.m.tv_search("Sarah")
+            await h.m.tv_search("Pippa")
 
 
 async def test_movie_disc_stays_a_movie(harness, keyed):
-    async with harness("/dev/fake-sr2") as h:  # The Wild Robot
+    async with harness("/dev/fake-sr2") as h:  # The Brass Heron
         job = await h.wait_job(lambda j: j.main_title is not None and j.state != JobState.scanning, timeout=60)
         assert job.media == MediaKind.movie and job.tv is None
         assert any("feature length" in e for e in job.media_evidence)
@@ -132,7 +132,7 @@ async def test_movie_disc_stays_a_movie(harness, keyed):
 
 async def test_switch_a_tv_disc_to_movie_and_back(harness, keyed):
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done", timeout=60)
             job = await h.m.set_media(job.id, MediaKind.movie)
@@ -144,11 +144,11 @@ async def test_switch_a_tv_disc_to_movie_and_back(harness, keyed):
 
 
 async def test_destination_clash_is_checked_before_copying_anything(harness, keyed, settings):
-    clash = settings.library_dir / "TV/Sarah & Duck (2013)/Season 03/Sarah & Duck - S03E28 - Pillow Fill.mkv"
+    clash = settings.library_dir / "TV/Pippa & Goose (2013)/Season 03/Pippa & Goose - S03E28 - Cushion Stuff.mkv"
     clash.parent.mkdir(parents=True)
     clash.write_bytes(b"keep")
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done", timeout=60)
             await h.m.tv_match_text(job.id, CASE_ORDER)
@@ -163,21 +163,21 @@ async def test_destination_clash_is_checked_before_copying_anything(harness, key
 async def test_unmatched_titles(harness, keyed, settings, setting, where):
     settings.tv_unmatched = setting
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done", timeout=60)
             await h.m.tv_match_text(job.id, CASE_ORDER)
             # Make the last episode an extra instead.
             await h.m.tv_confirm(job.id, [TitleMapUpdate(title_index=10, role=TitleRole.extra)])
             await h.wait_job(lambda j: j.state == JobState.done)
-    show = settings.library_dir / "TV/Sarah & Duck (2013)"
+    show = settings.library_dir / "TV/Pippa & Goose (2013)"
     if where is None:
         assert not (show / "extras").exists() and not (show / "Season 00").exists()
     else:
         names = [p.name for p in (show / where).iterdir()]
         assert len(names) == 1
         if where == "Season 00":
-            assert names[0].startswith("Sarah & Duck - S00E09")  # after TMDB's 8 specials
+            assert names[0].startswith("Pippa & Goose - S00E09")  # after TMDB's 8 specials
 
 
 @pytest.mark.slow
@@ -188,7 +188,7 @@ async def test_tv_api(settings, keyed):
     from ripshelf.main import create_app
 
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         router.route(host="testserver").pass_through()
         app = create_app(settings, backend=FakeDrives(present={SD}))
         with TestClient(app) as c:
@@ -199,7 +199,7 @@ async def test_tv_api(settings, keyed):
                     break
                 time.sleep(0.1)
             jid = jobs[0]["id"]
-            assert c.get("/api/tv/search?q=Sarah").json()[0]["tmdb_id"] == 46866
+            assert c.get("/api/tv/search?q=Pippa").json()[0]["tmdb_id"] == 46866
             assert c.get("/api/tv/search?q=").status_code == 422
             r = c.post(f"/api/jobs/{jid}/tv/match-text", json={"text": CASE_ORDER})
             assert r.status_code == 200 and r.json()["tv"]["consistent"]
@@ -221,7 +221,7 @@ async def test_tv_api(settings, keyed):
                     break
                 time.sleep(0.1)
             cols = c.get("/api/collections").json()
-            assert cols[0]["show"]["name"] == "Sarah & Duck"
+            assert cols[0]["show"]["name"] == "Pippa & Goose"
             detail = c.get(f"/api/collections/{cols[0]['id']}").json()
             assert any(g["season"] == 3 and g["present"] == 10 for g in detail["seasons"])
             assert c.get("/api/collections/999").status_code == 404
@@ -240,10 +240,10 @@ async def test_tv_review_notification(harness, keyed, settings):
     settings.pushover_user_key, settings.pushover_app_token = SecretStr("u"), SecretStr("t")
     settings.notify_events = {"review": 1}
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         po = router.post(PUSHOVER_API).mock(return_value=httpx.Response(200, json={"status": 1}))
         async with harness(SD) as h:
             await h.wait_job(lambda j: j.state == JobState.review, timeout=60)
             await until(lambda: po.call_count >= 1)
     body = {k: v[0] for k, v in parse_qs(po.calls[0].request.content.decode()).items()}
-    assert body["message"] == "TV disc: Sarah & Duck, 10 episode titles to check"
+    assert body["message"] == "TV disc: Pippa & Goose, 10 episode titles to check"

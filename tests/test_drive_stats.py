@@ -21,7 +21,7 @@ PM = "/dev/fake-sr1"
 async def test_finished_rip_is_counted_and_survives_deletion(harness):
     async with harness(PM) as h:
         job = await h.wait_job(lambda j: j.state == JobState.review)
-        await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+        await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
         done = await h.wait_job(lambda j: j.state == JobState.done)
         assert done.rip.size_bytes and done.rip.seconds is not None
         st = next(s for s in h.m.drive_stats() if s.drive_id == "fake-ihas122")

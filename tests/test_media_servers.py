@@ -159,7 +159,7 @@ async def test_every_server_is_refreshed_after_filing(harness, settings):
         px = router.get(f"{PLEX}/library/sections/1/refresh").mock(side_effect=httpx.ConnectError("x"))
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review)
-            await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+            await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
             await h.wait_job(lambda j: j.state == JobState.done)
             events = [e.message for e in h.db.events(job.id)]
     assert emby.call_count == jf.call_count == px.call_count == 1

@@ -30,16 +30,16 @@ def season(name: str, n: int) -> list[Episode]:
 
 
 @pytest.mark.parametrize("label, show, season_, disc, vol, tv", [
-    ("FAWLTY_TOWERS_S1_D2", "Fawlty Towers", 1, 2, None, True),
-    ("FRIENDS_S03D04", "Friends", 3, 4, None, True),
-    ("THE_OFFICE_SEASON_2_DISC_1", "The Office", 2, 1, None, True),
-    ("DOCTOR_WHO_SERIES_1_VOL_3", "Doctor Who", 1, None, 3, True),
+    ("SEAGULL_MANOR_S1_D2", "Seagull Manor", 1, 2, None, True),
+    ("LODGERS_S03D04", "Lodgers", 3, 4, None, True),
+    ("THE_DEPOT_SEASON_2_DISC_1", "The Depot", 2, 1, None, True),
+    ("CAPTAIN_COMET_SERIES_1_VOL_3", "Captain Comet", 1, None, 3, True),
     ("24_SEASON_4_DISC_2", "24", 4, 2, None, True),
-    ("BAND_OF_BROTHERS_D3", "Band of Brothers", None, 3, None, False),
-    ("SHERLOCK_COMPLETE_BOX_SET", "Sherlock", None, None, None, True),
-    ("SARAH_&_DUCK_BROLLY_BUS", "Sarah & Duck Brolly Bus", None, None, None, False),
-    ("SPIDERMAN", "Spiderman", None, None, None, False),
-    ("SEVEN", "Seven", None, None, None, False),
+    ("BAND_OF_COUSINS_D3", "Band of Cousins", None, 3, None, False),
+    ("VANE_COMPLETE_BOX_SET", "Vane", None, None, None, True),
+    ("PIPPA_&_GOOSE_KITE_TRAM", "Pippa & Goose Kite Tram", None, None, None, False),
+    ("LAMPMOTH", "Lampmoth", None, None, None, False),
+    ("ELEVEN", "Eleven", None, None, None, False),
     ("", "", None, None, None, False),
     (None, "", None, None, None, False),
 ])
@@ -54,7 +54,7 @@ def test_tv_labels(label, show, season_, disc, vol, tv):
 def test_real_dvd_compilation_shape():
     from ripshelf.jobs import to_title_info
 
-    scan = parse_info((FIX / "scan-dvd-sarah-duck.log").read_text())
+    scan = parse_info((FIX / "scan-dvd-pippa-goose.log").read_text())
     sh = shape.analyse([to_title_info(t) for t in scan.titles], bluray=False)
     assert sh.looks_like_tv and sh.play_all == [0] and sh.episodes == list(range(1, 11))
     assert not sh.same_as, "same-length DVD episodes are not duplicates"
@@ -63,7 +63,7 @@ def test_real_dvd_compilation_shape():
 def test_real_movie_with_featurettes_is_not_tv():
     from ripshelf.jobs import to_title_info
 
-    scan = parse_info((FIX / "scan-uhd-wild-robot.log").read_text())
+    scan = parse_info((FIX / "scan-uhd-brass-heron.log").read_text())
     sh = shape.analyse([to_title_info(t) for t in scan.titles], bluray=True)
     assert not sh.looks_like_tv and sh.feature == 0
 
@@ -134,8 +134,8 @@ def test_extras_start_skipped_when_settings_say_so(rip_extras, want):
 # --- alignment ---------------------------------------------------------------------------
 
 
-def test_fawlty_towers_disc_1_aligns_with_runtimes():
-    eps = season("fawlty-towers", 1)
+def test_seagull_manor_disc_1_aligns_with_runtimes():
+    eps = season("seagull-manor", 1)
     ts = [title(i, e.runtime + 0.5) for i, e in enumerate(eps[:3], 1)]
     got = tvmap.propose(ts, {}, eps, 1, pal=False)
     assert [m.episodes[0].episode for m in got] == [1, 2, 3]
@@ -143,14 +143,14 @@ def test_fawlty_towers_disc_1_aligns_with_runtimes():
 
 
 def test_disc_two_starts_from_the_collection_point():
-    eps = season("fawlty-towers", 1)
+    eps = season("seagull-manor", 1)
     ts = [title(i, eps[i + 2].runtime) for i in range(1, 4)]
     got = tvmap.propose(ts, {}, eps, 4, pal=False)
     assert [m.episodes[0].episode for m in got] == [4, 5, 6]
 
 
 def test_pal_speed_up_runtimes():
-    eps = season("fawlty-towers", 1)
+    eps = season("seagull-manor", 1)
     ts = [title(i, e.runtime * 23.976 / 25) for i, e in enumerate(eps, 1)]
     got = tvmap.propose(ts, {}, eps, 1, pal=True)
     assert [m.episodes[0].episode for m in got] == [1, 2, 3, 4, 5, 6]
@@ -158,14 +158,14 @@ def test_pal_speed_up_runtimes():
 
 
 def test_two_part_story_on_one_title():
-    eps = season("doctor-who", 1)  # 4 "Aliens of London (1)" 45 + 5 "World War Three (2)" 43
+    eps = season("captain-comet", 1)  # 4 "Strangers of Lowport (1)" 45 + 5 "Planet Feud Three (2)" 43
     ts = [title(1, 47), title(2, 47), title(3, 47), title(4, 88), title(5, 48)]
     got = tvmap.propose(ts, {}, eps, 1, pal=False)
     assert [[e.episode for e in m.episodes] for m in got] == [[1], [2], [3], [4, 5], [6]]
 
 
 def test_more_titles_than_episodes_left_become_extras():
-    eps = season("fawlty-towers", 1)
+    eps = season("seagull-manor", 1)
     ts = [title(i, 30) for i in range(1, 5)]
     got = tvmap.propose(ts, {}, eps, 5, pal=False)
     roles = [m.role for m in got]
@@ -181,13 +181,13 @@ def test_missing_runtimes_map_in_order():
 
 
 def test_obviously_wrong_lengths_are_left_as_extras():
-    eps = season("fawlty-towers", 1)
+    eps = season("seagull-manor", 1)
     got = tvmap.propose([title(1, 30), title(2, 3)], {}, eps, 1, pal=False)
     assert got[0].role == TitleRole.episode and got[1].role == TitleRole.extra
 
 
 def test_others_are_kept_in_title_order():
-    eps = season("fawlty-towers", 1)
+    eps = season("seagull-manor", 1)
     pa = TitleMap(title_index=0, duration_s=5400, role=TitleRole.play_all)
     got = tvmap.propose([title(1, 30)], {0: pa}, eps, 1, pal=False)
     assert [m.title_index for m in got] == [0, 1]
@@ -205,10 +205,10 @@ def test_align_edge_cases():
 
 
 @pytest.mark.parametrize("text, want", [
-    ("Brolly Bus, Rainbow Race, Hair Cut", ["Brolly Bus", "Rainbow Race", "Hair Cut"]),
-    ("1. Brolly Bus\n2) Rainbow Race\n- Hair Cut\n\n", ["Brolly Bus", "Rainbow Race", "Hair Cut"]),
-    ("Brolly Bus; Rainbow Race | Hair Cut", ["Brolly Bus", "Rainbow Race", "Hair Cut"]),
-    ("“Brolly Bus”\n'Hair Cut'", ["Brolly Bus", "Hair Cut"]),
+    ("Kite Tram, Puddle Dash, Beard Trim", ["Kite Tram", "Puddle Dash", "Beard Trim"]),
+    ("1. Kite Tram\n2) Puddle Dash\n- Beard Trim\n\n", ["Kite Tram", "Puddle Dash", "Beard Trim"]),
+    ("Kite Tram; Puddle Dash | Beard Trim", ["Kite Tram", "Puddle Dash", "Beard Trim"]),
+    ("“Kite Tram”\n'Beard Trim'", ["Kite Tram", "Beard Trim"]),
     ("   ", []),
 ])
 def test_split_names(text, want):
@@ -216,17 +216,17 @@ def test_split_names(text, want):
 
 
 def test_match_names_prefers_real_seasons_and_never_reuses():
-    eps = [Episode(season=0, episode=1, name="Brolly Bus"), Episode(season=3, episode=34, name="Brolly Bus"),
-           Episode(season=1, episode=1, name="Lots of Shallots")]
-    got = tvmap.match_names(["Brolly Bus", "Brolly Bus", "Nonsense Words Here"], eps)
+    eps = [Episode(season=0, episode=1, name="Kite Tram"), Episode(season=3, episode=34, name="Kite Tram"),
+           Episode(season=1, episode=1, name="Vefe of Bedosane")]
+    got = tvmap.match_names(["Kite Tram", "Kite Tram", "Nonsense Words Here"], eps)
     assert (got[0][1].season, got[0][1].episode) == (3, 34)
     assert (got[1][1].season, got[1][1].episode) == (0, 1)  # the remaining one
     assert got[2][1] is None
 
 
 def test_match_unicode_and_typos():
-    eps = [Episode(season=1, episode=2, name="If You’re Happy and You Know It")]
-    assert tvmap.match_names(["If You're Happy and You Know It"], eps)[0][1] is not None
+    eps = [Episode(season=1, episode=2, name="If You’re Merry and You Feel It")]
+    assert tvmap.match_names(["If You're Merry and You Feel It"], eps)[0][1] is not None
 
 
 # --- consistency ---------------------------------------------------------------------------
@@ -266,39 +266,39 @@ def shows(name: str) -> list[Show]:
     return [tmdb_tv.to_show(r) for r in load(name)["search"]["results"]]
 
 
-def test_doctor_who_confidential_never_wins():
-    ranked = tmdb_tv.rank_shows(shows("doctor-who"), ["Doctor Who"], 45 * 60)
+def test_captain_comet_confidential_never_wins():
+    ranked = tmdb_tv.rank_shows(shows("captain-comet"), ["Captain Comet"], 45 * 60)
     names = {s.name: s for s in ranked}
-    assert names["Doctor Who Confidential"].excluded and names["Totally Doctor Who"].excluded
-    assert ranked[0].name == "Doctor Who" and not ranked[0].excluded
+    assert names["Captain Comet Sehogamatige"].excluded and names["Ralupar Captain Comet"].excluded
+    assert ranked[0].name == "Captain Comet" and not ranked[0].excluded
 
 
-def test_year_breaks_doctor_who_tie():
-    ranked = tmdb_tv.rank_shows(shows("doctor-who"), ["Doctor Who"], None, year=2005)
+def test_year_breaks_captain_comet_tie():
+    ranked = tmdb_tv.rank_shows(shows("captain-comet"), ["Captain Comet"], None, year=2005)
     assert ranked[0].year == 2005
 
 
 def test_label_with_episode_name_finds_the_show():
-    ranked = tmdb_tv.rank_shows(shows("sarah-duck"), ["Sarah & Duck Brolly Bus"], 421)
-    assert ranked[0].name == "Sarah & Duck" and ranked[0].score >= 0.9
+    ranked = tmdb_tv.rank_shows(shows("pippa-goose"), ["Pippa & Goose Kite Tram"], 421)
+    assert ranked[0].name == "Pippa & Goose" and ranked[0].score >= 0.9
 
 
 def test_runtime_disagreement_is_evidence():
-    s = tmdb_tv.to_show({**load("fawlty-towers")["show"]})
-    scored = tmdb_tv.score_show(s, ["Fawlty Towers"], 90 * 60)
+    s = tmdb_tv.to_show({**load("seagull-manor")["show"]})
+    scored = tmdb_tv.score_show(s, ["Seagull Manor"], 90 * 60)
     assert any(e.ok is False and "TMDB says 30" in e.text for e in scored.evidence)
 
 
 def test_companion_series_without_genre_is_excluded():
-    s = Show(tmdb_id=1, name="Sherlock: Unscripted")
-    assert tmdb_tv.score_show(s, ["Sherlock"], None).excluded
+    s = Show(tmdb_id=1, name="Vane: Unscripted")
+    assert tmdb_tv.score_show(s, ["Vane"], None).excluded
 
 
 def test_queries_for():
-    assert tmdb_tv.queries_for("Sarah & Duck Brolly Bus") == [
-        "Sarah & Duck Brolly Bus", "Sarah & Duck Brolly", "Sarah & Duck", "Sarah &"]
+    assert tmdb_tv.queries_for("Pippa & Goose Kite Tram") == [
+        "Pippa & Goose Kite Tram", "Pippa & Goose Kite", "Pippa & Goose", "Pippa &"]
     assert tmdb_tv.queries_for("") == []
-    assert tmdb_tv.queries_for("Seinfeld") == ["Seinfeld"]
+    assert tmdb_tv.queries_for("Hollinger") == ["Hollinger"]
 
 
 def test_to_show_and_episodes_tolerate_junk():
@@ -318,13 +318,13 @@ def test_to_show_and_episodes_tolerate_junk():
 
 
 def test_episode_naming(tmp_path):
-    show = Show(tmdb_id=1, name="Doctor Who", year=2005)
-    e = [Episode(season=1, episode=4, name="Aliens of London (1)"),
-         Episode(season=1, episode=5, name="World War Three (2)")]
+    show = Show(tmdb_id=1, name="Captain Comet", year=2005)
+    e = [Episode(season=1, episode=4, name="Strangers of Lowport (1)"),
+         Episode(season=1, episode=5, name="Planet Feud Three (2)")]
     p = naming.episode_path(tmp_path / "TV", show, e[:1])
-    assert p == tmp_path / "TV/Doctor Who (2005)/Season 01/Doctor Who - S01E04 - Aliens of London (1).mkv"
+    assert p == tmp_path / "TV/Captain Comet (2005)/Season 01/Captain Comet - S01E04 - Strangers of Lowport (1).mkv"
     p2 = naming.episode_path(tmp_path, show, e)
-    assert p2.name == "Doctor Who - S01E04-E05 - Aliens of London (1) & World War Three (2).mkv"
+    assert p2.name == "Captain Comet - S01E04-E05 - Strangers of Lowport (1) & Planet Feud Three (2).mkv"
     p3 = naming.episode_path(tmp_path, Show(tmdb_id=2, name="Who? What: Where/"), [Episode(season=0, episode=1)])
     assert p3.parent.name == "Season 00" and p3.name == "Who What - Where - S00E01.mkv"
     long = naming.episode_path(tmp_path, show, [Episode(season=1, episode=1, name="x" * 400)])

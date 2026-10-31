@@ -19,11 +19,11 @@ def test_parse_duration():
 
 
 def test_uhd_scan(fixture_text):
-    scan = parse_info(fixture_text("scan-uhd-wild-robot.log"))
+    scan = parse_info(fixture_text("scan-uhd-brass-heron.log"))
     assert scan.makemkv_version == "2.0.0"
     assert scan.kind == "uhd"
-    assert scan.disc_name == "The Wild Robot"
-    assert scan.volume_name == "THE_WILD_ROBOT"
+    assert scan.disc_name == "The Brass Heron"
+    assert scan.volume_name == "THE_BRASS_HERON"
     assert scan.title_count == 24 and len(scan.titles) == 24
     assert scan.libredrive and "LibreDrive" in scan.libredrive
     assert scan.drive_serial("/dev/sr2") == "SN0000000001"
@@ -40,17 +40,17 @@ def test_uhd_scan(fixture_text):
 
 
 def test_uhd_main_feature_skips_duplicate_playlist(fixture_text):
-    main = choose_main_feature(parse_info(fixture_text("scan-uhd-wild-robot.log")))
+    main = choose_main_feature(parse_info(fixture_text("scan-uhd-brass-heron.log")))
     assert main.title.index == 0
     assert main.duplicates == [13]  # 00294.m2ts, same 1:41:41 content
     assert main.rivals == []
 
 
 def test_pal_dvd_scan(fixture_text):
-    scan = parse_info(fixture_text("scan-dvd-practical-magic.log"))
+    scan = parse_info(fixture_text("scan-dvd-moonlit-orchard.log"))
     assert scan.makemkv_version == "2.0.0"
     assert scan.kind == "dvd"
-    assert scan.disc_name == "PRACTICAL_MAGIC"
+    assert scan.disc_name == "MOONLIT_ORCHARD"
     main = choose_main_feature(scan)
     assert main.title.duration_s == 5983
     assert main.title.video.framerate == "25"
@@ -58,7 +58,7 @@ def test_pal_dvd_scan(fixture_text):
 
 
 def test_dvd_play_all_is_longest(fixture_text):
-    scan = parse_info(fixture_text("scan-dvd-sarah-duck.log"))
+    scan = parse_info(fixture_text("scan-dvd-pippa-goose.log"))
     assert len(scan.titles) == 11
     main = choose_main_feature(scan)
     assert main.title.duration_s == 4210

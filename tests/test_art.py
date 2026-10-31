@@ -23,7 +23,7 @@ def job(**kw) -> JobRecord:
 
 
 def test_confirmed_movie_poster():
-    j = job(identity=Candidate(title="Heat", poster_url=POSTER))
+    j = job(identity=Candidate(title="Ember", poster_url=POSTER))
     assert j.art_url() == (POSTER, False)
     pub = j.public()
     assert pub.art == art.key(POSTER) and not pub.art_proposed
@@ -31,7 +31,7 @@ def test_confirmed_movie_poster():
 
 def test_best_guess_is_proposed_and_extras_are_skipped():
     j = job(candidates=[Candidate(title="Making of", excluded=True, poster_url="https://image.tmdb.org/x.jpg"),
-                        Candidate(title="Heat", poster_url=POSTER)])
+                        Candidate(title="Ember", poster_url=POSTER)])
     assert j.art_url() == (POSTER, True) and j.public().art_proposed
 
 
@@ -118,12 +118,12 @@ def test_art_endpoint(settings):
             m = app.state.manager
             j = m.db.create_job("fake-ihas122", "/dev/fake-sr1")
             assert c.get(f"/api/jobs/{j.id}/art").status_code == 404  # nothing to show
-            j.identity = Candidate(title="Heat", poster_url=POSTER)
+            j.identity = Candidate(title="Ember", poster_url=POSTER)
             m.db.save_job(j)
             r = c.get(f"/api/jobs/{j.id}/art?k={art.key(POSTER)}")
             assert r.status_code == 200 and r.content == JPEG and r.headers["content-type"] == "image/jpeg"
             assert c.get(f"/api/jobs/{j.id}").json()["art"] == art.key(POSTER)
             assert c.get("/api/jobs/999/art").status_code == 404
-            j.identity = Candidate(title="Heat", poster_url="https://evil.example/x.jpg")
+            j.identity = Candidate(title="Ember", poster_url="https://evil.example/x.jpg")
             m.db.save_job(j)
             assert c.get(f"/api/jobs/{j.id}/art").status_code == 404

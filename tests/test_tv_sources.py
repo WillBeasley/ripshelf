@@ -31,9 +31,9 @@ from ripshelf.tv.tvdb import API as TVDB
 from ripshelf.tv.tvdb import Tvdb, TvdbError, tmdb_id_of, tvdb_id_of
 from ripshelf.tvjobs import TvMixin
 
-BWE = {"id": 1621, "name": "Boardwalk Empire", "first_air_date": "2010-09-19", "genre_ids": [80, 18],
+HBK = {"id": 1621, "name": "Harbour Kingdom", "first_air_date": "2010-09-19", "genre_ids": [80, 18],
        "seasons": [{"season_number": 1, "episode_count": 12}], "external_ids": {"tvdb_id": 84947}}
-BWE_RUNTIMES = [73, 53, 52, 54, 54, 60, 53, 50, 53, 59, 57, 61]
+HBK_RUNTIMES = [73, 53, 52, 54, 54, 60, 53, 50, 53, 59, 57, 61]
 
 
 def login(router, token="tok"):
@@ -44,17 +44,17 @@ def login(router, token="tok"):
 
 
 @pytest.mark.parametrize("name, show, season, disc, volume", [
-    ("Boardwalk Empire Season 1 Disc 2", "Boardwalk Empire", 1, 2, None),
-    ("Boardwalk Empire - Season 1", "Boardwalk Empire", 1, None, None),
-    ("The Wire: The Complete Second Season", "The Wire", 2, None, None),
-    ("The Office Season 2 (Disc 1)", "The Office", 2, 1, None),
-    ("Mad Men Season One", "Mad Men", 1, None, None),
-    ("Friends S03D04", "Friends", 3, 4, None),
-    ("Doctor Who Series 1 Vol 3", "Doctor Who", 1, None, 3),
+    ("Harbour Kingdom Season 1 Disc 2", "Harbour Kingdom", 1, 2, None),
+    ("Harbour Kingdom - Season 1", "Harbour Kingdom", 1, None, None),
+    ("The Signal: The Complete Second Season", "The Signal", 2, None, None),
+    ("The Depot Season 2 (Disc 1)", "The Depot", 2, 1, None),
+    ("Copper Men Season One", "Copper Men", 1, None, None),
+    ("Lodgers S03D04", "Lodgers", 3, 4, None),
+    ("Captain Comet Series 1 Vol 3", "Captain Comet", 1, None, 3),
     ("24 Season 4", "24", 4, None, None),
-    ("Sherlock: Series 3", "Sherlock", 3, None, None),
-    ("A Series of Unfortunate Events", "A Series of Unfortunate Events", None, None, None),
-    ("A Series of Unfortunate Events Season 2", "A Series of Unfortunate Events", 2, None, None),
+    ("Vane: Series 3", "Vane", 3, None, None),
+    ("A Catalogue of Curious Mishaps", "A Catalogue of Curious Mishaps", None, None, None),
+    ("A Catalogue of Curious Mishaps Season 2", "A Catalogue of Curious Mishaps", 2, None, None),
     ("The Complete Series", "The Complete Series", None, None, None),
     ("", "", None, None, None),
 ])
@@ -65,15 +65,15 @@ def test_split_show_name(name, show, season, disc, volume):
 
 @respx.mock
 async def test_find_shows_searches_the_show_not_the_disc_name():
-    search = respx.get(f"{TMDB}/search/tv").mock(return_value=httpx.Response(200, json={"results": [BWE]}))
-    respx.get(f"{TMDB}/tv/1621").mock(return_value=httpx.Response(200, json=BWE))
+    search = respx.get(f"{TMDB}/search/tv").mock(return_value=httpx.Response(200, json={"results": [HBK]}))
+    respx.get(f"{TMDB}/tv/1621").mock(return_value=httpx.Response(200, json=HBK))
     tmdb = Tmdb("k")
     try:
-        shows = await tmdb_tv.find_shows(tmdb, "Boardwalk Empire Season 1 Disc 2", None)
+        shows = await tmdb_tv.find_shows(tmdb, "Harbour Kingdom Season 1 Disc 2", None)
     finally:
         await tmdb.aclose()
-    assert search.calls[0].request.url.params["query"] == "Boardwalk Empire"
-    assert shows[0].name == "Boardwalk Empire" and shows[0].score >= 0.95
+    assert search.calls[0].request.url.params["query"] == "Harbour Kingdom"
+    assert shows[0].name == "Harbour Kingdom" and shows[0].score >= 0.95
     assert shows[0].tvdb_id == 84947
 
 
@@ -91,9 +91,9 @@ def test_remote_ids():
 @respx.mock
 async def test_tmdb_misses_tvdb_finds():
     respx.get(f"{TMDB}/search/tv").mock(return_value=httpx.Response(200, json={"results": []}))
-    respx.get(f"{TMDB}/tv/1621").mock(return_value=httpx.Response(200, json=BWE))
+    respx.get(f"{TMDB}/tv/1621").mock(return_value=httpx.Response(200, json=HBK))
     login(respx)
-    hits = {"data": [{"tvdb_id": "84947", "name": "Boardwalk Empire",
+    hits = {"data": [{"tvdb_id": "84947", "name": "Harbour Kingdom",
                       "remote_ids": [{"id": "1621", "sourceName": "TheMovieDB.com"}]}]}
     respx.get(f"{TVDB}/search").mock(return_value=httpx.Response(200, json=hits))
     tmdb, tvdb = Tmdb("k"), Tvdb("key")
@@ -170,23 +170,23 @@ class Tv(TvMixin):
         self.db = SimpleNamespace(collection_for_show=lambda _id: collection)
 
 
-def bwe_disc1():
-    """Boardwalk Empire S1 disc 1 as scanned, with a 72 min pilot, a 52 min episode, duplicate
+def hbk_disc1():
+    """Harbour Kingdom S1 disc 1 as scanned, with a 72 min pilot, a 52 min episode, duplicate
     playlists of both, and four short extras (three of about 4 min)."""
     t = [(0, 245, "10"), (1, 4341, "1"), (2, 3152, "2"), (3, 259, "11"), (4, 137, "12"), (5, 4341, "1"),
          (6, 3152, "2"), (7, 193, "13")]
     titles = [TitleInfo(index=i, duration_s=d, size_bytes=d * 1000 + i, chapters=8, segments_map=seg)
               for i, d, seg in t]
     return SimpleNamespace(titles=titles, disc=SimpleNamespace(kind=DiscKind.bluray, label="BWE_S1_D1",
-                                                               name="Boardwalk Empire Season 1 Disc 1"))
+                                                               name="Harbour Kingdom Season 1 Disc 1"))
 
 
 def season1():
-    return [Episode(season=1, episode=n, name=f"E{n}", runtime=r) for n, r in enumerate(BWE_RUNTIMES, 1)]
+    return [Episode(season=1, episode=n, name=f"E{n}", runtime=r) for n, r in enumerate(HBK_RUNTIMES, 1)]
 
 
 def test_reshape_from_season_runtimes(settings):
-    tv, job = Tv(settings), bwe_disc1()
+    tv, job = Tv(settings), hbk_disc1()
     from ripshelf.tv import shape
     plan = TvPlan(mapping=tv._shape_mapping(job, shape.analyse(job.titles, True)))
     before = [m.title_index for m in plan.mapping if m.role == TitleRole.episode]
@@ -201,7 +201,7 @@ def test_reshape_from_season_runtimes(settings):
 
 
 def test_reshape_leaves_hand_edits_alone(settings):
-    tv, job = Tv(settings), bwe_disc1()
+    tv, job = Tv(settings), hbk_disc1()
     from ripshelf.tv import shape
     plan = TvPlan(mapping=tv._shape_mapping(job, shape.analyse(job.titles, True)))
     plan.mapping[0].role = TitleRole.skip
@@ -210,7 +210,7 @@ def test_reshape_leaves_hand_edits_alone(settings):
 
 
 def test_next_disc_follows_only_the_disc_before(settings):
-    show = Show(tmdb_id=1621, name="Boardwalk Empire")
+    show = Show(tmdb_id=1621, name="Harbour Kingdom")
     disc2 = CollectionDisc(job_id=21, season=1, disc_number=2, label="BWE_S1_D2",
                            episodes=[EpisodeRef(season=1, episode=n) for n in (3, 4, 5)])
     tv = Tv(settings, SimpleNamespace(discs=[disc2]))
@@ -227,9 +227,9 @@ async def test_episodes_from_tvdb(settings):
     eps = [{"seasonNumber": 1, "number": n, "name": f"T{n}", "runtime": None} for n in (1, 2)]
     respx.get(f"{TVDB}/series/84947/episodes/default/eng").mock(
         return_value=httpx.Response(200, json={"data": {"episodes": eps}}))
-    respx.get(f"{TMDB}/tv/1621").mock(return_value=httpx.Response(200, json=BWE))
+    respx.get(f"{TMDB}/tv/1621").mock(return_value=httpx.Response(200, json=HBK))
     tmdb = Tmdb("k")
-    show = Show(tmdb_id=1621, name="Boardwalk Empire")  # no TheTVDB id yet, so asked of TMDB
+    show = Show(tmdb_id=1621, name="Harbour Kingdom")  # no TheTVDB id yet, so asked of TMDB
     try:
         got, note = await Tv(settings)._episode_list(show, 1, season1(), tmdb)
         assert [(e.name, e.runtime) for e in got] == [("T1", 73), ("T2", 53)]  # TMDB's runtimes
@@ -250,7 +250,7 @@ async def test_dvd_order_falls_back_to_aired_then_tmdb(settings):
     respx.get(url__regex=rf"{TVDB}/series/84947/episodes/dvd.*").mock(return_value=empty)
     aired = respx.get(url__regex=rf"{TVDB}/series/84947/episodes/default.*").mock(return_value=empty)
     tmdb = Tmdb("k")
-    show = Show(tmdb_id=1621, tvdb_id=84947, name="Boardwalk Empire")
+    show = Show(tmdb_id=1621, tvdb_id=84947, name="Harbour Kingdom")
     try:
         got, note = await Tv(settings)._episode_list(show, 1, season1(), tmdb)
     finally:

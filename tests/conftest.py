@@ -173,7 +173,7 @@ def mkv_script(tmp_path: Path):
     Snippets see ``args`` (non-flag arguments), ``out(line)``, ``FIX`` (the fixtures dir).
     """
 
-    def make(info: str = "replay('scan-dvd-practical-magic.log')", rip: str = "rip_ok()") -> str:
+    def make(info: str = "replay('scan-dvd-moonlit-orchard.log')", rip: str = "rip_ok()") -> str:
         p = tmp_path / "mkv_stub.py"
         head = textwrap.dedent(f"""\
             import os, sys, time

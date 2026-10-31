@@ -1,11 +1,11 @@
 {
- "query": "Sarah & Duck",
+ "query": "Pippa & Goose",
  "search": {
   "results": [
    {
     "id": 46866,
-    "name": "Sarah & Duck",
-    "original_name": "Sarah & Duck",
+    "name": "Pippa & Goose",
+    "original_name": "Pippa & Goose",
     "first_air_date": "2013-02-18",
     "genre_ids": [
      16,
@@ -23,8 +23,8 @@
  },
  "show": {
   "id": 46866,
-  "name": "Sarah & Duck",
-  "original_name": "Sarah & Duck",
+  "name": "Pippa & Goose",
+  "original_name": "Pippa & Goose",
   "first_air_date": "2013-02-18",
   "episode_run_time": [
    13
@@ -80,56 +80,56 @@
     {
      "season_number": 0,
      "episode_number": 1,
-     "name": "Twinkle, Twinkle, Little Star",
+     "name": "Glimmer, Glimmer, Putiro Lamp",
      "runtime": 3,
      "air_date": "2023-10-09"
     },
     {
      "season_number": 0,
      "episode_number": 2,
-     "name": "If You’re Happy and You Know It",
+     "name": "If You’re Merry and You Feel It",
      "runtime": 2,
      "air_date": "2023-10-09"
     },
     {
      "season_number": 0,
      "episode_number": 3,
-     "name": "One Potato, Two Potato",
+     "name": "One Fihili, Two Fihili",
      "runtime": 2,
      "air_date": "2023-10-09"
     },
     {
      "season_number": 0,
      "episode_number": 4,
-     "name": "Birthday Song",
+     "name": "Wiwarevi Toso",
      "runtime": 2,
      "air_date": "2023-10-09"
     },
     {
      "season_number": 0,
      "episode_number": 5,
-     "name": "Autocat Returns",
+     "name": "Gakuzor Dawesih",
      "runtime": 2,
      "air_date": "2023-10-09"
     },
     {
      "season_number": 0,
      "episode_number": 6,
-     "name": "Duckzilla",
+     "name": "Pukesupab",
      "runtime": 2,
      "air_date": "2023-10-09"
     },
     {
      "season_number": 0,
      "episode_number": 7,
-     "name": "Leaf Chase",
+     "name": "Zove Kurad",
      "runtime": 3,
      "air_date": "2023-10-09"
     },
     {
      "season_number": 0,
      "episode_number": 8,
-     "name": "Fireworks Dance Song",
+     "name": "Hokenezuw Jig Toso",
      "runtime": 2,
      "air_date": "2023-10-09"
     }
@@ -141,91 +141,91 @@
     {
      "season_number": 1,
      "episode_number": 1,
-     "name": "Lots of Shallots",
+     "name": "Vefe of Bedosane",
      "runtime": 7,
      "air_date": "2013-02-18"
     },
     {
      "season_number": 1,
      "episode_number": 2,
-     "name": "Sarah, Duck and the Penguins",
+     "name": "Hapep, Suwe and the Luzegopu",
      "runtime": 7,
      "air_date": "2013-02-19"
     },
     {
      "season_number": 1,
      "episode_number": 3,
-     "name": "Cheer Up Donkey",
+     "name": "Gopar Te Pony",
      "runtime": 7,
      "air_date": "2013-02-20"
     },
     {
      "season_number": 1,
      "episode_number": 4,
-     "name": "Cake Bake",
+     "name": "Naza Wefo",
      "runtime": 7,
      "air_date": "2013-02-21"
     },
     {
      "season_number": 1,
      "episode_number": 5,
-     "name": "Bouncy Ball",
+     "name": "Kuriha Zosa",
      "runtime": 7,
      "air_date": "2013-02-22"
     },
     {
      "season_number": 1,
      "episode_number": 6,
-     "name": "Robot Juice",
+     "name": "Pofoh Tipow",
      "runtime": 7,
      "air_date": "2013-02-25"
     },
     {
      "season_number": 1,
      "episode_number": 7,
-     "name": "Scarf Lady's House",
+     "name": "Hewaf Fupu's Zuwoh",
      "runtime": 7,
      "air_date": "2013-03-26"
     },
     {
      "season_number": 1,
      "episode_number": 8,
-     "name": "Rainbow Lemon",
+     "name": "Puddle Lipaz",
      "runtime": 7,
      "air_date": "2013-02-27"
     },
     {
      "season_number": 1,
      "episode_number": 9,
-     "name": "Sit Shop",
+     "name": "Zef Tezi",
      "runtime": 7,
      "air_date": "2013-02-28"
     },
     {
      "season_number": 1,
      "episode_number": 10,
-     "name": "Kite Flight",
+     "name": "Bofu Gasuba",
      "runtime": 7,
      "air_date": "2013-03-01"
     },
     {
      "season_number": 1,
      "episode_number": 11,
-     "name": "Umbrella and the Rain",
+     "name": "Zalehola and the Bife",
      "runtime": 7,
      "air_date": "2013-03-18"
     },
     {
      "season_number": 1,
      "episode_number": 12,
-     "name": "Big Shop",
+     "name": "Gis Tezi",
      "runtime": 7,
      "air_date": "2013-03-19"
     },
     {
      "season_number": 1,
      "episode_number": 13,
-     "name": "Woollen Music",
+     "name": "Figaden Tedig",
      "runtime": 7,
      "air_date": "2013-03-20"
     },
@@ -246,35 +246,35 @@
     {
      "season_number": 1,
      "episode_number": 16,
-     "name": "Sarah Gets a Cold",
+     "name": "Hapep Rala a Tazu",
      "runtime": 7,
      "air_date": "2013-03-25"
     },
     {
      "season_number": 1,
      "episode_number": 17,
-     "name": "Ribbon Sisters",
+     "name": "Zeleba Kozavur",
      "runtime": 7,
      "air_date": "2013-03-26"
     },
     {
      "season_number": 1,
      "episode_number": 18,
-     "name": "Stargazing",
+     "name": "Murubopazu",
      "runtime": 7,
      "air_date": "2013-03-29"
     },
     {
      "season_number": 1,
      "episode_number": 19,
-     "name": "Coloured Light",
+     "name": "Semuzigi Witam",
      "runtime": 7,
      "air_date": "2013-03-28"
     },
     {
      "season_number": 1,
      "episode_number": 20,
-     "name": "Strawberry Souffle",
+     "name": "Balaluzeze Neduzok",
      "runtime": 7,
      "air_date": "2013-03-27"
     },
@@ -288,133 +288,133 @@
     {
      "season_number": 1,
      "episode_number": 22,
-     "name": "Tapping Shoes",
+     "name": "Vofuges Wenat",
      "runtime": 7,
      "air_date": "2013-08-13"
     },
     {
      "season_number": 1,
      "episode_number": 23,
-     "name": "Bobsleigh",
+     "name": "Sawagenes",
      "runtime": 7,
      "air_date": "2013-08-14"
     },
     {
      "season_number": 1,
      "episode_number": 24,
-     "name": "Fireworks Dance",
+     "name": "Hokenezuw Jig",
      "runtime": 7,
      "air_date": "2013-08-15"
     },
     {
      "season_number": 1,
      "episode_number": 25,
-     "name": "Fancy Park",
+     "name": "Zafaf Satu",
      "runtime": 7,
      "air_date": "2013-08-16"
     },
     {
      "season_number": 1,
      "episode_number": 26,
-     "name": "Pipe Conductor",
+     "name": "Neli Fasadamaz",
      "runtime": 7,
      "air_date": "2013-08-19"
     },
     {
      "season_number": 1,
      "episode_number": 27,
-     "name": "Slow Quest",
+     "name": "Nuzo Bibil",
      "runtime": 7,
      "air_date": "2013-08-20"
     },
     {
      "season_number": 1,
      "episode_number": 28,
-     "name": "World Bread Day",
+     "name": "Planet Fatuf Fol",
      "runtime": 7,
      "air_date": "2013-08-21"
     },
     {
      "season_number": 1,
      "episode_number": 29,
-     "name": "Pond Princess",
+     "name": "Riku Sifenile",
      "runtime": 7,
      "air_date": "2013-08-22"
     },
     {
      "season_number": 1,
      "episode_number": 30,
-     "name": "Scared of Stairs",
+     "name": "Zubatu of Lazali",
      "runtime": 7,
      "air_date": "2013-08-23"
     },
     {
      "season_number": 1,
      "episode_number": 31,
-     "name": "Balloon Race",
+     "name": "Buburiv Dash",
      "runtime": 7,
      "air_date": "2013-11-04"
     },
     {
      "season_number": 1,
      "episode_number": 32,
-     "name": "Puncture Pump",
+     "name": "Vawebasi Huha",
      "runtime": 7,
      "air_date": "2013-11-05"
     },
     {
      "season_number": 1,
      "episode_number": 33,
-     "name": "Plate Fog",
+     "name": "Lumoz Ziv",
      "runtime": 7,
      "air_date": "2013-11-06"
     },
     {
      "season_number": 1,
      "episode_number": 34,
-     "name": "Moon Paint",
+     "name": "Comet Zodap",
      "runtime": 7,
      "air_date": "2013-11-07"
     },
     {
      "season_number": 1,
      "episode_number": 35,
-     "name": "The Play",
+     "name": "The Fowe",
      "runtime": 7,
      "air_date": "2013-11-09"
     },
     {
      "season_number": 1,
      "episode_number": 36,
-     "name": "Bread Bike",
+     "name": "Fatuf Tado",
      "runtime": 7,
      "air_date": "2013-11-11"
     },
     {
      "season_number": 1,
      "episode_number": 37,
-     "name": "Bug's Button Bank",
+     "name": "Gat's Humuwi Bome",
      "runtime": 7,
      "air_date": "2013-11-12"
     },
     {
      "season_number": 1,
      "episode_number": 38,
-     "name": "No More Wool",
+     "name": "No Novi Sazu",
      "runtime": 7,
      "air_date": "2013-11-13"
     },
     {
      "season_number": 1,
      "episode_number": 39,
-     "name": "Octagon Club",
+     "name": "Fagosoz Wege",
      "runtime": 7,
      "air_date": "2013-11-14"
     },
     {
      "season_number": 1,
      "episode_number": 40,
-     "name": "Petal Light Picking",
+     "name": "Vunaw Witam Zezunos",
      "runtime": 7,
      "air_date": "2013-12-19"
     }
@@ -426,280 +426,280 @@
     {
      "season_number": 2,
      "episode_number": 1,
-     "name": "Outside Outside",
+     "name": "Kovilis Kovilis",
      "runtime": 7,
      "air_date": "2014-08-11"
     },
     {
      "season_number": 2,
      "episode_number": 2,
-     "name": "Umbrella Bubbles",
+     "name": "Zalehola Hifonep",
      "runtime": 7,
      "air_date": "2014-08-12"
     },
     {
      "season_number": 2,
      "episode_number": 3,
-     "name": "Cloud Tower",
+     "name": "Fog Konid",
      "runtime": 7,
      "air_date": "2014-08-13"
     },
     {
      "season_number": 2,
      "episode_number": 4,
-     "name": "Sound Jumble",
+     "name": "Subid Lohoru",
      "runtime": 7,
      "air_date": "2014-08-14"
     },
     {
      "season_number": 2,
      "episode_number": 5,
-     "name": "The Mouse's Birthday",
+     "name": "The Beter's Wiwarevi",
      "runtime": 7,
      "air_date": "2014-08-15"
     },
     {
      "season_number": 2,
      "episode_number": 6,
-     "name": "Tortoise Snooze",
+     "name": "Ramowuno Pibizu",
      "runtime": 7,
      "air_date": "2014-10-14"
     },
     {
      "season_number": 2,
      "episode_number": 7,
-     "name": "Fast Slow Bungalow",
+     "name": "Dema Nuzo Lovuramu",
      "runtime": 7,
      "air_date": "2014-10-21"
     },
     {
      "season_number": 2,
      "episode_number": 8,
-     "name": "Bags of Bags",
+     "name": "Fuve of Fuve",
      "runtime": 7,
      "air_date": "2014-10-28"
     },
     {
      "season_number": 2,
      "episode_number": 9,
-     "name": "Ribbon Fall",
+     "name": "Zeleba Nuza",
      "runtime": 7,
      "air_date": "2014-11-04"
     },
     {
      "season_number": 2,
      "episode_number": 10,
-     "name": "Garden Gaming",
+     "name": "Semasi Liwumi",
      "runtime": 7,
      "air_date": "2014-11-11"
     },
     {
      "season_number": 2,
      "episode_number": 11,
-     "name": "Seacow Snow Trail",
+     "name": "Dimapa Luve Fotos",
      "runtime": 7,
      "air_date": "2014-12-16"
     },
     {
      "season_number": 2,
      "episode_number": 12,
-     "name": "Origami Overload",
+     "name": "Dadehop Kogesimi",
      "runtime": 7,
      "air_date": "2015-01-27"
     },
     {
      "season_number": 2,
      "episode_number": 13,
-     "name": "Shallot Circus",
+     "name": "Vefefet Nemuki",
      "runtime": 7,
      "air_date": "2015-01-28"
     },
     {
      "season_number": 2,
      "episode_number": 14,
-     "name": "Toy Tidy",
+     "name": "Kon Vura",
      "runtime": 7,
      "air_date": "2015-01-29"
     },
     {
      "season_number": 2,
      "episode_number": 15,
-     "name": "Plate Escape",
+     "name": "Lumoz Hamiwu",
      "runtime": 7,
      "air_date": "2015-01-30"
     },
     {
      "season_number": 2,
      "episode_number": 16,
-     "name": "The Big Sleepover",
+     "name": "The Gis Taratehah",
      "runtime": 7,
      "air_date": "2015-02-03"
     },
     {
      "season_number": 2,
      "episode_number": 17,
-     "name": "Paisley Sea",
+     "name": "Fiwotov Sez",
      "runtime": 7,
      "air_date": "2015-02-04"
     },
     {
      "season_number": 2,
      "episode_number": 18,
-     "name": "Duck's Quack",
+     "name": "Suwe's Wuhen",
      "runtime": 7,
      "air_date": "2015-02-05"
     },
     {
      "season_number": 2,
      "episode_number": 19,
-     "name": "Rainbow's Niece",
+     "name": "Puddle's Lanuk",
      "runtime": 7,
      "air_date": "2015-02-06"
     },
     {
      "season_number": 2,
      "episode_number": 20,
-     "name": "Decorating Donkey",
+     "name": "Dawohudopa Pony",
      "runtime": 7,
      "air_date": "2015-02-10"
     },
     {
      "season_number": 2,
      "episode_number": 21,
-     "name": "Duck Hotel",
+     "name": "Suwe Inn",
      "runtime": 7,
      "air_date": "2015-02-11"
     },
     {
      "season_number": 2,
      "episode_number": 22,
-     "name": "Parasol Show",
+     "name": "Pebizuf Kuvi",
      "runtime": 7,
      "air_date": "2015-05-12"
     },
     {
      "season_number": 2,
      "episode_number": 23,
-     "name": "Extra Bounce",
+     "name": "Extra Ledole",
      "runtime": 7,
      "air_date": "2015-05-13"
     },
     {
      "season_number": 2,
      "episode_number": 24,
-     "name": "Cake Relocate",
+     "name": "Naza Daporiwu",
      "runtime": 7,
      "air_date": "2015-05-14"
     },
     {
      "season_number": 2,
      "episode_number": 25,
-     "name": "Lost Librarian",
+     "name": "Megi Viruwetod",
      "runtime": 7,
      "air_date": "2015-05-15"
     },
     {
      "season_number": 2,
      "episode_number": 26,
-     "name": "Scooter Standstill",
+     "name": "Notodoz Viwasamigo",
      "runtime": 7,
      "air_date": "2015-05-19"
     },
     {
      "season_number": 2,
      "episode_number": 27,
-     "name": "Music Fixer",
+     "name": "Tedig Bawig",
      "runtime": 7,
      "air_date": "2015-05-20"
     },
     {
      "season_number": 2,
      "episode_number": 28,
-     "name": "Wool on Wheels",
+     "name": "Sazu on Wilaku",
      "runtime": 7,
      "air_date": "2015-05-21"
     },
     {
      "season_number": 2,
      "episode_number": 29,
-     "name": "Lemon Café",
+     "name": "Lipaz Bové",
      "runtime": 7,
      "air_date": "2015-05-22"
     },
     {
      "season_number": 2,
      "episode_number": 30,
-     "name": "Star Renovation",
+     "name": "Lamp Sotokitela",
      "runtime": 7,
      "air_date": "2015-08-21"
     },
     {
      "season_number": 2,
      "episode_number": 31,
-     "name": "Woollen Memories",
+     "name": "Figaden Kefarake",
      "runtime": 7,
      "air_date": "2015-08-28"
     },
     {
      "season_number": 2,
      "episode_number": 32,
-     "name": "Beach Break",
+     "name": "Vulap Bulaw",
      "runtime": 7,
      "air_date": "2015-08-31"
     },
     {
      "season_number": 2,
      "episode_number": 33,
-     "name": "Bubble Bumbling",
+     "name": "Gikoso Vusigofa",
      "runtime": 7,
      "air_date": "2015-09-04"
     },
     {
      "season_number": 2,
      "episode_number": 34,
-     "name": "Toggle Tangle",
+     "name": "Netaza Nuzuvu",
      "runtime": 7,
      "air_date": "2015-09-11"
     },
     {
      "season_number": 2,
      "episode_number": 35,
-     "name": "Tummy Talk",
+     "name": "Hegez Pedi",
      "runtime": 7,
      "air_date": "2015-11-27"
     },
     {
      "season_number": 2,
      "episode_number": 36,
-     "name": "Moon's Exhibition",
+     "name": "Comet's Kawiduduni",
      "runtime": 7,
      "air_date": "2015-12-01"
     },
     {
      "season_number": 2,
      "episode_number": 37,
-     "name": "Pond Prose",
+     "name": "Riku Hekak",
      "runtime": 7,
      "air_date": "2015-12-02"
     },
     {
      "season_number": 2,
      "episode_number": 38,
-     "name": "The Art of Pink",
+     "name": "The Wup of Rapi",
      "runtime": 7,
      "air_date": "2015-12-03"
     },
     {
      "season_number": 2,
      "episode_number": 39,
-     "name": "Bug bop",
+     "name": "Gat kus",
      "runtime": 7,
      "air_date": "2015-12-04"
     },
     {
      "season_number": 2,
      "episode_number": 40,
-     "name": "Duck Flies",
+     "name": "Suwe Kitar",
      "runtime": 7,
      "air_date": "2015-12-15"
     }
@@ -711,280 +711,280 @@
     {
      "season_number": 3,
      "episode_number": 1,
-     "name": "Picture Planes",
+     "name": "Lefibak Nenisu",
      "runtime": 7,
      "air_date": "2016-10-18"
     },
     {
      "season_number": 3,
      "episode_number": 2,
-     "name": "Hat Fuss",
+     "name": "Zad Fulo",
      "runtime": 7,
      "air_date": "2016-10-19"
     },
     {
      "season_number": 3,
      "episode_number": 3,
-     "name": "Dewy Morning",
+     "name": "Tuvo Wozobok",
      "runtime": 7,
      "air_date": "2016-10-20"
     },
     {
      "season_number": 3,
      "episode_number": 4,
-     "name": "Sticker Swap",
+     "name": "Nezubor Dumo",
      "runtime": 7,
      "air_date": "2016-10-25"
     },
     {
      "season_number": 3,
      "episode_number": 5,
-     "name": "Train Fudge",
+     "name": "Nopuh Zusaz",
      "runtime": 7,
      "air_date": "2016-10-26"
     },
     {
      "season_number": 3,
      "episode_number": 6,
-     "name": "Magic Panic",
+     "name": "Tarag Lobig",
      "runtime": 7,
      "air_date": "2016-10-27"
     },
     {
      "season_number": 3,
      "episode_number": 7,
-     "name": "Birthday Buoy",
+     "name": "Wiwarevi Powi",
      "runtime": 7,
      "air_date": "2016-11-01"
     },
     {
      "season_number": 3,
      "episode_number": 8,
-     "name": "Alarm Cluck",
+     "name": "Muhof Gupig",
      "runtime": 7,
      "air_date": "2016-11-02"
     },
     {
      "season_number": 3,
      "episode_number": 9,
-     "name": "Twang Ball",
+     "name": "Muvof Zosa",
      "runtime": 7,
      "air_date": "2016-11-03"
     },
     {
      "season_number": 3,
      "episode_number": 10,
-     "name": "Auto Cat",
+     "name": "Pime Dib",
      "runtime": 7,
      "air_date": "2016-11-04"
     },
     {
      "season_number": 3,
      "episode_number": 11,
-     "name": "Fluff Bread",
+     "name": "Gehat Fatuf",
      "runtime": 7,
      "air_date": "2017-04-04"
     },
     {
      "season_number": 3,
      "episode_number": 12,
-     "name": "Moon Bow",
+     "name": "Comet Guw",
      "runtime": 7,
      "air_date": "2017-04-05"
     },
     {
      "season_number": 3,
      "episode_number": 13,
-     "name": "Mountain Mints",
+     "name": "Zorabape Nuwer",
      "runtime": 7,
      "air_date": "2017-04-06"
     },
     {
      "season_number": 3,
      "episode_number": 14,
-     "name": "Bench Blocked",
+     "name": "Fadov Mevarer",
      "runtime": 7,
      "air_date": "2017-04-11"
     },
     {
      "season_number": 3,
      "episode_number": 15,
-     "name": "Planetarium Aquarium",
+     "name": "Ferovawigol Vivamehe",
      "runtime": 7,
      "air_date": "2017-04-12"
     },
     {
      "season_number": 3,
      "episode_number": 16,
-     "name": "Shallot Boat",
+     "name": "Vefefet Kefi",
      "runtime": 7,
      "air_date": "2017-04-13"
     },
     {
      "season_number": 3,
      "episode_number": 17,
-     "name": "Cake Decorate",
+     "name": "Naza Pufisuda",
      "runtime": 7,
      "air_date": "2017-04-18"
     },
     {
      "season_number": 3,
      "episode_number": 18,
-     "name": "Balloon Barnacles",
+     "name": "Buburiv Nomanugin",
      "runtime": 7,
      "air_date": "2017-04-19"
     },
     {
      "season_number": 3,
      "episode_number": 19,
-     "name": "Basking Shark",
+     "name": "Rehekop Lamot",
      "runtime": 7,
      "air_date": "2017-04-20"
     },
     {
      "season_number": 3,
      "episode_number": 20,
-     "name": "Old Toys",
+     "name": "Kik Zape",
      "runtime": 7,
      "air_date": "2017-04-25"
     },
     {
      "season_number": 3,
      "episode_number": 21,
-     "name": "Hair Cut",
+     "name": "Beard Trim",
      "runtime": 7,
      "air_date": "2017-06-20"
     },
     {
      "season_number": 3,
      "episode_number": 22,
-     "name": "Constable Quack",
+     "name": "Senuvalom Wuhen",
      "runtime": 7,
      "air_date": "2017-06-27"
     },
     {
      "season_number": 3,
      "episode_number": 23,
-     "name": "Arcade Dance Off",
+     "name": "Seaside Jig Off",
      "runtime": 7,
      "air_date": "2017-07-04"
     },
     {
      "season_number": 3,
      "episode_number": 24,
-     "name": "Mars as Moon",
+     "name": "Venus as Comet",
      "runtime": 7,
      "air_date": "2017-07-11"
     },
     {
      "season_number": 3,
      "episode_number": 25,
-     "name": "Donkey Jump",
+     "name": "Pony Hop",
      "runtime": 7,
      "air_date": "2017-07-18"
     },
     {
      "season_number": 3,
      "episode_number": 26,
-     "name": "Rainbow Race",
+     "name": "Puddle Dash",
      "runtime": 7,
      "air_date": "2017-07-25"
     },
     {
      "season_number": 3,
      "episode_number": 27,
-     "name": "Perimeter Pals",
+     "name": "Memafugez Luro",
      "runtime": 7,
      "air_date": "2017-08-01"
     },
     {
      "season_number": 3,
      "episode_number": 28,
-     "name": "Pillow Fill",
+     "name": "Cushion Stuff",
      "runtime": 7,
      "air_date": "2017-08-08"
     },
     {
      "season_number": 3,
      "episode_number": 29,
-     "name": "Castle Scribbling",
+     "name": "Tower Doodling",
      "runtime": 7,
      "air_date": "2017-08-15"
     },
     {
      "season_number": 3,
      "episode_number": 30,
-     "name": "Cloud Jam",
+     "name": "Fog Knot",
      "runtime": 7,
      "air_date": "2017-08-22"
     },
     {
      "season_number": 3,
      "episode_number": 31,
-     "name": "Boo Night",
+     "name": "Gub Tapuw",
      "runtime": 7,
      "air_date": "2017-10-28"
     },
     {
      "season_number": 3,
      "episode_number": 32,
-     "name": "Comet's Coming",
+     "name": "Vibim's Puziva",
      "runtime": 7,
      "air_date": "2017-11-14"
     },
     {
      "season_number": 3,
      "episode_number": 33,
-     "name": "Whatsathingy",
+     "name": "Nikukivuvavi",
      "runtime": 7,
      "air_date": "2017-11-15"
     },
     {
      "season_number": 3,
      "episode_number": 34,
-     "name": "Brolly Bus",
+     "name": "Kite Tram",
      "runtime": 7,
      "air_date": "2017-11-16"
     },
     {
      "season_number": 3,
      "episode_number": 35,
-     "name": "Hedge Opera",
+     "name": "Ravah Lekef",
      "runtime": 7,
      "air_date": "2017-11-17"
     },
     {
      "season_number": 3,
      "episode_number": 36,
-     "name": "Park Trimming",
+     "name": "Satu Kusihowa",
      "runtime": 7,
      "air_date": "2017-11-21"
     },
     {
      "season_number": 3,
      "episode_number": 37,
-     "name": "Haberdasher",
+     "name": "Buttonmaker",
      "runtime": 7,
      "air_date": "2017-11-22"
     },
     {
      "season_number": 3,
      "episode_number": 38,
-     "name": "Cinema Scoot",
+     "name": "Wosibi Fuwom",
      "runtime": 7,
      "air_date": "2017-11-23"
     },
     {
      "season_number": 3,
      "episode_number": 39,
-     "name": "Snowball Skate",
+     "name": "Virifulu Nokuf",
      "runtime": 7,
      "air_date": "2017-12-14"
     },
     {
      "season_number": 3,
      "episode_number": 40,
-     "name": "Ribbon Alvida",
+     "name": "Zeleba Kagila",
      "runtime": 7,
      "air_date": "2017-12-15"
     }
