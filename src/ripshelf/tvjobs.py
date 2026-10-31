@@ -886,6 +886,8 @@ class TvMixin:
                            "names": [e.name for e in eps] if eps else []}
         job = self.db.get_job(job.id)
         self._event(job, "finalise", f"Copied and verified {len(copied)} titles")
+        self._spawn_notify(job, "copied", f"{len(copied)} title{'s' if len(copied) != 1 else ''} to "
+                           f"{naming.show_folder(self.s.tv, plan.show)}")
         originals = self._originals(job)
         if originals:
             self._set_step(job, "Copying the kept originals", "Transcoding was set to keep the rips as well")

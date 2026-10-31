@@ -497,7 +497,7 @@ SettingsCheck = Literal["tmdb", "tvdb", "tvmaze", "omdb", "thediscdb", "pushover
                         "catalogue", "makemkv", "paths"]
 MediaServer = Literal["emby", "jellyfin", "plex"]
 TvEpisodeOrder = Literal["tmdb", "tvdb_aired", "tvdb_dvd"]
-NotifyEvent = Literal["disc", "review", "exists", "done", "failed", "setup"]
+NotifyEvent = Literal["disc", "review", "exists", "ripped", "transcoded", "copied", "done", "failed", "setup"]
 PushoverPriority = Annotated[int, Field(ge=-2, le=1)]
 TranscodeCrop = Literal["off", "when_transcoding", "always"]
 CatalogueSearch = Literal["off", "searxng"]

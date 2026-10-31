@@ -1231,6 +1231,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
         if job.tv:
             self._check_plan(job)
         self._save(job)
+        # Before the eject and a TV disc's episode checks, which can take minutes.
+        self._spawn_notify(job, "ripped")
         if self.s.auto_eject:
             await self.eject(d.hw.id, quiet=True)
         if job.media == MediaKind.tv:
@@ -1317,6 +1319,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
             return
         job = self.db.get_job(job.id)
         self._event(job, "finalise", f"Copied and verified ({gib(total)}, sha256 {sha[:12]}…)")
+        self._spawn_notify(job, "copied", str(dest))
         originals = self._originals(job)
         if originals:
             self._set_step(job, "Copying the kept original", "Transcoding was set to keep the rip as well")
@@ -1379,6 +1382,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
         job = self.db.get_job(job.id)
         total = library.tree_size(dest)
         self._event(job, "finalise", f"Copied and verified {len(hashes)} files ({gib(total)})")
+        self._spawn_notify(job, "copied", f"Full disc backup, {len(hashes)} files, to {dest}")
         job.destination = str(dest)
         work = self.work_dir(job)
         info = self._disc_json(job, dest, "")
@@ -1427,12 +1431,15 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
 
     # --- notifications ----------------------------------------------------------
 
-    def _spawn_notify(self, job: JobRecord, kind: str) -> None:
+    def _spawn_notify(self, job: JobRecord, kind: str, detail: str = "") -> None:
+        """Notify about a job, once per job for each kind. ``detail`` is the message for
+        the kinds whose caller knows it best (transcoded, copied)."""
         if not integrations.notifications_enabled(self.s) or kind in job.notified:
             return
         job.notified.append(kind)
         self.db.save_job(job)
-        name = job.identity.title if job.identity else (job.disc.name or job.disc.label or "Disc")
+        name = (job.identity.title if job.identity else job.tv.show.name if job.tv and job.tv.show
+                else job.disc.name or job.disc.label or "Disc")
         where = f"/?job={job.id}"
         if kind == "disc":
             note = integrations.Note(kind, f"Disc inserted: {job.disc.label or 'no label'}",
@@ -1451,8 +1458,14 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
             note = integrations.Note(kind, f"Already in library: {name}",
                                      "\n".join(Path(f.path).name for f in files[:5]) or "",
                                      f"/review?job={job.id}", "Decide")
+        elif kind == "ripped":
+            note = integrations.Note(kind, f"Rip finished: {name}", self._next_step(job), where)
+        elif kind == "transcoded":
+            note = integrations.Note(kind, f"Transcode finished: {name}", detail, where)
+        elif kind == "copied":
+            note = integrations.Note(kind, f"Copied to library: {name}", detail, where)
         elif kind == "done":
-            note = integrations.Note(kind, f"Ripped: {name}", job.destination or "", f"/finished?job={job.id}")
+            note = integrations.Note(kind, f"Done: {name}", job.destination or "", f"/finished?job={job.id}")
         else:
             msg = job.problem.message if job.problem else "Failed"
             note = integrations.Note(kind, f"Failed: {name}", msg, where)

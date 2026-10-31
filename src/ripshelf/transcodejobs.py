@@ -154,6 +154,7 @@ class TranscodeMixin:
             job = self.db.get_job(job_id)
             job.transcode.state = "done"
             self._save(job)
+            self._spawn_notify(job, "transcoded", self._transcode_note(job))
 
     async def _transcode_file(self, job_id: int, idx: int, src: Path, encoder: str, of: str = "") -> TranscodeFile:
         job = self.db.get_job(job_id)
@@ -244,6 +245,39 @@ class TranscodeMixin:
         if not done:
             return "not transcoded" + (f" ({why})" if why else "")
         return f"{len(done)} transcoded, {len(left)} as ripped" + (f" ({why})" if why else "")
+
+    def _transcode_note(self, job: JobRecord) -> str:
+        """The transcode's outcome for a notification, with the space it saved."""
+        files = job.transcode.files
+        done = [f for f in files if f.action == "transcoded"]
+        before = sum(f.size_before or 0 for f in done)
+        after = sum(f.size_after or 0 for f in done)
+        saved = f", {round(100 * after / before)}% of the original size" if before else ""
+        summary = self._transcode_summary(job) or "nothing to transcode"
+        return summary[0].upper() + summary[1:] + saved + ". Copying into the library next."
+
+    def _next_step(self, job: JobRecord) -> str:
+        """What happens to a finished rip, for the "Rip finished" notification. Whether a
+        file is transcoded is only known once it's probed, so this goes by the settings."""
+        if job.mode == "backup":
+            what = "Copying the full disc backup into the library (not transcoded)"
+        elif not self.s.transcode_enabled:
+            what = "Copying into the library (transcoding is off)"
+        elif not self.s.transcode_source(job.disc.kind.value if job.disc.kind else None)["transcode"]:
+            kind = transcode.DISC_NAMES.get(job.disc.kind.value, job.disc.kind.value)
+            what = f"Copying into the library ({kind} discs aren't transcoded)"
+        else:
+            what = "Transcoding to H.265 where needed, then copying into the library"
+        what = what[0].lower() + what[1:]
+        if job.state == JobState.clash:
+            return f"Already in the library, so waiting for you to decide. Then: {what}"
+        if job.state == JobState.review and job.media == MediaKind.tv and self.s.tv_auto_confirm:
+            return f"Checking the episodes (you may be asked to review them). Then: {what}"
+        if job.state == JobState.review:
+            return f"Waiting for you to review it. Then: {what}"
+        if job.identity is None:
+            return f"Still identifying it. Then: {what}"
+        return f"Next: {what}"
 
     def _copy_detail(self, job: JobRecord, what: str) -> str:
         summary = self._transcode_summary(job)
