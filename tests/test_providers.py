@@ -40,27 +40,27 @@ from ripshelf.providers.tvmaze import Tvmaze, TvmazeError
 from ripshelf.tv import tmdb_tv
 
 from .conftest import posix_only
-from .test_tv_sources import BWE, Tv, season1
+from .test_tv_sources import HBK, Tv, season1
 from .tvfix import load, mock_show
 
-ROBOT = "/dev/fake-sr2"  # In THE_WILD_ROBOT UHD, title 0 is 00801.mpls (1:41:41), title 3 00149.mpls
-SD = "/dev/fake-sr0"  # In SARAH_&_DUCK_BROLLY_BUS DVD, title 0 is the play-all, 1-10 the episodes (7:01)
+ROBOT = "/dev/fake-sr2"  # In THE_BRASS_HERON UHD, title 0 is 00801.mpls (1:41:41), title 3 00149.mpls
+SD = "/dev/fake-sr0"  # In PIPPA_&_GOOSE_KITE_TRAM DVD, title 0 is the play-all, 1-10 the episodes (7:01)
 SD_EPISODES = [34, 26, 21, 23, 24, 25, 29, 37, 30, 28]
 
-# A trimmed record as /api/dischash answers it (TheDiscDB's 'Round Midnight Criterion disc).
-ROUND_MIDNIGHT = {
+# A trimmed record as /api/dischash answers it (TheDiscDB's 'Neath Moonrise Archive disc).
+NEATH_MOONRISE = {
     "global_disc_id": "BDE5486DBE5FA6E7B9D66485CB9AA774C527D8EE", "format": "Blu-Ray",
     "content_hash": "2D61282D8DA5EAC2CA87B451BCE9A055",
-    "media": {"title": "'Round Midnight", "full_title": "'Round Midnight (1986)", "year": 1986, "type": "Movie",
-              "external_ids": {"tmdb": "14670", "imdb": "tt0090557"}},
-    "release": {"slug": "2022-criterion-blu-ray", "title": "Criterion Blu-ray", "year": 2022},
-    "disc": {"slug": "blu-ray", "name": "’ROUND MIDNIGHT", "index": 1},
+    "media": {"title": "'Neath Moonrise", "full_title": "'Neath Moonrise (1986)", "year": 1986, "type": "Movie",
+              "external_ids": {"tmdb": "14670", "imdb": "tt9900557"}},
+    "release": {"slug": "2022-archive-blu-ray", "title": "Archive Blu-ray", "year": 2022},
+    "disc": {"slug": "blu-ray", "name": "’NEATH MOONRISE", "index": 1},
     "titles": [
         {"index": 0, "source_file": "00001.mpls", "segment_map": "274", "duration": "2:11:34", "size": 36380633088,
-         "item": {"title": "'Round Midnight", "type": "MainMovie"}},
+         "item": {"title": "'Neath Moonrise", "type": "MainMovie"}},
         {"index": 1, "source_file": "00230.m2ts", "segment_map": "230", "duration": "0:00:00", "size": 239616},
         {"index": 2, "source_file": "00002.mpls", "segment_map": "300", "duration": "0:25:10", "size": 1,
-         "item": {"title": "Bertrand Tavernier on 'Round Midnight", "type": "Extra"}},
+         "item": {"title": "Henri Duvallon on 'Neath Moonrise", "type": "Extra"}},
         "not a title",
     ],
 }
@@ -229,13 +229,13 @@ async def test_structure_read_lists_sizes(tmp_path):
 @respx.mock
 async def test_lookup_by_disc_id_then_content_hash(discdb):
     by_id = respx.get(f"{SITE}/api/discid/AAA").mock(return_value=httpx.Response(404))
-    by_hash = respx.get(f"{SITE}/api/dischash/BBB").mock(return_value=httpx.Response(200, json=ROUND_MIDNIGHT))
+    by_hash = respx.get(f"{SITE}/api/dischash/BBB").mock(return_value=httpx.Response(200, json=NEATH_MOONRISE))
     db = TheDiscDb()
     db.lookup = lambda fps: discdb.real(db, fps)
     try:
         m = await db.lookup({"disc_id": "AAA", "content_hash": "BBB"})
         assert by_id.called and by_hash.called and m.by == "content_hash"
-        respx.get(f"{SITE}/api/discid/CCC").mock(return_value=httpx.Response(200, json=[ROUND_MIDNIGHT]))
+        respx.get(f"{SITE}/api/discid/CCC").mock(return_value=httpx.Response(200, json=[NEATH_MOONRISE]))
         assert (await db.lookup({"disc_id": "CCC"})).by == "disc_id"
         assert await db.lookup({}) is None
         respx.get(f"{SITE}/api/dischash/DDD").mock(return_value=httpx.Response(500))
@@ -257,21 +257,21 @@ async def test_lookup_by_disc_id_then_content_hash(discdb):
 
 
 def test_record_to_match():
-    m = thediscdb.to_match(ROUND_MIDNIGHT, "disc_id")
+    m = thediscdb.to_match(NEATH_MOONRISE, "disc_id")
     assert (m.media, m.title, m.year, m.tmdb_id, m.imdb_id, m.release) == (
-        MediaKind.movie, "'Round Midnight", 1986, 14670, "tt0090557", "Criterion Blu-ray")
+        MediaKind.movie, "'Neath Moonrise", 1986, 14670, "tt9900557", "Archive Blu-ray")
     assert [(t.index, t.kind, t.duration_s) for t in m.titles] == [(0, "main", 7894), (1, None, 0), (2, "extra", 1510)]
-    assert thediscdb.summary(m) == "'Round Midnight (1986), Criterion Blu-ray, ’ROUND MIDNIGHT"
-    series = {**ROUND_MIDNIGHT, "media": {"title": "Show", "type": "Series", "external_ids": {"tvdb": "12"}},
+    assert thediscdb.summary(m) == "'Neath Moonrise (1986), Archive Blu-ray, ’NEATH MOONRISE"
+    series = {**NEATH_MOONRISE, "media": {"title": "Show", "type": "Series", "external_ids": {"tvdb": "12"}},
               "titles": [{"index": 3, "item": {"title": "Pilot", "type": "Episode", "season": "1", "episode": "x"}}]}
     s = thediscdb.to_match(series, "content_hash")
     assert s.media == MediaKind.tv and s.tvdb_id == 12 and s.titles[0].season == 1 and s.titles[0].episode is None
-    assert thediscdb.to_match({**ROUND_MIDNIGHT, "media": {"title": "X", "type": "Boxset"}}, "disc_id") is None
+    assert thediscdb.to_match({**NEATH_MOONRISE, "media": {"title": "X", "type": "Boxset"}}, "disc_id") is None
     assert thediscdb.to_match({}, "disc_id") is None
 
 
 def test_place_titles_on_the_scan():
-    m = thediscdb.to_match(ROUND_MIDNIGHT, "disc_id")
+    m = thediscdb.to_match(NEATH_MOONRISE, "disc_id")
     scan = [TitleInfo(index=5, duration_s=7894, size_bytes=1, chapters=1, source_file="00001.mpls", segments_map="274"),
             TitleInfo(index=1, duration_s=1510, size_bytes=1, chapters=1, source_file="00002.mpls", segments_map="9")]
     assert thediscdb.place_titles(m, scan) == 1  # 00002.mpls plays other clips here
@@ -286,7 +286,7 @@ def test_place_titles_on_the_scan():
 # --- TVmaze ---------------------------------------------------------------------------------
 
 
-MAZE_BWE = {"id": 112, "name": "Boardwalk Empire", "premiered": "2010-09-19",
+MAZE_HBK = {"id": 112, "name": "Harbour Kingdom", "premiered": "2010-09-19",
             "externals": {"tvrage": 1, "thetvdb": 84947, "imdb": "tt0979432"}}
 
 
@@ -294,9 +294,9 @@ MAZE_BWE = {"id": 112, "name": "Boardwalk Empire", "premiered": "2010-09-19",
 async def test_tvmaze_client():
     respx.get(f"{MAZE}/search/shows").mock(side_effect=[
         httpx.Response(429, headers={"Retry-After": "0"}),
-        httpx.Response(200, json=[{"score": 1, "show": MAZE_BWE}, {"show": {"name": "no id"}}, "junk"])])
+        httpx.Response(200, json=[{"score": 1, "show": MAZE_HBK}, {"show": {"name": "no id"}}, "junk"])])
     respx.get(f"{MAZE}/lookup/shows", params={"thetvdb": "1"}).mock(return_value=httpx.Response(404))
-    respx.get(f"{MAZE}/lookup/shows", params={"imdb": "tt0979432"}).mock(return_value=httpx.Response(200, json=MAZE_BWE))
+    respx.get(f"{MAZE}/lookup/shows", params={"imdb": "tt0979432"}).mock(return_value=httpx.Response(200, json=MAZE_HBK))
     eps = [{"season": 1, "number": n, "name": f"E{n}", "airdate": "2010-09-19", "runtime": 55} for n in (2, 1)]
     eps += [{"season": 1, "number": None, "name": "special"}, {"season": 2, "number": 1}, "junk",
             {"season": 1, "number": 1, "name": "dup"}]
@@ -323,12 +323,12 @@ async def _nothing():
 @respx.mock
 async def test_tvmaze_finds_what_tmdb_misses():
     respx.get(f"{TMDB}/search/tv").mock(return_value=httpx.Response(200, json={"results": []}))
-    respx.get(f"{MAZE}/search/shows").mock(return_value=httpx.Response(200, json=[{"show": MAZE_BWE}]))
+    respx.get(f"{MAZE}/search/shows").mock(return_value=httpx.Response(200, json=[{"show": MAZE_HBK}]))
     respx.get(f"{TMDB}/find/84947").mock(return_value=httpx.Response(200, json={"tv_results": [{"id": 1621}]}))
-    respx.get(f"{TMDB}/tv/1621").mock(return_value=httpx.Response(200, json=BWE))
+    respx.get(f"{TMDB}/tv/1621").mock(return_value=httpx.Response(200, json=HBK))
     tmdb, maze = Tmdb("k"), Tvmaze()
     try:
-        shows = await tmdb_tv.find_shows(tmdb, "Boardwalk Empire", None, sources=["tmdb", "tvmaze"], tvmaze=maze)
+        shows = await tmdb_tv.find_shows(tmdb, "Harbour Kingdom", None, sources=["tmdb", "tvmaze"], tvmaze=maze)
         assert [s.tmdb_id for s in shows] == [1621] and shows[0].providers == ["tvmaze", "tmdb"]
         assert any(e.text == "Found through TVmaze (TMDB's search missed it)" for e in shows[0].evidence)
         respx.get(f"{MAZE}/search/shows").mock(return_value=httpx.Response(500))
@@ -340,14 +340,14 @@ async def test_tvmaze_finds_what_tmdb_misses():
 
 @respx.mock
 async def test_episodes_from_tvmaze_without_a_tvdb_key(settings):
-    respx.get(f"{TMDB}/tv/1621").mock(return_value=httpx.Response(200, json={**BWE, "external_ids": {
+    respx.get(f"{TMDB}/tv/1621").mock(return_value=httpx.Response(200, json={**HBK, "external_ids": {
         "tvdb_id": 84947, "imdb_id": "tt0979432"}}))
-    respx.get(f"{MAZE}/lookup/shows").mock(return_value=httpx.Response(200, json=MAZE_BWE))
+    respx.get(f"{MAZE}/lookup/shows").mock(return_value=httpx.Response(200, json=MAZE_HBK))
     eps = [{"season": 1, "number": n, "name": f"M{n}"} for n in (1, 2)]
     respx.get(f"{MAZE}/shows/112/episodes").mock(return_value=httpx.Response(200, json=eps))
     settings.metadata_providers = {"episodes": [{"name": "tvmaze"}, {"name": "tmdb"}]}
     tmdb = Tmdb("k")
-    show = Show(tmdb_id=1621, name="Boardwalk Empire")
+    show = Show(tmdb_id=1621, name="Harbour Kingdom")
     try:
         got, note = await Tv(settings)._episode_list(show, 1, season1(), tmdb)
         assert [(e.name, e.runtime) for e in got] == [("M1", 73), ("M2", 53)]  # TMDB's runtimes filled in
@@ -368,9 +368,9 @@ async def test_episodes_from_tvmaze_without_a_tvdb_key(settings):
 # --- OMDb ---------------------------------------------------------------------------------
 
 
-OMDB_HITS = {"Search": [{"Title": "Practical Magic", "Year": "1998", "imdbID": "tt0120791", "Type": "movie"},
+OMDB_HITS = {"Search": [{"Title": "Moonlit Orchard", "Year": "1998", "imdbID": "tt0120791", "Type": "movie"},
                         {"Title": "Bad", "imdbID": "nope"}], "Response": "True"}
-OMDB_PM = {"Title": "Practical Magic", "Year": "1998", "Runtime": "104 min", "Genre": "Comedy, Fantasy",
+OMDB_PM = {"Title": "Moonlit Orchard", "Year": "1998", "Runtime": "104 min", "Genre": "Comedy, Fantasy",
            "Plot": "Two witch sisters.", "Poster": "https://img/pm.jpg", "imdbVotes": "120,345",
            "imdbID": "tt0120791", "Response": "True"}
 
@@ -391,9 +391,9 @@ async def test_omdb_client():
     omdb_route(respx)
     o = Omdb("k")
     try:
-        got = await o.candidates(["Practical Magic"], 1999)  # nothing for 1999, so searched again without
+        got = await o.candidates(["Moonlit Orchard"], 1999)  # nothing for 1999, so searched again without
         assert [(c.title, c.year, c.runtime, c.imdb_id, c.vote_count, c.source) for c in got] == [
-            ("Practical Magic", 1998, 104, "tt0120791", 120345, "omdb")]
+            ("Moonlit Orchard", 1998, 104, "tt0120791", 120345, "omdb")]
         respx.get(OMDB).mock(return_value=httpx.Response(401, json={"Response": "False", "Error": "Invalid API key!"}))
         with pytest.raises(OmdbError, match="refused the API key"):
             await o.search("x")
@@ -417,27 +417,27 @@ async def test_films_merges_tmdb_and_omdb(keyed):
     keyed.omdb_api_key = SecretStr("o")
     keyed.metadata_providers = {"movie": [{"name": "tmdb"}, {"name": "omdb", "enabled": True}]}
     respx.get(f"{TMDB}/search/movie").mock(return_value=httpx.Response(200, json={"results": [
-        {"id": 6435, "title": "Practical Magic", "release_date": "1998-10-16"}]}))
+        {"id": 6435, "title": "Moonlit Orchard", "release_date": "1998-10-16"}]}))
     respx.get(f"{TMDB}/movie/6435").mock(return_value=httpx.Response(200, json={
         "id": 6435, "runtime": 104, "imdb_id": "tt0120791"}))
-    hits = {"Search": [*OMDB_HITS["Search"], {"Title": "Practical Magic 2", "Year": "2026", "imdbID": "tt999"},
+    hits = {"Search": [*OMDB_HITS["Search"], {"Title": "Moonlit Orchard 2", "Year": "2026", "imdbID": "tt999"},
                        {"Title": "Only on IMDb", "Year": "2001", "imdbID": "tt555"}]}
     omdb_route(respx, hits)
     respx.get(f"{TMDB}/find/tt999").mock(return_value=httpx.Response(200, json={"movie_results": [{"id": 77}]}))
     respx.get(f"{TMDB}/find/tt555").mock(return_value=httpx.Response(200, json={"movie_results": []}))
     respx.get(f"{TMDB}/movie/77").mock(return_value=httpx.Response(200, json={
-        "id": 77, "title": "Practical Magic 2", "release_date": "2026-09-18", "imdb_id": "tt999"}))
-    got, notes = await films.search(keyed, ["Practical Magic"], None)
+        "id": 77, "title": "Moonlit Orchard 2", "release_date": "2026-09-18", "imdb_id": "tt999"}))
+    got, notes = await films.search(keyed, ["Moonlit Orchard"], None)
     by = {c.title: c for c in got}
-    assert by["Practical Magic"].providers == ["tmdb", "omdb"] and by["Practical Magic"].tmdb_id == 6435
-    assert by["Practical Magic 2"].providers == ["omdb", "tmdb"] and by["Practical Magic 2"].source == "tmdb"
+    assert by["Moonlit Orchard"].providers == ["tmdb", "omdb"] and by["Moonlit Orchard"].tmdb_id == 6435
+    assert by["Moonlit Orchard 2"].providers == ["omdb", "tmdb"] and by["Moonlit Orchard 2"].source == "tmdb"
     assert by["Only on IMDb"].tmdb_id is None and by["Only on IMDb"].providers == ["omdb"]
-    assert notes == [("info", "TMDB: 1 candidates for “Practical Magic”"),
-                     ("info", "OMDb: 3 candidates for “Practical Magic”")]
+    assert notes == [("info", "TMDB: 1 candidates for “Moonlit Orchard”"),
+                     ("info", "OMDb: 3 candidates for “Moonlit Orchard”")]
     films.cross_check(got)
-    assert by["Practical Magic"].evidence[-1].text == "Found by TMDB and OMDb"
+    assert by["Moonlit Orchard"].evidence[-1].text == "Found by TMDB and OMDb"
     respx.get(OMDB).mock(return_value=httpx.Response(401, json={"Error": "Invalid API key!"}))
-    got, notes = await films.search(keyed, ["Practical Magic"], None)
+    got, notes = await films.search(keyed, ["Moonlit Orchard"], None)
     assert len(got) == 1 and notes[-1] == ("warning", "OMDb refused the API key")
 
 
@@ -476,7 +476,7 @@ async def test_settings_tests_for_new_providers(settings):
     assert r.ok and "1 titles" in r.details[0]
     respx.get(OMDB).mock(return_value=httpx.Response(401, json={"Error": "Invalid API key!"}))
     assert not (await checks.omdb(settings, SettingsUpdate(omdb_api_key="bad"))).ok
-    respx.get(f"{MAZE}/search/shows").mock(return_value=httpx.Response(200, json=[{"show": MAZE_BWE}]))
+    respx.get(f"{MAZE}/search/shows").mock(return_value=httpx.Response(200, json=[{"show": MAZE_HBK}]))
     assert (await checks.tvmaze(settings, SettingsUpdate())).ok
     respx.get(f"{MAZE}/search/shows").mock(side_effect=httpx.ConnectError("down"))
     assert (await checks.tvmaze(settings, SettingsUpdate())).message.startswith("Could not reach TVmaze")
@@ -489,27 +489,27 @@ async def test_settings_tests_for_new_providers(settings):
 # --- in the pipeline ------------------------------------------------------------------------
 
 
-def robot_match(main: str = "00801.mpls") -> DiscMatch:
-    return DiscMatch(media=MediaKind.movie, title="The Wild Robot", year=2024, tmdb_id=1184918,
+def heron_match(main: str = "00801.mpls") -> DiscMatch:
+    return DiscMatch(media=MediaKind.movie, title="The Brass Heron", year=2024, tmdb_id=1184918,
                      release="4K Ultra HD", titles=[DiscMatchTitle(index=0, source_file=main, kind="main"),
                                                     DiscMatchTitle(index=1, source_file="01238.mpls", kind="extra")])
 
 
 async def test_disc_database_identifies_a_film_without_any_search(harness, settings, discdb):
-    discdb.match = robot_match()
+    discdb.match = heron_match()
     async with harness(ROBOT) as h:
         job = await h.wait_job(lambda j: j.state == JobState.done)
         events = [e.message for e in h.db.events(job.id)]
     assert len(discdb.asked[0]["disc_id"]) == 40
-    assert job.identity.title == "The Wild Robot" and job.identity_source == "auto"
+    assert job.identity.title == "The Brass Heron" and job.identity_source == "auto"
     assert job.identity.providers == ["thediscdb"] and job.identity.score == films.DISC_MATCH_SCORE
     assert job.disc_match.titles[0].scan_index == 0
-    assert "TheDiscDB knows this disc as The Wild Robot (2024), 4K Ultra HD" in events
+    assert "TheDiscDB knows this disc as The Brass Heron (2024), 4K Ultra HD" in events
 
 
 async def test_disc_database_picks_the_main_title(harness, keyed, discdb):
-    discdb.match = robot_match("00149.mpls")
-    f = json.loads((Path(__file__).parent / "fixtures" / "tmdb" / "wild-robot.json").read_text())
+    discdb.match = heron_match("00149.mpls")
+    f = json.loads((Path(__file__).parent / "fixtures" / "tmdb" / "brass-heron.json").read_text())
     with respx.mock(assert_all_called=False) as router:
         router.get(f"{TMDB}/search/movie").mock(return_value=httpx.Response(200, json={"results": f["results"]}))
         for tid, d in f["details"].items():
@@ -532,13 +532,13 @@ async def test_unknown_disc_and_titles_that_dont_fit(harness, settings, discdb):
 
 @pytest.mark.slow
 async def test_disc_database_maps_tv_episodes(harness, keyed, settings, discdb):
-    sd = load("sarah-duck")
-    discdb.match = DiscMatch(media=MediaKind.tv, title="Sarah & Duck", tmdb_id=sd["show"]["id"], titles=[
+    sd = load("pippa-goose")
+    discdb.match = DiscMatch(media=MediaKind.tv, title="Pippa & Goose", tmdb_id=sd["show"]["id"], titles=[
         DiscMatchTitle(index=0, duration_s=4210),
         *(DiscMatchTitle(index=i, duration_s=421, kind="episode", season=3, episode=n, name=f"Ep {n}")
           for i, n in enumerate(SD_EPISODES, 1))])
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck", search_override=[])
+        mock_show(router, "pippa-goose", search_override=[])
         router.get(f"{MAZE}/search/shows").mock(return_value=httpx.Response(200, json=[]))
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.done, timeout=60)

@@ -94,7 +94,7 @@ async def test_remote_drive_rips_into_the_controller_library(controller, tmp_pat
         assert any("Scan found" in e["message"] for e in detail["events"])
         assert api(url, f"/api/jobs/{job['id']}/log?kind=scan")  # remote output reached the log
         r = httpx.post(f"{url}/api/jobs/{job['id']}/confirm",
-                       json={"candidate": {"title": "Practical Magic", "year": 1998, "source": "manual"}})
+                       json={"candidate": {"title": "Moonlit Orchard", "year": 1998, "source": "manual"}})
         assert r.status_code == 200
         done = await asyncio.to_thread(wait_http, lambda: (j := api(url, f"/api/jobs/{job['id']}"))
                                        ["state"] == "done" and j)

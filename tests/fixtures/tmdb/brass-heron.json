@@ -1,0 +1,17 @@
+{
+  "query": "The Brass Heron",
+  "results": [
+    {"id": 9000101, "title": "The Making of The Brass Heron", "original_title": "The Making of The Brass Heron", "release_date": "2024-12-10", "genre_ids": [99], "vote_count": 12, "popularity": 2.1, "poster_path": "/mk.jpg"},
+    {"id": 1184918, "title": "The Brass Heron", "original_title": "The Brass Heron", "release_date": "2024-09-12", "genre_ids": [16, 878, 10751], "vote_count": 4521, "popularity": 310.4, "poster_path": "/wTnV3PCVW5O92JMrFvvrRcV39RU.jpg"},
+    {"id": 9000102, "title": "Inside The Brass Heron", "original_title": "Inside The Brass Heron", "release_date": "2025-01-14", "genre_ids": [99], "vote_count": 3, "popularity": 0.9},
+    {"id": 9000103, "title": "The Brass Heron", "original_title": "The Brass Heron", "release_date": "2016-05-01", "genre_ids": [16], "vote_count": 2, "popularity": 0.6},
+    {"id": 9000104, "title": "The Brass Heron: Behind the Scenes", "original_title": "The Brass Heron: Behind the Scenes", "release_date": "2024-10-01", "genre_ids": [99], "vote_count": 1, "popularity": 0.4}
+  ],
+  "details": {
+    "9000101": {"runtime": 24, "genres": [{"id": 99, "name": "Documentary"}]},
+    "1184918": {"runtime": 102, "genres": [{"id": 16, "name": "Animation"}, {"id": 878, "name": "Science Fiction"}, {"id": 10751, "name": "Family"}]},
+    "9000102": {"runtime": 12, "genres": [{"id": 99, "name": "Documentary"}]},
+    "9000103": {"runtime": 6, "genres": [{"id": 16, "name": "Animation"}]},
+    "9000104": {"runtime": 18, "genres": [{"id": 99, "name": "Documentary"}]}
+  }
+}

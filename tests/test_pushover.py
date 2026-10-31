@@ -40,17 +40,17 @@ async def test_review_done_and_failed_reach_pushover(harness, pushed, mkv_script
         po = router.post(PUSHOVER_API).mock(return_value=httpx.Response(200, json={"status": 1}))
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review)
-            await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+            await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
             await h.wait_job(lambda j: j.state == JobState.done)
             await until(lambda: sent(po, "Ripped"))
     [review], [done] = sent(po, "Needs review"), sent(po, "Ripped")
     assert review["token"] == "a-token" and review["user"] == "u-key"
     assert review["priority"] == "1"
     assert review["url"] == f"http://ripshelf.lan:8380/review?job={job.id}" and review["url_title"] == "Review it"
-    assert done["title"] == "Ripped: Practical Magic" and done["priority"] == "0"
+    assert done["title"] == "Ripped: Moonlit Orchard" and done["priority"] == "0"
     assert done["url"] == f"http://ripshelf.lan:8380/finished?job={job.id}"
     body, raw_link = done["message"].rsplit("\n", 1)
-    assert body.endswith("Practical Magic (1998).mkv") and raw_link == done["url"]
+    assert body.endswith("Moonlit Orchard (1998).mkv") and raw_link == done["url"]
     assert not sent(po, "Disc inserted"), "off by default"
 
 
@@ -74,7 +74,7 @@ async def test_events_can_be_turned_off_or_on(harness, pushed, settings):
             await h.wait_job(lambda j: j.state == JobState.review)
             await until(lambda: sent(po, "Disc inserted"))
             await asyncio.sleep(0.2)
-    assert [f["title"] for f in map(form, po.calls)] == ["Disc inserted: PRACTICAL_MAGIC"]
+    assert [f["title"] for f in map(form, po.calls)] == ["Disc inserted: MOONLIT_ORCHARD"]
     assert form(po.calls[0])["priority"] == "-1"
     assert form(po.calls[0])["message"].startswith("In Top bay")
 

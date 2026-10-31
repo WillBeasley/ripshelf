@@ -32,24 +32,24 @@ DRIVES = {
         DriveHw(id="fake-pioneer", device="/dev/fake-sr2", sg_device="/dev/fake-sg7", vendor="PIONEER",
                 model="BD-RW  BDR-S11JX", revision="1.53", serial=None,
                 capabilities=[Capability.dvd, Capability.bluray, Capability.uhd], port="fake:2"),
-        FakeDisc("THE_WILD_ROBOT", "scan-uhd-wild-robot.log", 84_505_309_184, bdmt="The Wild Robot"),
+        FakeDisc("THE_BRASS_HERON", "scan-uhd-brass-heron.log", 84_505_309_184, bdmt="The Brass Heron"),
     ),
     "/dev/fake-sr1": (
         DriveHw(id="fake-ihas122", device="/dev/fake-sr1", sg_device="/dev/fake-sg6", vendor="ATAPI",
                 model="iHAS122", revision="ZL0E", serial=None, capabilities=[Capability.dvd], port="fake:1"),
-        FakeDisc("PRACTICAL_MAGIC", "scan-dvd-practical-magic.log", 3_892_871_168),
+        FakeDisc("MOONLIT_ORCHARD", "scan-dvd-moonlit-orchard.log", 3_892_871_168),
     ),
     "/dev/fake-sr0": (
         DriveHw(id="fake-ghc0n", device="/dev/fake-sr0", sg_device="/dev/fake-sg5", vendor="HL-DT-ST",
                 model="DVD-RAM GHC0N", revision="MA00", serial=None, capabilities=[Capability.dvd],
                 port="fake:0"),
-        FakeDisc("SARAH_&_DUCK_BROLLY_BUS", "scan-dvd-sarah-duck.log", 4_000_000_000),
+        FakeDisc("PIPPA_&_GOOSE_KITE_TRAM", "scan-dvd-pippa-goose.log", 4_000_000_000),
     ),
     "/dev/fake-sr3": (
         DriveHw(id="fake-ggc-h20n", device="/dev/fake-sr3", sg_device="/dev/fake-sg1", vendor="HL-DT-ST",
                 model="BDDVDRW GGC-H20N", revision="1.01", serial=None,
                 capabilities=[Capability.dvd, Capability.bluray], port="fake:3"),
-        FakeDisc("RENTAL_FAMILY", None, 45_000_000_000),
+        FakeDisc("PAPER_KITES", None, 45_000_000_000),
     ),
 }
 

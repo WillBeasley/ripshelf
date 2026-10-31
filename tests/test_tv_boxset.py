@@ -1,4 +1,4 @@
-"""A Fawlty Towers box set across two discs, where collections carry the numbering on."""
+"""A Seagull Manor box set across two discs, where collections carry the numbering on."""
 
 from __future__ import annotations
 
@@ -59,9 +59,9 @@ async def run_disc(h, label, monkeypatch, settings, mkv_script, runtimes, play_a
 @pytest.mark.slow
 async def test_two_discs_continue_the_season(harness, keyed, settings, mkv_script, monkeypatch):
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "fawlty-towers")
+        mock_show(router, "seagull-manor")
         async with harness() as h:
-            d1 = await run_disc(h, "FAWLTY_TOWERS_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
+            d1 = await run_disc(h, "SEAGULL_MANOR_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
             assert d1.media == MediaKind.tv and d1.tv.season == 1 and d1.tv.disc_number == 1
             eps = [m.episodes[0].episode for m in d1.tv.mapping if m.role == TitleRole.episode]
             assert eps == [1, 2, 3] and d1.tv.consistent
@@ -69,7 +69,7 @@ async def test_two_discs_continue_the_season(harness, keyed, settings, mkv_scrip
             await until(lambda: h.job(d1.id).state == JobState.done)
             await h.m.eject("fake-ghc0n")
             # Disc 2 has no disc number in its label, so the collection says what comes next.
-            d2 = await run_disc(h, "FAWLTY_TOWERS_SERIES_1", monkeypatch, settings, mkv_script, RUNTIMES[2])
+            d2 = await run_disc(h, "SEAGULL_MANOR_SERIES_1", monkeypatch, settings, mkv_script, RUNTIMES[2])
             assert d2.tv.season == 1 and d2.tv.disc_number == 2 and d2.tv.start_episode == 4
             eps = [m.episodes[0].episode for m in d2.tv.mapping if m.role == TitleRole.episode]
             assert eps == [4, 5, 6]
@@ -78,20 +78,20 @@ async def test_two_discs_continue_the_season(harness, keyed, settings, mkv_scrip
             detail = h.m.collection_detail(h.job(d2.id).tv.collection_id)
     s1 = next(g for g in detail.seasons if g.season == 1)
     assert s1.present == 6 and s1.total == 6
-    show = settings.library_dir / "TV/Fawlty Towers (1975)/Season 01"
-    assert sorted(p.name for p in show.iterdir())[0] == "Fawlty Towers - S01E01 - A Touch of Class.mkv"
+    show = settings.library_dir / "TV/Seagull Manor (1975)/Season 01"
+    assert sorted(p.name for p in show.iterdir())[0] == "Seagull Manor - S01E01 - A Hint of Style.mkv"
     assert len(list(show.iterdir())) == 6
 
 
 @pytest.mark.slow
 async def test_same_disc_twice_shows_duplicates(harness, keyed, settings, mkv_script, monkeypatch):
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "fawlty-towers")
+        mock_show(router, "seagull-manor")
         async with harness() as h:
-            d1 = await run_disc(h, "FAWLTY_TOWERS_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
+            d1 = await run_disc(h, "SEAGULL_MANOR_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
             await h.m.tv_confirm(d1.id, [])
             await h.m.eject("fake-ghc0n")
-            d2 = await run_disc(h, "FAWLTY_TOWERS_S1_D2", monkeypatch, settings, mkv_script, RUNTIMES[1])
+            d2 = await run_disc(h, "SEAGULL_MANOR_S1_D2", monkeypatch, settings, mkv_script, RUNTIMES[1])
             # Label says disc 2 but force the same run, and the grid shows the clash.
             await h.m.tv_propose(d2.id, 2207, season=1, disc_number=2, start_episode=1, compilation=False)
             await h.m.tv_confirm(d2.id, [])
@@ -102,9 +102,9 @@ async def test_same_disc_twice_shows_duplicates(harness, keyed, settings, mkv_sc
 
 async def test_disc_number_guess_without_collection(harness, keyed, settings, mkv_script, monkeypatch):
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "fawlty-towers")
+        mock_show(router, "seagull-manor")
         async with harness() as h:
-            d2 = await run_disc(h, "FAWLTY_TOWERS_S1_D2", monkeypatch, settings, mkv_script, RUNTIMES[2],
+            d2 = await run_disc(h, "SEAGULL_MANOR_S1_D2", monkeypatch, settings, mkv_script, RUNTIMES[2],
                                 play_all=False)
             assert d2.tv.start_episode == 4
             assert [m.episodes[0].episode for m in d2.tv.mapping if m.role == TitleRole.episode] == [4, 5, 6]
@@ -118,11 +118,11 @@ async def test_tmdb_down_during_tv_identify(harness, keyed, settings, mkv_script
     with respx.mock(assert_all_called=False) as router:
         router.route(host="api.themoviedb.org").mock(side_effect=httpx.ConnectError("down"))
         async with harness() as h:
-            d = await run_disc(h, "FAWLTY_TOWERS_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
+            d = await run_disc(h, "SEAGULL_MANOR_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
             assert d.tv.show is None and "pick the show" in d.tv.problems
             assert any("TMDB request failed" in e.message for e in h.db.events(d.id))
             with pytest.raises(ValueError, match="pick the show"):
-                await h.m.tv_match_text(d.id, "A Touch of Class")
+                await h.m.tv_match_text(d.id, "A Hint of Style")
             with pytest.raises(ValueError, match="pick the show"):
                 await h.m.tv_confirm(d.id, [])
             with pytest.raises(ValueError, match="TMDB request failed"):
@@ -155,9 +155,9 @@ async def test_ripped_files_missing_at_finalise(harness, keyed, settings, mkv_sc
     from pathlib import Path
 
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "fawlty-towers")
+        mock_show(router, "seagull-manor")
         async with harness() as h:
-            d = await run_disc(h, "FAWLTY_TOWERS_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
+            d = await run_disc(h, "SEAGULL_MANOR_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
             Path(d.rip.files[2]).unlink()
             await h.m.tv_confirm(d.id, [])
             failed = await until(lambda: (j := h.job(d.id)).state == JobState.failed and j)
@@ -191,9 +191,9 @@ async def run_auto(h, label, monkeypatch, settings, mkv_script, runtimes, play_a
 async def test_label_placed_disc_waits_for_the_order_check(harness, auto, settings, mkv_script, monkeypatch):
     # Play-all present but the order check is off, so not verified, so a human checks it.
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "fawlty-towers")
+        mock_show(router, "seagull-manor")
         async with harness() as h:
-            j = await run_auto(h, "FAWLTY_TOWERS_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
+            j = await run_auto(h, "SEAGULL_MANOR_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
     assert j.state == JobState.review and not j.tv.auto_confirmed
     assert "waiting for the order check" in j.tv.auto_evidence
 
@@ -208,9 +208,9 @@ async def test_label_placed_disc_with_verified_order_confirms_itself(harness, au
     monkeypatch.setattr(verify, "verify_order", verified)
     settings.verify_order = True
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "fawlty-towers")
+        mock_show(router, "seagull-manor")
         async with harness() as h:
-            j = await run_auto(h, "FAWLTY_TOWERS_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
+            j = await run_auto(h, "SEAGULL_MANOR_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
             done = await until(lambda: (x := h.job(j.id)).state == JobState.done and x)
     assert done.identity_source == "auto" and done.tv.auto_confirmed
     assert any("order verified" in e for e in done.tv.auto_evidence)
@@ -220,14 +220,14 @@ async def test_label_placed_disc_with_verified_order_confirms_itself(harness, au
 @pytest.mark.slow
 async def test_continuing_disc_confirms_itself(harness, auto, settings, mkv_script, monkeypatch):
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "fawlty-towers")
+        mock_show(router, "seagull-manor")
         async with harness() as h:
-            d1 = await run_auto(h, "FAWLTY_TOWERS_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
+            d1 = await run_auto(h, "SEAGULL_MANOR_S1_D1", monkeypatch, settings, mkv_script, RUNTIMES[1])
             assert d1.state == JobState.review
             await h.m.tv_confirm(d1.id, [])
             await until(lambda: h.job(d1.id).state == JobState.done)
             await h.m.eject("fake-ghc0n")
-            d2 = await run_auto(h, "FAWLTY_TOWERS_SERIES_1", monkeypatch, settings, mkv_script, RUNTIMES[2],
+            d2 = await run_auto(h, "SEAGULL_MANOR_SERIES_1", monkeypatch, settings, mkv_script, RUNTIMES[2],
                                 play_all=False)
             done = await until(lambda: (x := h.job(d2.id)).state == JobState.done and x)
     assert done.identity_source == "auto"
@@ -235,12 +235,12 @@ async def test_continuing_disc_confirms_itself(harness, auto, settings, mkv_scri
 
 
 @pytest.mark.parametrize("label, runtimes, expect", [
-    ("FAWLTY_TOWERS", [30, 28, 33], "nothing says which season"),  # label gives no season/disc
-    ("FAWLTY_TOWERS_S1_D1", [30, 45, 33], "runtimes disagree"),  # a title of the wrong length
+    ("SEAGULL_MANOR", [30, 28, 33], "nothing says which season"),  # label gives no season/disc
+    ("SEAGULL_MANOR_S1_D1", [30, 45, 33], "runtimes disagree"),  # a title of the wrong length
 ])
 async def test_weak_discs_go_to_review(harness, auto, settings, mkv_script, monkeypatch, label, runtimes, expect):
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "fawlty-towers")
+        mock_show(router, "seagull-manor")
         async with harness() as h:
             j = await run_auto(h, label, monkeypatch, settings, mkv_script, runtimes, play_all=False)
     assert j.state == JobState.review and j.identity is None

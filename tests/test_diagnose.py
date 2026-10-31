@@ -32,7 +32,7 @@ def test_medium_errors_name_the_file_and_count():
 
 def test_probe_errors_on_other_drives_are_ignored():
     # Every scan has "SCRAMBLED SECTOR" errors from probing the other drives; a good scan has no cause.
-    assert diagnose(msgs("scan-dvd-practical-magic.log")) is None
+    assert diagnose(msgs("scan-dvd-moonlit-orchard.log")) is None
 
 
 def test_scrambled_sector_on_this_disc_is_an_auth_problem():

@@ -25,15 +25,15 @@ async def test_uhd_disc_is_backed_up_whole(settings: Settings):
         job = await until(lambda: next(iter(db.list_jobs([JobState.review.value])), None))
         assert job.mode == "backup" and job.media == "movie"
         assert job.disc_index == 1  # the Pioneer's number in its scan log
-        await m.confirm(job.id, Candidate(source="manual", title="The Wild Robot", year=2024))
+        await m.confirm(job.id, Candidate(source="manual", title="The Brass Heron", year=2024))
         done = await until(lambda: (j := db.get_job(job.id)) and j.state == JobState.done and j)
         dest = Path(done.destination)
-        assert dest == settings.library_dir / "Disc backups/The Wild Robot (2024) - 2160p"
+        assert dest == settings.library_dir / "Disc backups/The Brass Heron (2024) - 2160p"
         assert (dest / "BDMV/index.bdmv").read_bytes().startswith(b"INDX")
         assert (dest / "BDMV/STREAM/00001.m2ts").stat().st_size == 64 * 1024
         assert (dest / "CERTIFICATE/id.bdmv").exists()
         meta = json.loads((dest / ".disc/disc.json").read_text())
-        assert meta["title"] == "The Wild Robot" and meta["backup"]["decrypted"]
+        assert meta["title"] == "The Brass Heron" and meta["backup"]["decrypted"]
         assert set(meta["backup"]["files"]) >= {"BDMV/index.bdmv", "BDMV/STREAM/00001.m2ts"}
         assert done.transcode is None, "backups are never transcoded"
         assert not any(settings.scratch_dir.iterdir()), "scratch cleaned up"
@@ -53,9 +53,9 @@ async def test_dvd_is_ripped_as_titles_in_backup_mode(settings: Settings):
         job = await until(lambda: next(iter(db.list_jobs([JobState.review.value])), None))
         assert job.mode == "titles"
         assert any("Blu-ray and UHD discs only" in e.message for e in db.events(job.id))
-        await m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+        await m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
         done = await until(lambda: (j := db.get_job(job.id)) and j.state == JobState.done and j)
-        assert done.destination.endswith("Movies/Practical Magic (1998)/Practical Magic (1998).mkv")
+        assert done.destination.endswith("Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv")
     finally:
         await m.stop()
         db.close()
@@ -70,8 +70,8 @@ async def test_per_drive_mode_overrides_the_default(settings: Settings):
         job = await until(lambda: next(iter(db.list_jobs([JobState.review.value])), None))
         assert job.mode == "backup"
         # Planned while ripping, then kept, as the backup folder, not an .mkv
-        await m.confirm(job.id, Candidate(source="manual", title="The Wild Robot", year=2024))
-        assert db.get_job(job.id).destination.endswith("Disc backups/The Wild Robot (2024) - 2160p")
+        await m.confirm(job.id, Candidate(source="manual", title="The Brass Heron", year=2024))
+        assert db.get_job(job.id).destination.endswith("Disc backups/The Brass Heron (2024) - 2160p")
         with pytest.raises(ValueError, match="no episodes"):
             await m.set_media(job.id, "tv")
         await until(lambda: db.get_job(job.id).state == JobState.done)
@@ -105,10 +105,10 @@ esac
 
 
 def test_disc_index_from_scan(fixture_text):
-    scan = parse_info(fixture_text("scan-uhd-wild-robot.log"))
+    scan = parse_info(fixture_text("scan-uhd-brass-heron.log"))
     assert scan.disc_index("/dev/sr2", None) == 1
     # A device the scan doesn't name (a worker's, or a fake one) is matched by the disc's label.
-    assert scan.disc_index("/dev/fake-sr2", "THE_WILD_ROBOT") == 1
+    assert scan.disc_index("/dev/fake-sr2", "THE_BRASS_HERON") == 1
     assert scan.disc_index("/dev/fake-sr2", "SOMETHING_ELSE") is None
 
 
@@ -154,8 +154,8 @@ def test_copy_tree_verified(tmp_path: Path):
 
 def test_backup_path():
     root = Path("/b")
-    assert library.backup_path(root, "Alien: Romulus", 2024, False) == root / "Alien - Romulus (2024)"
-    assert library.backup_path(root, "Dune", None, True) == root / "Dune - 2160p"
+    assert library.backup_path(root, "Stowaway: Remnant", 2024, False) == root / "Stowaway - Remnant (2024)"
+    assert library.backup_path(root, "Drift", None, True) == root / "Drift - 2160p"
 
 
 def test_backup_folder_is_checked_only_when_used(tmp_path: Path):

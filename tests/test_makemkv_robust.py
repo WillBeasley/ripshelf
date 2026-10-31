@@ -43,7 +43,7 @@ def test_zero_titles(fixture_text):
 
 
 def test_truncated_scan_keeps_complete_titles(fixture_text):
-    text = fixture_text("scan-dvd-practical-magic.log")
+    text = fixture_text("scan-dvd-moonlit-orchard.log")
     cut = text[: len(text) * 2 // 3]
     cut = cut[: cut.rfind("\n") + 25]  # end mid-line
     res = parse_info(cut)
@@ -150,7 +150,7 @@ def test_libredrive_required_real_log(fixture_text):
 
 def test_serial_comes_from_the_scanned_drive_not_the_last_listed(fixture_text):
     # Real scan of /dev/sr1 in a container that sees all four drives.
-    res = parse_info(fixture_text("scan-dvd-practical-magic.log"))
+    res = parse_info(fixture_text("scan-dvd-moonlit-orchard.log"))
     assert set(res.drives) == {"/dev/sr0", "/dev/sr1", "/dev/sr2", "/dev/sr3"}
     assert res.drive_serial("/dev/sr1") == "SN0000000002"
     assert res.drive_serial("/dev/sr2") == "SN0000000001"

@@ -30,15 +30,15 @@ async def test_review_confirm_finalise(settings: Settings):
     try:
         # With no TMDB key, the disc goes to review while the rip carries on.
         job = await until(lambda: next(iter(db.list_jobs([JobState.review.value])), None))
-        assert job.disc.label == "PRACTICAL_MAGIC"
+        assert job.disc.label == "MOONLIT_ORCHARD"
         assert job.main_title and job.main_title.duration_s > 3600
-        await m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+        await m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
         done = await until(lambda: (j := db.get_job(job.id)) and j.state == JobState.done and j)
         dest = Path(done.destination)
-        assert dest == settings.library_dir / "Movies/Practical Magic (1998)/Practical Magic (1998).mkv"
+        assert dest == settings.library_dir / "Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv"
         assert dest.stat().st_size > 0
         meta = json.loads((dest.parent / ".disc/disc.json").read_text())
-        assert meta["title"] == "Practical Magic" and meta["label"] == "PRACTICAL_MAGIC"
+        assert meta["title"] == "Moonlit Orchard" and meta["label"] == "MOONLIT_ORCHARD"
         assert (dest.parent / ".disc/makemkv-scan.log").exists()
         assert (dest.parent / ".disc/VIDEO_TS/VIDEO_TS.IFO").exists()
         assert not any(settings.scratch_dir.iterdir()), "scratch cleaned up"
@@ -55,7 +55,7 @@ async def test_same_disc_again_is_recognised_from_cache(settings: Settings):
     m, db, backend = await run_manager(settings, {"/dev/fake-sr1"})
     try:
         job = await until(lambda: next(iter(db.list_jobs([JobState.review.value])), None))
-        await m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+        await m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
         await until(lambda: db.get_job(job.id).state == JobState.done)
         # Remove the first copy so the second can land, then insert the disc again.
         Path(db.get_job(job.id).destination).unlink()

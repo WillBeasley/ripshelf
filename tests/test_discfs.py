@@ -31,12 +31,12 @@ def test_bdmt_title(tmp_path):
     assert discfs.bdmt_title(tmp_path) is None
     dl = tmp_path / "BDMV/META/DL"
     dl.mkdir(parents=True)
-    (dl / "bdmt_fra.xml").write_text("<di:name>Le Robot Sauvage</di:name>")
-    assert discfs.bdmt_title(tmp_path) == "Le Robot Sauvage"
-    (dl / "bdmt_eng.xml").write_text("<di:name> Fast &amp; Furious </di:name>")
-    assert discfs.bdmt_title(tmp_path) == "Fast & Furious"
+    (dl / "bdmt_fra.xml").write_text("<di:name>Le Héron de Laiton</di:name>")
+    assert discfs.bdmt_title(tmp_path) == "Le Héron de Laiton"
+    (dl / "bdmt_eng.xml").write_text("<di:name> Swift &amp; Fierce </di:name>")
+    assert discfs.bdmt_title(tmp_path) == "Swift & Fierce"
     (dl / "bdmt_eng.xml").write_bytes(b"<di:name>  </di:name>\xff")
-    assert discfs.bdmt_title(tmp_path) == "Le Robot Sauvage"
+    assert discfs.bdmt_title(tmp_path) == "Le Héron de Laiton"
 
 
 def test_fingerprints():

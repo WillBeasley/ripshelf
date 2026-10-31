@@ -10,9 +10,9 @@ from ripshelf.models import Candidate, JobState, MediaKind, Preset, Show
 
 from .tvfix import load, mock_show
 
-PM = "/dev/fake-sr1"  # PRACTICAL_MAGIC, a film
-SD = "/dev/fake-sr0"  # SARAH_&_DUCK_BROLLY_BUS, a TV disc
-FILM = Candidate(source="tmdb", tmdb_id=6435, title="Practical Magic", year=1998)
+PM = "/dev/fake-sr1"  # MOONLIT_ORCHARD, a film
+SD = "/dev/fake-sr0"  # PIPPA_&_GOOSE_KITE_TRAM, a TV disc
+FILM = Candidate(source="tmdb", tmdb_id=6435, title="Moonlit Orchard", year=1998)
 
 
 async def test_film_preset_during_scan_skips_identification(harness):
@@ -20,13 +20,13 @@ async def test_film_preset_during_scan_skips_identification(harness):
     async with harness(PM) as h:
         job = await h.wait_job(lambda j: j.state == JobState.scanning)
         await h.m.set_preset(job.id, Preset(media=MediaKind.movie, candidate=FILM))
-        assert h.job(job.id).preset.candidate.title == "Practical Magic"  # outlives the scan's own saves
+        assert h.job(job.id).preset.candidate.title == "Moonlit Orchard"  # outlives the scan's own saves
         done = await h.wait_job(lambda j: j.state == JobState.done, timeout=60)
         states = [e.message for e in h.db.events(done.id) if e.kind == "state"]
-    assert done.identity.title == "Practical Magic" and done.identity_source == "user"
+    assert done.identity.title == "Moonlit Orchard" and done.identity_source == "user"
     assert done.preset is None
     assert not any("review" in s.lower() for s in states)
-    assert done.destination.endswith("Practical Magic (1998).mkv")
+    assert done.destination.endswith("Moonlit Orchard (1998).mkv")
 
 
 async def test_cleared_preset_identifies_as_usual(harness):
@@ -43,7 +43,7 @@ async def test_film_preset_after_the_scan_confirms(harness):
         job = await h.wait_job(lambda j: j.state == JobState.review, timeout=60)
         await h.m.set_preset(job.id, Preset(media=MediaKind.movie, candidate=FILM))
         done = await h.wait_job(lambda j: j.state == JobState.done, timeout=60)
-    assert done.identity.title == "Practical Magic"
+    assert done.identity.title == "Moonlit Orchard"
 
 
 async def test_tv_preset_after_the_scan_of_a_film_is_refused(harness):
@@ -55,10 +55,10 @@ async def test_tv_preset_after_the_scan_of_a_film_is_refused(harness):
 
 async def test_tv_preset_maps_the_named_season(harness, settings):
     settings.tmdb_api_key = SecretStr("k")
-    f = load("sarah-duck")
-    show = Show(tmdb_id=f["show"]["id"], name="Sarah & Duck", year=2013)
+    f = load("pippa-goose")
+    show = Show(tmdb_id=f["show"]["id"], name="Pippa & Goose", year=2013)
     with respx.mock(assert_all_called=False) as router:
-        mock_show(router, "sarah-duck")
+        mock_show(router, "pippa-goose")
         async with harness(SD) as h:
             job = await h.wait_job(lambda j: j.state == JobState.scanning)
             await h.m.set_preset(job.id, Preset(media=MediaKind.tv, show=show, season=3, disc_number=1,
@@ -66,7 +66,7 @@ async def test_tv_preset_maps_the_named_season(harness, settings):
             job = await h.wait_job(lambda j: j.state == JobState.review and j.tv and j.tv.show, timeout=60)
     plan = job.tv
     assert job.media == MediaKind.tv and job.preset is None
-    assert plan.show.name == "Sarah & Duck" and plan.show.score == 1.0
+    assert plan.show.name == "Pippa & Goose" and plan.show.score == 1.0
     assert plan.season == 3 and not plan.compilation and plan.start_episode == 21
     assert plan.label_placed  # placed by hand, so auto-confirm may take it from here
     first = min((m for m in plan.mapping if m.episodes), key=lambda m: m.title_index)

@@ -14,14 +14,14 @@ from ripshelf.tv.mapping import align, describe, runtime_cost
 
 
 @pytest.mark.parametrize("label, title, disc, dropped, extended", [
-    ("LOTR_FOTR_EXT_DISC2", "Lotr Fotr", 2, ["EXT", "DISC2"], True),
-    ("TDKR_D2", "Tdkr", 2, ["D2"], False),
-    ("ALIEN_DC", "Alien", None, ["DC"], True),
-    ("BLADE_RUNNER_DIRECTORS_CUT", "Blade Runner", None, ["Directors Cut"], True),
+    ("KOTL_GOTL_EXT_DISC2", "Kotl Gotl", 2, ["EXT", "DISC2"], True),
+    ("TPCR_D2", "Tpcr", 2, ["D2"], False),
+    ("STOWAWAY_DC", "Stowaway", None, ["DC"], True),
+    ("GLASS_HUNTER_DIRECTORS_CUT", "Glass Hunter", None, ["Directors Cut"], True),
     ("FILM_2004_UNRATED", "Film", None, ["Unrated", "2004"], True),
-    ("THE_MATRIX_1999_WS", "The Matrix", None, ["1999", "WS"], False),
-    ("BRAVE_UK", "Brave", None, ["UK"], False),
-    ("SAW_X", "Saw X", None, [], False),
+    ("THE_LATTICE_1999_WS", "The Lattice", None, ["1999", "WS"], False),
+    ("BOLD_UK", "Bold", None, ["UK"], False),
+    ("RUST_X", "Rust X", None, [], False),
 ])
 def test_label_tokens(label, title, disc, dropped, extended):
     p = parse_label(label)
@@ -35,10 +35,10 @@ def test_disc_marker_needs_a_title_before_it():
 
 
 def test_a_bare_trailing_digit_is_also_tried_as_a_sequel():
-    assert parse_label("SHREK_2").queries == ["Shrek", "Shrek 2"]
-    assert parse_label("SHREK_2").disc_number == 2
+    assert parse_label("GRUMBLE_2").queries == ["Grumble", "Grumble 2"]
+    assert parse_label("GRUMBLE_2").disc_number == 2
     # An explicit disc marker is not a sequel number.
-    assert parse_label("SHREK_DISC2").queries == ["Shrek"]
+    assert parse_label("GRUMBLE_DISC2").queries == ["Grumble"]
 
 
 def test_generic_label_keeps_its_raw_text():
@@ -105,14 +105,14 @@ def test_describe_verdicts():
 def test_message_flags_params_and_drive_fields():
     res = parse_info("\n".join([
         'MSG:1005,7,1,"MakeMKV v2.0.0 linux(x64-release) started","%1 started","MakeMKV v2.0.0 linux(x64-release)"',
-        'DRV:3,2,999,12,"HD-DVD-ROM HL-DT-ST BDDVDRW GGC-H20N 1.01 SN000000004","RENTAL_FAMILY","/dev/sr3"',
+        'DRV:3,2,999,12,"HD-DVD-ROM HL-DT-ST BDDVDRW GGC-H20N 1.01 SN000000004","PAPER_KITES","/dev/sr3"',
         'DRV:4,256,999,0,"","",""',
         'DRV:5,0,999,0,"ignored","",""',
     ]))
     assert res.messages[0].flags == 7 and res.messages[0].params == ["MakeMKV v2.0.0 linux(x64-release)"]
     assert res.makemkv_version == "2.0.0"
     d = res.drives["/dev/sr3"]
-    assert (d.index, d.visibility, d.flags, d.disc_name) == (3, 2, 12, "RENTAL_FAMILY")
+    assert (d.index, d.visibility, d.flags, d.disc_name) == (3, 2, 12, "PAPER_KITES")
     assert list(res.drives) == ["/dev/sr3"], "empty slots and drives without a device are skipped"
 
 

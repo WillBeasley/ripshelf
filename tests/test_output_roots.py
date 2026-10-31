@@ -51,18 +51,18 @@ async def test_films_go_to_the_movies_folder(harness, settings, tmp_path):
         emby = router.post(f"{EMBY}/Library/Media/Updated").mock(return_value=httpx.Response(204))
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.review)
-            await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+            await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
             done = await h.wait_job(lambda j: j.state == JobState.done)
-    assert done.destination == str(films / "Practical Magic (1998)" / "Practical Magic (1998).mkv")
+    assert done.destination == str(films / "Moonlit Orchard (1998)" / "Moonlit Orchard (1998).mkv")
     assert not (settings.library_dir / "Movies").exists()
-    assert json.loads(emby.calls[0].request.content)["Updates"][0]["Path"] == "/media/films/Practical Magic (1998)/Practical Magic (1998).mkv"
+    assert json.loads(emby.calls[0].request.content)["Updates"][0]["Path"] == "/media/films/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv"
 
 
 async def test_missing_movies_folder_fails_the_job_not_creates_it(harness, settings, tmp_path):
     settings.movies_dir = tmp_path / "unmounted"
     async with harness(PM) as h:
         job = await h.wait_job(lambda j: j.state == JobState.review)
-        await h.m.confirm(job.id, Candidate(source="manual", title="Practical Magic", year=1998))
+        await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
         failed = await h.wait_job(lambda j: j.state == JobState.failed)
     assert failed.problem.code == "library_missing" and "movies folder" in failed.problem.message
     assert not (tmp_path / "unmounted").exists()

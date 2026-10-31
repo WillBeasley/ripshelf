@@ -316,7 +316,7 @@ def tc_settings(settings):
     return settings
 
 
-MANUAL = Candidate(source="manual", title="Practical Magic", year=1998)
+MANUAL = Candidate(source="manual", title="Moonlit Orchard", year=1998)
 
 
 @needs_ffmpeg

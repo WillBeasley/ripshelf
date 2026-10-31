@@ -6,19 +6,19 @@ from ripshelf.identify.label import clean_bdmt_title, name_differs_from_label, p
 @pytest.mark.parametrize(
     "label,title,year,disc",
     [
-        ("PRACTICAL_MAGIC", "Practical Magic", None, None),
-        ("THE_WILD_ROBOT", "The Wild Robot", None, None),
-        ("SARAH_&_DUCK_BROLLY_BUS", "Sarah & Duck Brolly Bus", None, None),
-        ("ALIEN_1979_DISC_1", "Alien", 1979, 1),
-        ("GLADIATOR_SPECIAL_EDITION_D2", "Gladiator", None, 2),
-        ("BLADE_RUNNER_2049", "Blade Runner 2049", None, None),
-        ("THE_LEGO_MOVIE", "The Lego Movie", None, None),
-        ("ROCKY_II", "Rocky II", None, None),
-        ("INCEPTION_UHD", "Inception", None, None),
-        ("AVATAR_WS_PAL", "Avatar", None, None),
-        ("LORD_OF_THE_RINGS", "Lord of the Rings", None, None),
-        ("DIRTY_HARRY_WW", "Dirty Harry", None, None),
-        ("HEAT_INTL_NORDIC", "Heat", None, None),
+        ("MOONLIT_ORCHARD", "Moonlit Orchard", None, None),
+        ("THE_BRASS_HERON", "The Brass Heron", None, None),
+        ("PIPPA_&_GOOSE_KITE_TRAM", "Pippa & Goose Kite Tram", None, None),
+        ("STOWAWAY_1979_DISC_1", "Stowaway", 1979, 1),
+        ("IRONHELM_SPECIAL_EDITION_D2", "Ironhelm", None, 2),
+        ("GLASS_HUNTER_2061", "Glass Hunter 2061", None, None),
+        ("THE_BRICK_MOVIE", "The Brick Movie", None, None),
+        ("BRAWLER_II", "Brawler II", None, None),
+        ("UNDERTOW_UHD", "Undertow", None, None),
+        ("VANTAGE_WS_PAL", "Vantage", None, None),
+        ("KEEPER_OF_THE_LANTERNS", "Keeper of the Lanterns", None, None),
+        ("DUSTY_HAL_WW", "Dusty Hal", None, None),
+        ("EMBER_INTL_NORDIC", "Ember", None, None),
     ],
 )
 def test_parse_label(label, title, year, disc):
@@ -34,16 +34,16 @@ def test_generic_labels_have_no_queries():
 
 
 def test_truncated_label_adds_shorter_query():
-    p = parse_label("HARRY_POTTER_AND_THE_PHILOSOPHER")
-    assert p.queries == ["Harry Potter and the Philosopher", "Harry Potter"]
+    p = parse_label("FELIX_HOLLOW_AND_THE_ALCHEMIST")
+    assert p.queries == ["Felix Hollow and the Alchemist", "Felix Hollow"]
 
 
 def test_bdmt_title_cleanup():
-    assert clean_bdmt_title("The Wild Robot - 4K Ultra HD") == "The Wild Robot"
-    assert clean_bdmt_title("Dune (Disc 1)") == "Dune"
-    assert clean_bdmt_title("The Wild Robot") == "The Wild Robot"
+    assert clean_bdmt_title("The Brass Heron - 4K Ultra HD") == "The Brass Heron"
+    assert clean_bdmt_title("Drift (Disc 1)") == "Drift"
+    assert clean_bdmt_title("The Brass Heron") == "The Brass Heron"
 
 
 def test_name_differs_from_label():
-    assert name_differs_from_label("The Wild Robot", "THE_WILD_ROBOT")
-    assert not name_differs_from_label("PRACTICAL_MAGIC", "PRACTICAL_MAGIC")
+    assert name_differs_from_label("The Brass Heron", "THE_BRASS_HERON")
+    assert not name_differs_from_label("MOONLIT_ORCHARD", "MOONLIT_ORCHARD")
