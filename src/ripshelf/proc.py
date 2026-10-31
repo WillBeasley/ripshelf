@@ -10,6 +10,7 @@ Object, which takes in whatever it starts later, and the job is terminated.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shlex
 import signal
@@ -41,6 +42,23 @@ def start_options() -> dict:
     if WINDOWS:
         return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
+
+
+async def communicate(proc: asyncio.subprocess.Process, timeout: float) -> tuple[bytes, bytes] | None:
+    """``proc.communicate()``, or None if it takes longer than ``timeout``. A timeout or a
+    cancel kills the program and waits for it, so it isn't left running (or reaped after
+    the event loop has closed)."""
+    try:
+        return await asyncio.wait_for(proc.communicate(), timeout)
+    except TimeoutError:
+        return None
+    finally:
+        if proc.returncode is None:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            await proc.wait()
 
 
 class Tree:

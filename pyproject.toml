@@ -34,6 +34,7 @@ ripshelf = ["static/**/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 # The slow tests run first (see conftest.py), so a parallel run (-n) finishes evenly.
 markers = ["slow: an end-to-end test that takes ten seconds or more; -m 'not slow' skips them"]
 

@@ -11,6 +11,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from .. import proc as procs
 from ..models import Capability, DriveStatus
 from . import sgio
 
@@ -214,11 +215,11 @@ class SysfsDrives:
                 self.blkid, "-p", "-o", "export", device,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
             )
-            out, _ = await asyncio.wait_for(proc.communicate(), 30)
-            for line in out.decode(errors="replace").splitlines():
+            done = await procs.communicate(proc, 30)
+            for line in (done[0] if done else b"").decode(errors="replace").splitlines():
                 k, _, v = line.partition("=")
                 props[k] = v
-        except (OSError, TimeoutError):
+        except OSError:
             pass
         size = None
         sectors = _read(SYS_BLOCK / Path(device).name / "size")

@@ -104,13 +104,10 @@ async def _run(cmd: list[str], timeout: float = PROBE_TIMEOUT_S) -> tuple[int | 
                                                     stderr=asyncio.subprocess.PIPE)
     except OSError as e:
         return None, b"", str(e).encode()
-    try:
-        out, err = await asyncio.wait_for(proc.communicate(), timeout)
-    except TimeoutError:
-        proc.kill()
-        await proc.wait()
+    done = await procs.communicate(proc, timeout)
+    if done is None:
         return None, b"", b"timed out"
-    return proc.returncode, out, err
+    return proc.returncode, *done
 
 
 def parse_probe(data: dict) -> MediaInfo:
