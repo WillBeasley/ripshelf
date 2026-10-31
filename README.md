@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/WillBeasley/ripshelf/actions/workflows/test.yml"><img src="https://github.com/WillBeasley/ripshelf/actions/workflows/test.yml/badge.svg?branch=main" alt="Tests"></a>
   <a href="https://github.com/WillBeasley/ripshelf/actions/workflows/images.yml"><img src="https://github.com/WillBeasley/ripshelf/actions/workflows/images.yml/badge.svg" alt="Image build"></a>
-  <a href="https://github.com/WillBeasley/ripshelf/releases/tag/v0.3.0"><img src="https://img.shields.io/badge/release-v0.3.0-blue" alt="Release v0.3.0"></a>
+  <a href="https://github.com/WillBeasley/ripshelf/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/release-v0.4.0-blue" alt="Release v0.4.0"></a>
   <a href="https://github.com/WillBeasley/ripshelf/pkgs/container/ripshelf"><img src="https://img.shields.io/badge/ghcr.io-willbeasley%2Fripshelf-blue?logo=docker" alt="Container image: ghcr.io/willbeasley/ripshelf"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-green" alt="Licence: MIT"></a>
 </p>

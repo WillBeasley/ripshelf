@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: ripshelf
-Version: 0.3.0
+Version: 0.4.0
 Summary: Automatic disc ripping: controller + embedded worker
 License-Expression: MIT
 Requires-Python: >=3.12
