@@ -18,6 +18,7 @@ import re
 import shutil
 from pathlib import Path
 
+from . import proc as procs
 from .makemkv.parse import ScanResult
 
 log = logging.getLogger(__name__)
@@ -48,11 +49,7 @@ async def extract_structure(sevenzip: str, device: str, out_dir: Path, timeout: 
     except OSError as e:
         log.warning("7z not available: %s", e)
         return []
-    try:
-        await asyncio.wait_for(proc.communicate(), timeout)
-    except TimeoutError:
-        proc.kill()
-        await proc.wait()
+    if await procs.communicate(proc, timeout) is None:
         log.warning("7z timed out reading %s", device)
     sizes = await list_sizes(sevenzip, device, timeout)
     if sizes:
@@ -95,13 +92,10 @@ async def list_sizes(sevenzip: str, device: str, timeout: float = 120) -> list[t
         )
     except OSError:
         return []
-    try:
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout)
-    except TimeoutError:
-        proc.kill()
-        await proc.wait()
+    done = await procs.communicate(proc, timeout)
+    if done is None:
         return []
-    return parse_listing(out.decode(errors="replace"))
+    return parse_listing(done[0].decode(errors="replace"))
 
 
 def parse_listing(text: str) -> list[tuple[str, int]]:

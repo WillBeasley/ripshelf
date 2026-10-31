@@ -91,6 +91,8 @@ log = logging.getLogger(__name__)
 PROGRESS_PUBLISH_S = 1.0
 PROGRESS_SAVE_S = 10.0
 STATUS_TIMEOUT_S = 10.0
+# How long stop() waits for cancelled tasks, so their processes are reaped first.
+STOP_WAIT_S = 5.0
 # Scratch needed for a rip is its size plus a margin, plus room for a transcoded copy.
 SCRATCH_MARGIN = 1.05
 BACKUP_INTERVAL_S = 24 * 3600
@@ -192,20 +194,20 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
 
     async def stop(self) -> None:
         self.notifier.cancel()
-        if self._poller:
-            self._poller.cancel()
-        if getattr(self, "_backups", None):
-            self._backups.cancel()
+        tasks = [t for t in (self._poller, getattr(self, "_backups", None)) if t]
         for job_id in list(self._bg):
+            tasks += self._bg[job_id]
             self._cancel_bg(job_id)
-        for t in list(self._contrib_tasks.values()):
-            t.cancel()
+        tasks += self._contrib_tasks.values()
         for d in self.drives.values():
             for proc in (d.scan, d.rip):
                 if proc:
                     proc.kill()
-            for t in list(d.tasks):
-                t.cancel()
+            tasks += d.tasks
+        for t in tasks:
+            t.cancel()
+        if tasks:
+            await asyncio.wait(tasks, timeout=STOP_WAIT_S)
 
     def discover(self) -> None:
         for hw in self.backend.discover(self.s.uhd_models):
@@ -552,7 +554,9 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
 
         def done(t: asyncio.Task) -> None:
             d.tasks.discard(t)
-            if not t.cancelled() and t.exception():
+            if t.cancelled():
+                coro.close()  # in case it was cancelled before it started
+            elif t.exception():
                 log.error("job task failed", exc_info=t.exception())
 
         task.add_done_callback(done)

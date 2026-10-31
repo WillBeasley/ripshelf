@@ -83,6 +83,8 @@ class TranscodeMixin:
         task = asyncio.create_task(guarded())
         self._bg.setdefault(job_id, set()).add(task)
         task.add_done_callback(lambda t: self._bg.get(job_id, set()).discard(t))
+        # Cancelled before it started (at shutdown), coro was never awaited.
+        task.add_done_callback(lambda t: t.cancelled() and coro.close())
         return task
 
     def _cancel_bg(self, job_id: int) -> None:

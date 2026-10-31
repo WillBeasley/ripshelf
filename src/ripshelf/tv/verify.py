@@ -14,6 +14,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from .. import proc as procs
+
 log = logging.getLogger(__name__)
 
 PROBE_W, PROBE_H = 48, 27
@@ -40,13 +42,10 @@ async def _run(cmd: list[str], timeout: float = FFMPEG_TIMEOUT_S) -> bytes | Non
     except OSError as e:
         log.warning("%s not available: %s", cmd[0], e)
         return None
-    try:
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout)
-    except TimeoutError:
-        proc.kill()
-        await proc.wait()
+    done = await procs.communicate(proc, timeout)
+    if done is None:
         return None
-    return out if proc.returncode == 0 else None
+    return done[0] if proc.returncode == 0 else None
 
 
 async def duration(ffprobe: str, path: Path) -> float | None:
