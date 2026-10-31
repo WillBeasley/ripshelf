@@ -20,30 +20,36 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    # The image's base, so the tests run on its Python and Debian's ffmpeg, the program
+    # the image transcodes with.
+    container: docker.io/library/python:3.12-slim-bookworm
     timeout-minutes: 20
     steps:
+      - name: Tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg git xz-utils
+          useradd -m tester
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      # The transcode and TV tests use a real ffmpeg (they skip without one).
-      - name: Tools
-        run: |
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pip
+          key: pip-bookworm-${{ hashFiles('requirements-dev.lock') }}
       - name: Python
-        run: pip install -q -r requirements-dev.lock && pip install -q --no-deps -e .
+        run: pip install -q --root-user-action=ignore -r requirements-dev.lock && pip install -q --root-user-action=ignore --no-deps -e .
       - name: Lint
         run: ruff check src tests
       - name: Tests
-        # The tests mostly wait on fake rips, so three per core keeps the runner busy.
-        run: pytest -q -n 12 --dist worksteal
+        # As a normal user, because root ignores the file modes some tests check. The tests
+        # mostly wait on fake rips, so three per core keeps the runner busy.
+        run: |
+          chown -R tester .
+          runuser -u tester -- pytest -q -n 12 --dist worksteal
       - name: UI
         working-directory: web
         run: |
