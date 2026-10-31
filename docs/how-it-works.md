@@ -40,6 +40,24 @@ Files are copied into the library, checked by SHA-256, and never overwritten. Th
 
 Titles on a TV disc that aren't episodes go to extras, Season 00, or are skipped (Settings). Afterwards Emby, Jellyfin and Plex (whichever are set up) are told about the new files, Pushover notifies you, and the disc is ejected.
 
+## Notifications
+
+Pushover tells you about each job as it goes. Under Settings → Notifications each event can be off or have its own priority:
+
+| Event | When | Default |
+|---|---|---|
+| Disc inserted | a disc goes into a drive | off |
+| Needs review | it couldn't be identified for sure | high |
+| Already in library | a copy is already there, so you decide | high |
+| Rip finished | MakeMKV is done. It says what happens next: transcoding to H.265, or copying straight into the library (and why) | normal |
+| Transcode finished | the transcode step is done, with how many files were transcoded and the size saved | off |
+| Copied to library | the files are copied and checked, with where they went | off |
+| Done | everything is finished and the media servers are told | normal |
+| Failed | a job stopped with a problem | high |
+| Setup problem | something in Settings needs fixing | normal |
+
+Each event comes once per job (a TV disc's episodes are one notification, with a count), with a link to the job. Rips from remote workers come back to the controller, which transcodes, copies and notifies, so they work the same way. Settings saved before an event existed give it its default.
+
 ## Drives
 
 - **Drive ids.** They come from the drive's vendor, model and serial number, read from the drive. Its history, settings, name and MakeMKV data stay with it on another port, another `/dev/srN`, or another machine. A drive that reports no serial falls back to an id from its port (logged at start-up).

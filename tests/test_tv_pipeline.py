@@ -238,7 +238,7 @@ async def test_tv_review_notification(harness, keyed, settings):
     from ripshelf.integrations import PUSHOVER_API
 
     settings.pushover_user_key, settings.pushover_app_token = SecretStr("u"), SecretStr("t")
-    settings.notify_events = {"review": 1}
+    settings.notify_events = {"review": 1, "ripped": None}
     with respx.mock(assert_all_called=False) as router:
         mock_show(router, "pippa-goose")
         po = router.post(PUSHOVER_API).mock(return_value=httpx.Response(200, json={"status": 1}))
@@ -247,3 +247,32 @@ async def test_tv_review_notification(harness, keyed, settings):
             await until(lambda: po.call_count >= 1)
     body = {k: v[0] for k, v in parse_qs(po.calls[0].request.content.decode()).items()}
     assert body["message"] == "TV disc: Pippa & Goose, 10 episode titles to check"
+
+
+async def test_tv_rip_and_copy_notifications(harness, keyed, settings):
+    from urllib.parse import parse_qs
+
+    import httpx
+
+    from ripshelf.integrations import PUSHOVER_API
+
+    settings.pushover_user_key, settings.pushover_app_token = SecretStr("u"), SecretStr("t")
+    settings.notify_events = {"review": None, "ripped": 0, "copied": 0, "done": None}
+    settings.notify_batch_s = 0
+    settings.transcode_enabled = False
+    with respx.mock(assert_all_called=False) as router:
+        mock_show(router, "pippa-goose")
+        po = router.post(PUSHOVER_API).mock(return_value=httpx.Response(200, json={"status": 1}))
+        async with harness(SD) as h:
+            job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done", timeout=60)
+            await h.m.tv_match_text(job.id, CASE_ORDER)
+            await h.m.tv_confirm(job.id, [])
+            await h.wait_job(lambda j: j.state == JobState.done)
+            await until(lambda: po.call_count >= 2)
+    ripped, copied = ({k: v[0] for k, v in parse_qs(c.request.content.decode()).items()} for c in po.calls)
+    assert ripped["title"] == "Rip finished: Pippa & Goose"
+    assert ripped["message"] == ("Checking the episodes (you may be asked to review them). Then: copying into "
+                                 "the library (transcoding is off)")
+    assert copied["title"] == "Copied to library: Pippa & Goose"
+    assert copied["message"] == f"10 titles to {settings.library_dir / 'TV' / 'Pippa & Goose (2013)'}"
+    assert po.call_count == 2

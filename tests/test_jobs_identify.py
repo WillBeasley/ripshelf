@@ -160,7 +160,7 @@ async def test_identify_again_from_review_and_after_failure(harness, keyed, sett
 async def test_notifications_and_emby(harness, settings):
     settings.pushover_user_key, settings.pushover_app_token = SecretStr("u"), SecretStr("t")
     settings.public_url = "http://rip.lan:8380"
-    settings.notify_events = {"review": 1, "done": 0}
+    settings.notify_events = {"review": 1, "ripped": None, "done": 0}
     settings.emby_url, settings.emby_api_key = EMBY, SecretStr("ek")
     settings.emby_movies_path = "/media/Movies"
     with respx.mock(assert_all_called=False) as router:
@@ -175,7 +175,7 @@ async def test_notifications_and_emby(harness, settings):
             h.m._spawn_notify(h.job(job.id), "done")
             await asyncio.sleep(0.2)
     bodies = [{k: v[0] for k, v in parse_qs(c.request.content.decode()).items()} for c in po.calls]
-    assert [b["title"].split(":")[0] for b in bodies] == ["Needs review", "Ripped"]
+    assert [b["title"].split(":")[0] for b in bodies] == ["Needs review", "Done"]
     assert bodies[0]["url"] == f"http://rip.lan:8380/review?job={job.id}"
     assert emby.call_count == 1
     path = json.loads(emby.calls[0].request.content)["Updates"][0]["Path"]

@@ -42,12 +42,12 @@ async def test_review_done_and_failed_reach_pushover(harness, pushed, mkv_script
             job = await h.wait_job(lambda j: j.state == JobState.review)
             await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
             await h.wait_job(lambda j: j.state == JobState.done)
-            await until(lambda: sent(po, "Ripped"))
-    [review], [done] = sent(po, "Needs review"), sent(po, "Ripped")
+            await until(lambda: sent(po, "Done"))
+    [review], [done] = sent(po, "Needs review"), sent(po, "Done")
     assert review["token"] == "a-token" and review["user"] == "u-key"
     assert review["priority"] == "1"
     assert review["url"] == f"http://ripshelf.lan:8380/review?job={job.id}" and review["url_title"] == "Review it"
-    assert done["title"] == "Ripped: Moonlit Orchard" and done["priority"] == "0"
+    assert done["title"] == "Done: Moonlit Orchard" and done["priority"] == "0"
     assert done["url"] == f"http://ripshelf.lan:8380/finished?job={job.id}"
     body, raw_link = done["message"].rsplit("\n", 1)
     assert body.endswith("Moonlit Orchard (1998).mkv") and raw_link == done["url"]
@@ -66,7 +66,8 @@ async def test_failure_notification(harness, pushed, settings, mkv_script):
 
 
 async def test_events_can_be_turned_off_or_on(harness, pushed, settings):
-    settings.notify_events = {"disc": -1, "review": None, "done": None, "failed": None, "setup": None}
+    settings.notify_events = {"disc": -1, "review": None, "ripped": None, "done": None, "failed": None,
+                              "setup": None}
     settings.drive_names = {"fake-ihas122": "Top bay"}
     with respx.mock(assert_all_called=False) as router:
         po = router.post(PUSHOVER_API).mock(return_value=httpx.Response(200, json={"status": 1}))
@@ -116,19 +117,19 @@ async def test_batching_sends_the_first_then_one_summary(pushed):
     route = respx.post(PUSHOVER_API).mock(return_value=httpx.Response(200, json={"status": 1}))
     n = integrations.Notifier(pushed)
     for i in range(4):
-        n.send(Note("done", f"Ripped: Film {i}", "", f"/finished?job={i}"))
+        n.send(Note("done", f"Done: Film {i}", "", f"/finished?job={i}"))
     n.send(Note("failed", "Failed: Other", "", "/?job=9"))
     await until(lambda: route.call_count >= 2)
     titles = [form(c)["title"] for c in route.calls]
-    assert titles == ["Ripped: Film 0", "Failed: Other"]
+    assert titles == ["Done: Film 0", "Failed: Other"]
     await until(lambda: route.call_count >= 3, timeout=3)
     summary = form(route.calls[2])
-    assert summary["title"] == "Ripped: 3 more"
-    assert summary["message"].splitlines() == ["Ripped: Film 1", "Ripped: Film 2", "Ripped: Film 3",
+    assert summary["title"] == "Done: 3 more"
+    assert summary["message"].splitlines() == ["Done: Film 1", "Done: Film 2", "Done: Film 3",
                                                "http://ripshelf.lan:8380/finished"]
     assert summary["url"] == "http://ripshelf.lan:8380/finished"
     # The window is closed, so the next one goes at once.
-    n.send(Note("done", "Ripped: Film 5", ""))
+    n.send(Note("done", "Done: Film 5", ""))
     await until(lambda: route.call_count == 4)
     n.cancel()
 
@@ -138,10 +139,10 @@ async def test_one_held_note_is_sent_as_it_is(pushed):
     pushed.notify_batch_s = 0.2
     route = respx.post(PUSHOVER_API).mock(return_value=httpx.Response(200, json={"status": 1}))
     n = integrations.Notifier(pushed)
-    n.send(Note("done", "Ripped: A", ""))
-    n.send(Note("done", "Ripped: B", ""))
+    n.send(Note("done", "Done: A", ""))
+    n.send(Note("done", "Done: B", ""))
     await until(lambda: route.call_count == 2, timeout=3)
-    assert form(route.calls[1])["title"] == "Ripped: B"
+    assert form(route.calls[1])["title"] == "Done: B"
 
 
 @respx.mock
@@ -150,7 +151,7 @@ async def test_no_batching(pushed):
     route = respx.post(PUSHOVER_API).mock(return_value=httpx.Response(200, json={"status": 1}))
     n = integrations.Notifier(pushed)
     for i in range(3):
-        n.send(Note("done", f"Ripped: {i}", ""))
+        n.send(Note("done", f"Done: {i}", ""))
     await until(lambda: route.call_count == 3)
 
 
@@ -194,7 +195,7 @@ def test_settings_api_keeps_keys_secret(settings):
         assert r.status_code == 200 and "secret-" not in r.text
         body = r.json()
         assert body["pushover_user_key_set"] and body["pushover_app_token_set"]
-        assert body["notify_events"] == {**events, "exists": 1} and body["notify_batch_s"] == 30
+        assert body["notify_events"] == {**events, "exists": 1, "ripped": 0, "transcoded": None, "copied": None} and body["notify_batch_s"] == 30
         assert c.put("/api/settings", json={"notify_events": {"done": 2}}).status_code == 422
         assert c.put("/api/settings", json={"notify_events": {"nonsense": 0}}).status_code == 422
 
@@ -204,12 +205,12 @@ async def test_summary_dropped_if_the_event_was_turned_off_meanwhile(pushed):
     pushed.notify_batch_s = 0.2
     route = respx.post(PUSHOVER_API).mock(return_value=httpx.Response(200, json={"status": 1}))
     n = integrations.Notifier(pushed)
-    n.send(Note("done", "Ripped: A", ""))
-    n.send(Note("done", "Ripped: B", ""))
+    n.send(Note("done", "Done: A", ""))
+    n.send(Note("done", "Done: B", ""))
     pushed.notify_events = {**pushed.notify_events, "done": None}
     await asyncio.sleep(0.5)
-    assert [form(c)["title"] for c in route.calls] == ["Ripped: A"]
-    n.send(Note("done", "Ripped: C", ""))  # off now, so nothing at all
+    assert [form(c)["title"] for c in route.calls] == ["Done: A"]
+    n.send(Note("done", "Done: C", ""))  # off now, so nothing at all
     await asyncio.sleep(0.1)
     assert route.call_count == 1
 
@@ -230,7 +231,7 @@ async def test_summary_carries_its_priority_and_link_title(pushed):
 
 async def test_without_keys_nothing_is_sent_or_held(settings):
     n = integrations.Notifier(settings)
-    n.send(Note("done", "Ripped: A", ""))
+    n.send(Note("done", "Done: A", ""))
     assert n._held == {} and n._tasks == set()
 
 
@@ -249,3 +250,88 @@ async def test_raw_link_survives_a_long_message(pushed):
     await integrations.pushover(pushed, Note("done", "t", "m" * 2000, "/?job=42"), 0)
     msg = form(route.calls[0])["message"]
     assert len(msg) == 1024 and msg.endswith("\nhttp://ripshelf.lan:8380/?job=42")
+
+
+# --- the steps after the rip --------------------------------------------------------------
+
+
+def test_stage_events_default_for_old_settings(settings):
+    settings.notify_events = {"review": 1, "done": 0}  # saved before these existed
+    n = integrations.Notifier(settings)
+    assert n.priority("ripped") == 0, "on by default"
+    assert n.priority("transcoded") is None and n.priority("copied") is None, "opt-in"
+    assert list(integrations.EVENTS) == ["disc", "review", "exists", "ripped", "transcoded", "copied",
+                                         "done", "failed", "setup"]
+    assert set(integrations.SUMMARY_PATHS) == set(integrations.EVENTS)
+
+
+async def stage_notes(harness, settings, title: str = "Moonlit Orchard") -> tuple[int, list[dict]]:
+    """Run a disc to done with every stage event on, and return what Pushover got."""
+    settings.notify_events = {"ripped": 0, "transcoded": -1, "copied": -1}
+    settings.notify_batch_s = 0
+    with respx.mock(assert_all_called=False) as router:
+        po = router.post(PUSHOVER_API).mock(return_value=httpx.Response(200, json={"status": 1}))
+        async with harness(PM) as h:
+            job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done")
+            await h.m.confirm(job.id, Candidate(source="manual", title=title, year=1998))
+            await h.wait_job(lambda j: j.state == JobState.done, timeout=60)
+            await until(lambda: sent(po, "Done"))
+            await asyncio.sleep(0.1)
+    return job.id, [form(c) for c in po.calls]
+
+
+async def test_rip_and_copy_notes_without_transcoding(harness, pushed, settings):
+    settings.transcode_enabled = False
+    job_id, notes = await stage_notes(harness, settings)
+    titles = [n["title"] for n in notes]
+    assert titles == ["Needs review: MOONLIT_ORCHARD", "Rip finished: MOONLIT_ORCHARD",
+                      "Copied to library: Moonlit Orchard", "Done: Moonlit Orchard"]
+    ripped, copied = notes[1], notes[2]
+    assert ripped["priority"] == "0" and ripped["url"] == f"http://ripshelf.lan:8380/?job={job_id}"
+    # Confirmed while the drive ejected, or not yet.
+    assert ripped["message"].split("\n")[0] in (
+        "Waiting for you to review it. Then: copying into the library (transcoding is off)",
+        "Next: copying into the library (transcoding is off)")
+    assert copied["priority"] == "-1"
+    assert copied["message"].split("\n")[0].endswith("Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv")
+
+
+async def test_transcode_note(harness, pushed, settings):
+    from .test_transcode import HAS_FFMPEG
+
+    if not HAS_FFMPEG:
+        pytest.skip("ffmpeg not installed")
+    settings.transcode_codecs = ["mpeg2video"]
+    settings.transcode_encoder = "x265"
+    settings.transcode_crop = "off"
+    _, notes = await stage_notes(harness, settings)
+    [ripped] = [n for n in notes if n["title"].startswith("Rip finished")]
+    assert ": transcoding to H.265 where needed, then copying into the library\n" in ripped["message"]
+    [tc] = [n for n in notes if n["title"].startswith("Transcode finished")]
+    assert tc["title"] == "Transcode finished: Moonlit Orchard"
+    assert tc["message"].startswith("Transcoded to H.265, ") and "% of the original size" in tc["message"]
+    titles = [n["title"].split(":")[0] for n in notes]
+    assert titles.index("Transcode finished") < titles.index("Copied to library") < titles.index("Done")
+
+
+@pytest.mark.parametrize("mode, kind, sources, state, identified, want", [
+    ("titles", "bluray", {}, JobState.ripping, True,
+     "Next: transcoding to H.265 where needed, then copying into the library"),
+    ("titles", "uhd", {}, JobState.ripping, True, "Next: copying into the library (4K UHD discs aren't transcoded)"),
+    ("titles", "dvd", {"dvd": {"transcode": False}}, JobState.identifying, False,
+     "Still identifying it. Then: copying into the library (DVD discs aren't transcoded)"),
+    ("backup", "bluray", {}, JobState.clash, True,
+     "Already in the library, so waiting for you to decide. Then: copying the full disc backup into the "
+     "library (not transcoded)"),
+])
+async def test_rip_finished_says_what_happens_next(harness, settings, mode, kind, sources, state, identified,
+                                                   want):
+    from ripshelf.db import JobRecord, now
+    from ripshelf.models import DiscInfo
+
+    settings.transcode_sources = sources
+    async with harness() as h:
+        job = JobRecord(id=1, drive_id="d", state=state, created_at=now(), updated_at=now(), mode=mode,
+                        disc=DiscInfo(label="SEAGULL_MANOR", kind=kind),
+                        identity=Candidate(source="manual", title="Seagull Manor") if identified else None)
+        assert h.m._next_step(job) == want
