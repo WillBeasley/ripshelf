@@ -17,7 +17,7 @@ search for it finds the title. That's what ripshelf does.
 
 1. ripshelf spots a label that's just a catalogue number. That's letters then
    4 to 8 digits (`EO51710`, `OPTD2345_D1`, `CDR-30123`), or a bare number of
-   6 or more digits. Abbreviations such as `BTTF2`, and years such as `1917`, aren't
+   6 or more digits. Abbreviations such as `TPCR2`, and years such as `1747`, aren't
    treated as catalogue numbers.
 2. The web is searched for `"EO51710" dvd` (or `blu-ray`). If nothing comes
    back, the bare number is searched instead.

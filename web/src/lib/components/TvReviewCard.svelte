@@ -275,7 +275,7 @@
 		<details>
 			<summary class="small">Paste the run order from the case</summary>
 			<div class="stack tight">
-				<textarea rows="4" bind:value={runOrder} placeholder="Brolly Bus, Rainbow Race, Hair Cut, …"></textarea>
+				<textarea rows="4" bind:value={runOrder} placeholder="Kite Tram, Puddle Dash, Beard Trim, …"></textarea>
 				<button onclick={matchText} disabled={act.busy || !runOrder.trim()}>Match episode names</button>
 			</div>
 		</details>

@@ -95,7 +95,7 @@ def clean_title(page_title: str, catno: str) -> str | None:
     """The film or show name in a shop's page title, or None when there is none."""
     s = page_title.replace(catno, " ")
     parts = [p for p in _SEPARATORS.split(s) if p.strip()]
-    # The first part with words that is not a domain ("Laserdisken.dk").
+    # The first part with words that is not a domain ("Filmbutikken-eksempel.dk").
     part = next((p for p in parts if re.search(r"[A-Za-z]{2}", p)
                  and not re.search(r"\b[\w-]+\.(?:com|co\.uk|uk|de|dk|fi|cz|fr|nl|se|net|org)\b", p, re.I)), None)
     if not part:
@@ -106,7 +106,7 @@ def clean_title(page_title: str, catno: str) -> str | None:
     part = re.sub(r"\s+", " ", part).strip(" -–:,.;/+&")
     part = re.sub(r"\s*:\s*$", "", part)
     m = _ARTICLE_AFTER.match(part)
-    if m:  # "Mortal Instruments, The: City of Bones"
+    if m:  # "Hollow Compass, The: City of Ash"
         part = f"{m.group(2).title()} {m.group(1)}{(' ' + m.group(3)) if m.group(3) else ''}"
         part = re.sub(r"\s+:", ":", part)
     if not re.search(r"[A-Za-z]{2}", part) or number(part.replace(" ", "_")) or len(part) > 100:

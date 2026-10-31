@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# When a compilation disc is named after an episode ("BROLLY_BUS"), that episode
+# When a compilation disc is named after an episode ("KITE_TRAM"), that episode
 # is usually the first title.
 COMPILATION_NAME_MIN = 0.85
 # Titles within this fraction of the season's shortest and longest episode are episodes.
@@ -973,7 +973,7 @@ class TvMixin:
 
 
 def _label_remainder(label_show: str, show_name: str) -> str | None:
-    """What a label says beyond the show's name, so "Sarah & Duck Brolly Bus" -> "Brolly Bus"."""
+    """What a label says beyond the show's name, so "Pippa & Goose Kite Tram" -> "Kite Tram"."""
     if not label_show or not show_name:
         return None
     words = label_show.split()

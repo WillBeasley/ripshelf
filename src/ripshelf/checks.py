@@ -63,7 +63,7 @@ async def tvdb(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
     client = Tvdb(key, _value(s, v, "tvdb_pin"))
     try:
         await client.login()
-        hits = await client.search_series("Fawlty Towers")
+        hits = await client.search_series("Garden")
     except TvdbError as e:
         msg = str(e)
         return _fail(msg[:1].upper() + msg[1:])
@@ -79,7 +79,7 @@ async def omdb(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
         return _fail("No OMDb key")
     client = Omdb(key)
     try:
-        hits = await client.search("Fawlty Towers")
+        hits = await client.search("Garden")
     except OmdbError as e:
         return _fail(str(e))
     finally:
@@ -90,7 +90,7 @@ async def omdb(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
 async def tvmaze(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
     client = Tvmaze()
     try:
-        hits = await client.search("Fawlty Towers")
+        hits = await client.search("Garden")
     except TvmazeError as e:
         msg = str(e)
         return _fail(msg[:1].upper() + msg[1:])

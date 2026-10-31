@@ -9,7 +9,7 @@ Turn it on in **Settings → Drives and MakeMKV → What to rip**, for every dri
 A decrypted copy of the disc's file system, named after the identified film:
 
 ```
-disc-backups/The Wild Robot (2024) - 2160p/
+disc-backups/The Brass Heron (2024) - 2160p/
     BDMV/            index.bdmv, PLAYLIST/, STREAM/*.m2ts, ...
     CERTIFICATE/
     .disc/disc.json  label, fingerprints, MakeMKV version, and a SHA-256 for every file

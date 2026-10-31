@@ -51,7 +51,7 @@ _EXTRA_MARKERS = re.compile(
     r"|bloopers?|gag reel|special features|first look|sneak peek)\b",
     re.I,
 )
-# Prefixes that only mark an extra when the rest is the disc's title ("Inside Out" is a film).
+# Prefixes that only mark an extra when the rest is the disc's title ("Halfway Out" is a film).
 _EXTRA_PREFIX = re.compile(
     r"^\s*(inside|anatomy of|the story of|the art of|the science of|the magic of|creating"
     r"|bringing|a look at|making|discovering|exploring|unboxing)\b[\s:,.-]*(.+)$",
@@ -74,7 +74,7 @@ def title_similarity(a: str, b: str) -> float:
         return 0.0
     if na == nb:
         return 1.0
-    # token_sort handles word order; ratio penalises extra words ("Practical Magic 2").
+    # token_sort handles word order; ratio penalises extra words ("Moonlit Orchard 2").
     return max(fuzz.ratio(na, nb), fuzz.token_sort_ratio(na, nb) * 0.98) / 100
 
 
@@ -245,8 +245,8 @@ def rank(candidates: list[Candidate], disc: DiscFacts) -> list[Candidate]:
     scored.sort(key=_order)
     live = [c for c in scored if not c.excluded]
     if live and _similar_to_disc(live[0], disc) < 0.95:
-        # The runtime favours a differently named film ("Toy Story 2" for a disc
-        # labelled "Toy Story"), so a human should decide.
+        # The runtime favours a differently named film ("Tin Parade 2" for a disc
+        # labelled "Tin Parade"), so a human should decide.
         exact = next((o for o in live[1:] if _similar_to_disc(o, disc) >= 0.95), None)
         if exact:
             live[0].score = round(min(live[0].score, 0.89) * AMBIGUITY_FACTOR, 3)

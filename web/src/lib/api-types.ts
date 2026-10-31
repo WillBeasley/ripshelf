@@ -549,7 +549,7 @@ export interface DiscMatch {
   imdb_id: string | null;
   tvdb_id: number | null;
   /**
-   * the release the disc belongs to ("Criterion Blu-ray")
+   * the release the disc belongs to ("Archive Blu-ray")
    */
   release: string | null;
   disc_name: string | null;

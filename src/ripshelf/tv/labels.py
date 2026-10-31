@@ -1,7 +1,7 @@
 """Season, disc and volume numbers in TV disc labels.
 
-    FAWLTY_TOWERS_S1_D2, THE_OFFICE_SEASON_2_DISC_1, DOCTOR_WHO_SERIES_1_VOL_3,
-    FRIENDS_S03D04, SARAH_&_DUCK_BROLLY_BUS (no numbers, so a compilation or a film)
+    SEAGULL_MANOR_S1_D2, THE_DEPOT_SEASON_2_DISC_1, CAPTAIN_COMET_SERIES_1_VOL_3,
+    LODGERS_S03D04, PIPPA_&_GOOSE_KITE_TRAM (no numbers, so a compilation or a film)
 """
 
 from __future__ import annotations

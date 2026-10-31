@@ -196,7 +196,7 @@ class DiscMatch(BaseModel):
     tmdb_id: int | None = None
     imdb_id: str | None = None
     tvdb_id: int | None = None
-    release: str | None = Field(None, description="the release the disc belongs to (\"Criterion Blu-ray\")")
+    release: str | None = Field(None, description="the release the disc belongs to (\"Archive Blu-ray\")")
     disc_name: str | None = None
     titles: list[DiscMatchTitle] = []
 
