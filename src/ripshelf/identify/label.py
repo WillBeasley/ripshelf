@@ -46,7 +46,7 @@ class ParsedLabel:
     generic: bool = False
     dropped: list[str] = field(default_factory=list)
     extended: bool = False  # extended / director's / unrated cut, longer than the theatrical runtime
-    # The disc number came from a bare trailing digit, which may be a sequel ("SHREK_2").
+    # The disc number came from a bare trailing digit, which may be a sequel ("GRUMBLE_2").
     bare_number: bool = False
 
     @property

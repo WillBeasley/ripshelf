@@ -2,7 +2,7 @@
 
 Shows are scored like films (title similarity, plus how well the disc's
 episode length agrees with the show's), with the same guard against extras:
-"Doctor Who Confidential" and other documentary/behind-the-scenes series
+"Captain Comet Confidential" and other documentary/behind-the-scenes series
 about a show never win for that show's own disc.
 """
 
@@ -78,7 +78,7 @@ def to_episodes(season: dict) -> list[Episode]:
 
 def queries_for(show_name: str) -> list[str]:
     """The label's show name, then shorter prefixes, because compilation labels append an
-    episode name ("SARAH_&_DUCK_BROLLY_BUS")."""
+    episode name ("PIPPA_&_GOOSE_KITE_TRAM")."""
     words = show_name.split()
     out = [show_name] if show_name else []
     for k in range(len(words) - 1, 0, -1):
@@ -94,7 +94,7 @@ def score_show(show: Show, names: list[str], episode_s: float | None) -> Show:
     for n in names:
         for t in filter(None, (show.name, show.original_name)):
             sim = title_similarity(n, t)
-            # A label "Sarah & Duck Brolly Bus" contains the show name, so that is a match.
+            # A label "Pippa & Goose Kite Tram" contains the show name, so that is a match.
             if title_similarity(n[: len(t)], t) >= 0.95 and len(t) >= 4:
                 sim = max(sim, 0.97)
             if sim > best_sim:
