@@ -1452,12 +1452,12 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
                 msg = f"TV disc: {show}, {eps} episode titles to check"
             else:
                 msg = f"Best guess: {best.title} ({best.year}), score {best.score:.2f}" if best else "No candidates found"
-            note = integrations.Note(kind, f"Needs review: {name}", msg, f"/review?job={job.id}", "Review it")
+            note = integrations.Note(kind, f"Needs review: {name}", msg, f"/review#job-{job.id}", "Review it")
         elif kind == "exists":
             files = job.clash.files if job.clash else []
             note = integrations.Note(kind, f"Already in library: {name}",
                                      "\n".join(Path(f.path).name for f in files[:5]) or "",
-                                     f"/review?job={job.id}", "Decide")
+                                     f"/review#job-{job.id}", "Decide")
         elif kind == "ripped":
             note = integrations.Note(kind, f"Rip finished: {name}", self._next_step(job), where)
         elif kind == "transcoded":

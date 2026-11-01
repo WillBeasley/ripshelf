@@ -46,7 +46,7 @@ async def test_review_done_and_failed_reach_pushover(harness, pushed, mkv_script
     [review], [done] = sent(po, "Needs review"), sent(po, "Done")
     assert review["token"] == "a-token" and review["user"] == "u-key"
     assert review["priority"] == "1"
-    assert review["url"] == f"http://ripshelf.lan:8380/review?job={job.id}" and review["url_title"] == "Review it"
+    assert review["url"] == f"http://ripshelf.lan:8380/review#job-{job.id}" and review["url_title"] == "Review it"
     assert done["title"] == "Done: Moonlit Orchard" and done["priority"] == "0"
     assert done["url"] == f"http://ripshelf.lan:8380/finished?job={job.id}"
     body, raw_link = done["message"].rsplit("\n", 1)

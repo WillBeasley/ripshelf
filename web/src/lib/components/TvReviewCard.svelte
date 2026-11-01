@@ -179,7 +179,7 @@
 	let thumbFailed = $state<Record<number, boolean>>({});
 </script>
 
-<article class="card review">
+<article class="card review" id="job-{job.id}">
 	<header class="spread">
 		<div class="facts">
 			<h2 class="mono label">{job.disc.label ?? 'No volume label'}</h2>

@@ -176,7 +176,7 @@ async def test_notifications_and_emby(harness, settings):
             await asyncio.sleep(0.2)
     bodies = [{k: v[0] for k, v in parse_qs(c.request.content.decode()).items()} for c in po.calls]
     assert [b["title"].split(":")[0] for b in bodies] == ["Needs review", "Done"]
-    assert bodies[0]["url"] == f"http://rip.lan:8380/review?job={job.id}"
+    assert bodies[0]["url"] == f"http://rip.lan:8380/review#job-{job.id}"
     assert emby.call_count == 1
     path = json.loads(emby.calls[0].request.content)["Updates"][0]["Path"]
     assert path == "/media/Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv"
