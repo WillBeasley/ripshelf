@@ -19,7 +19,7 @@
 	}
 </script>
 
-<article class="card stack">
+<article class="card stack" id="job-{job.id}">
 	<header class="spread">
 		<button class="link" onclick={() => openJob(job.id)}><strong>{jobTitle(job)}</strong></button>
 		<span class="small muted mono">{job.disc.label ?? ''}</span>
