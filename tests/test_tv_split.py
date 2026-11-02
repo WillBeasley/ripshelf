@@ -71,7 +71,7 @@ TOTAL = 5460
 def test_cuts_fit_the_runtimes():
     got = split.propose_cuts(CHAPTERS, TOTAL, [None] * 6, eps(30, 28, 33, 29, 29, 31))
     assert got.cuts == [2, 4] and got.costs == [0, 0, 0]
-    assert got.confidence == 1.0 and got.note.startswith("3 episodes, 3 of 3 runtimes match")
+    assert got.confidence == 1.0 and got.note == "3 of 3 runtimes match, breaks not checked"
 
 
 def test_breaks_settle_a_close_call():
@@ -119,6 +119,21 @@ def test_parts():
 def test_split_command():
     cmd = split.split_command("mkvmerge", Path("/s/t.mkv"), Path("/o"), [4, 2, 2])
     assert cmd == ["mkvmerge", "--quiet", "-o", "/o/part.mkv", "--split", "chapters:3,5", "/s/t.mkv"]
+
+
+def test_mkvmerge_found_in_program_files_on_windows(tmp_path, monkeypatch):
+    from ripshelf import proc
+
+    exe = tmp_path / "MKVToolNix" / "mkvmerge.exe"
+    exe.parent.mkdir()
+    exe.write_bytes(b"")
+    monkeypatch.setattr(proc, "WINDOWS", True)
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+    monkeypatch.setenv("ProgramFiles", str(tmp_path))
+    assert split.default_mkvmerge("mkvmerge") == str(exe)
+    assert split.default_mkvmerge("/opt/mkvmerge") == "/opt/mkvmerge"
+    monkeypatch.setattr(proc, "WINDOWS", False)
+    assert split.default_mkvmerge("mkvmerge") == "mkvmerge"
 
 
 def test_break_command_and_score():
@@ -277,6 +292,9 @@ async def test_single_title_disc_end_to_end(harness, keyed, settings, mkv_script
             sp = job.tv.split
             assert sp.state == "ready" and sp.title_index == 0 and sp.cuts == [2, 4] == sp.proposed
             assert sp.breaks[2] == 1.0 and sp.breaks[4] == 1.0 and sp.confidence == 1.0
+            assert sp.note == "3 of 3 runtimes match, 2 of 2 cuts at black and silence"
+            # One long title says nothing about episode length, so the show isn't marked down for it.
+            assert not any("TMDB says" in e.text for e in job.tv.show.evidence)
             rows = {m.title_index: m for m in job.tv.mapping}
             assert rows[0].role == TitleRole.skip and rows[1].role != TitleRole.episode
             parts = [rows[split.part_index(k)] for k in range(3)]
@@ -293,6 +311,7 @@ async def test_single_title_disc_end_to_end(harness, keyed, settings, mkv_script
             with pytest.raises(ValueError, match="chapter 6 can't start an episode"):
                 await h.m.tv_split(job.id, [6], None)
             job = await h.m.tv_split(job.id, [2, 4], None)
+            assert not job.tv.split.edited  # back to the proposal
 
             await h.m.tv_confirm(job.id, [])
             done = await h.wait_job(lambda j: j.state in (JobState.done, JobState.failed))
