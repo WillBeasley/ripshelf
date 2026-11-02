@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+import statistics
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -285,15 +286,20 @@ class TvMixin:
             plan.compilation, plan.season, plan.start_episode = True, None, None
             plan.season_poster_url = None
             plan.episodes = episodes
-            mapping = [TitleMap(title_index=t.index, duration_s=t.duration_s, role=TitleRole.episode,
-                                note="pick the episode, or paste the run order from the case")
-                       for t in ordered]
+            split_note = self._plan_split(job, plan, show, old_split)
+            if split_note:
+                notes.append(split_note)
+                ordered = self._ordered_episode_titles(job, plan)
+                others = {m.title_index: m.model_copy(update={"episodes": []}) for m in plan.mapping
+                          if m.role != TitleRole.episode}
+            mapping = self._compilation_rows(ordered)
             if remainder and ordered:
                 hit = max(episodes, key=lambda e: title_similarity(remainder, e.name), default=None)
                 if hit and title_similarity(remainder, hit.name) >= COMPILATION_NAME_MIN:
                     mapping[0].episodes = [EpisodeRef(season=hit.season, episode=hit.episode)]
                     mapping[0].note = f"the disc is named “{hit.name}”"
             plan.mapping = sorted([*mapping, *others.values()], key=lambda m: m.title_index)
+            self._label_parts(plan)
         else:
             s_guess, disc_guess, start_guess = self._next_for(show, season, disc_number, job_id)
             season = season if season is not None else (s_guess or 1)
@@ -416,7 +422,7 @@ class TvMixin:
     def _plan_split(self, job: JobRecord, plan: TvPlan, show: Show, old: TitleSplit | None) -> str | None:
         """Mark the long title that holds this disc's episodes, when there is one, to be
         split at its chapters. Its parts take its place in the mapping."""
-        if plan.split_off or plan.compilation:
+        if plan.split_off:
             return None
         roles = {m.title_index: m.role for m in plan.mapping}
         cand = tvsplit.detect(job.titles, roles, plan.episodes)
@@ -446,10 +452,16 @@ class TvMixin:
         return "; ".join(notes)
 
     def _cut(self, job: JobRecord, plan: TvPlan) -> None:
-        """Propose where to cut, from the chapters and the season's runtimes."""
+        """Propose where to cut, from the chapters and the season's runtimes. A compilation's
+        episodes come from anywhere in the show, so every part fits its typical runtime."""
         sp = plan.split
-        eps = sorted((e for e in plan.episodes if e.season == plan.season and e.episode >= (plan.start_episode or 1)),
-                     key=lambda e: e.episode)
+        if plan.compilation:
+            runtimes = [e.runtime for e in plan.episodes if e.runtime]
+            typical = round(statistics.median(runtimes)) if runtimes else None
+            eps = [Episode(season=0, episode=n + 1, runtime=typical) for n in range(len(sp.chapters))]
+        else:
+            eps = sorted((e for e in plan.episodes if e.season == plan.season
+                          and e.episode >= (plan.start_episode or 1)), key=lambda e: e.episode)
         pal = any(t.framerate == "25" for t in job.titles)
         got = tvsplit.propose_cuts(sp.chapters, sp.duration_s, sp.breaks, eps, pal)
         sp.cuts, sp.proposed, sp.confidence, sp.note = got.cuts, list(got.cuts), got.confidence, got.note
@@ -477,9 +489,19 @@ class TvMixin:
         ordered = self._ordered_episode_titles(job, plan)
         others = {m.title_index: m.model_copy(update={"episodes": []}) for m in plan.mapping
                   if m.role != TitleRole.episode}
-        pal = any(t.framerate == "25" for t in job.titles)
-        plan.mapping = tvmap.propose(ordered, others, plan.episodes, plan.start_episode, pal)
+        if plan.compilation:  # the parts start with nothing picked; other titles keep theirs
+            kept = {m.title_index: m for m in plan.mapping}
+            rows = [kept.get(t.index) or row for t, row in zip(ordered, self._compilation_rows(ordered), strict=True)]
+            plan.mapping = sorted([*rows, *others.values()], key=lambda m: m.title_index)
+        else:
+            pal = any(t.framerate == "25" for t in job.titles)
+            plan.mapping = tvmap.propose(ordered, others, plan.episodes, plan.start_episode, pal)
         self._label_parts(plan)
+
+    @staticmethod
+    def _compilation_rows(ordered: list[TitleInfo]) -> list[TitleMap]:
+        return [TitleMap(title_index=t.index, duration_s=t.duration_s, role=TitleRole.episode,
+                         note="pick the episode, or paste the run order from the case") for t in ordered]
 
     async def _analyse_split(self, job_id: int) -> None:
         """Read the long title's chapters from the rip, look for breaks at each chapter mark,
@@ -527,8 +549,6 @@ class TvMixin:
         plan = job.tv
         if not plan or not plan.show:
             raise ValueError("pick the show first")
-        if plan.compilation:
-            raise ValueError("a compilation's titles are picked by name, so it isn't split")
         if off:
             self._unsplit(plan)
             plan.split_off = True

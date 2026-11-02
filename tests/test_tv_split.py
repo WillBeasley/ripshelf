@@ -53,6 +53,12 @@ def test_not_a_single_title_disc(why, titles, roles):
     assert split.detect(titles, roles, eps(30, 28, 33)) is None, why
 
 
+def test_a_whole_shows_runtimes_dont_hide_it():
+    # A compilation offers every episode of the show, including a 90 min special.
+    titles = [title(0, 91, 12), title(1, 5), title(2, 6), title(3, 4)]
+    assert split.detect(titles, {}, eps(3, 30, 28, 33, 29, 90)).title_index == 0
+
+
 def test_detection_needs_runtimes_and_picks_the_longest():
     titles = [title(0, 70, 8), title(1, 120, 16)]
     assert split.detect(titles, {}, eps(None, None)) is None
@@ -380,3 +386,33 @@ async def test_split_api(settings, keyed, monkeypatch, mkv_script, tmp_path):
             r = c.post(f"/api/jobs/{jid}/tv/split", json={"off": True})
             assert r.status_code == 200 and r.json()["tv"]["split"] is None and r.json()["tv"]["split_off"]
             assert c.post("/api/jobs/999/tv/split", json={"off": True}).status_code == 409
+
+
+@needs_ffmpeg
+@pytest.mark.slow
+async def test_compilation_disc_in_one_title(harness, keyed, settings, mkv_script, monkeypatch, seagull_rip):
+    """Episodes from anywhere in the show: cut at the show's typical runtime, then picked by name."""
+    with respx.mock(assert_all_called=False) as router:
+        mock_show(router, "seagull-manor")
+        async with harness() as h:
+            job = await single_title_job(h, monkeypatch, settings, mkv_script, seagull_rip)
+            job = await h.m.tv_propose(job.id, 2207, season=None, disc_number=None, start_episode=None,
+                                       compilation=True)
+            assert job.tv.compilation and job.tv.split.state == "ready" and job.tv.split.cuts == [2, 4]
+            parts = [m for m in job.tv.mapping if m.part_of == 0]
+            assert len(parts) == 3 and all(m.role == TitleRole.episode and not m.episodes for m in parts)
+            job = await h.m.tv_match_text(job.id, "The Inn Critics, A Hint of Style, The Tourists")
+            got = [m.episodes[0].episode for m in job.tv.mapping if m.part_of == 0]
+            assert got == [4, 1, 6] and job.tv.consistent
+            # New cuts start the parts afresh; other titles keep their picks.
+            job = await h.m.tv_split(job.id, [2], None)
+            assert [m.episodes for m in job.tv.mapping if m.part_of == 0] == [[], []]
+            job = await h.m.tv_split(job.id, [2, 4], None)
+            job = await h.m.tv_match_text(job.id, "The Inn Critics, A Hint of Style, The Tourists")
+            await h.m.tv_confirm(job.id, [])
+            done = await h.wait_job(lambda j: j.state in (JobState.done, JobState.failed))
+    assert done.state == JobState.done, done.problem
+    season = settings.library_dir / "TV/Seagull Manor (1975)/Season 01"
+    assert sorted(p.name for p in season.iterdir()) == [
+        "Seagull Manor - S01E01 - A Hint of Style.mkv", "Seagull Manor - S01E04 - The Inn Critics.mkv",
+        "Seagull Manor - S01E06 - The Tourists.mkv"]

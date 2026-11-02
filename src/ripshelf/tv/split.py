@@ -83,7 +83,9 @@ def detect(titles: list[TitleInfo], roles: dict[int, TitleRole], episodes: list[
     if not runtimes:
         return None
     typical = statistics.median(runtimes) * 60
-    lo, hi = min(runtimes) * 60 * (1 - EPISODE_WINDOW), max(runtimes) * 60 * (1 + EPISODE_WINDOW)
+    # Within the runtimes, but near the typical one, as a whole show's (a compilation's) can span a lot.
+    lo = max(min(runtimes) * 60 * (1 - EPISODE_WINDOW), typical / 2)
+    hi = min(max(runtimes) * 60 * (1 + EPISODE_WINDOW), typical * 1.5)
     usable = [t for t in titles if roles.get(t.index) not in (TitleRole.play_all, TitleRole.duplicate)]
     long = [t for t in usable if t.duration_s >= LONG_FACTOR * typical
             and t.chapters >= max(MIN_CHAPTERS, round(t.duration_s / typical))]
