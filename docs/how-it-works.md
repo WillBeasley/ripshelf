@@ -26,7 +26,7 @@ Some TV DVDs have no title per episode, only one long title with a few chapters 
 3. The Review card (and the job's details) show the title as a timeline with a tick at each chapter, the proposed cuts, and a frame from just after each cut. Click a tick to cut there or not, then pick each part's episode in the table as usual. "Keep it as one title" maps the title as a single title instead.
 4. On confirm, `mkvmerge` (MKVToolNix, included in the image) splits the file at the chosen chapters without re-encoding. The parts are then transcoded and copied like any episode.
 
-These discs always wait for review. If TheDiscDB lists the long title as an episode, that episode is where the parts start. If it lists a title per episode, nothing is split. A TV label (season, volume) with one long title of three or more chapters counts as a TV disc; without one, use "This is a TV disc" on the Review card.
+On a compilation disc (episodes from anywhere in the show), each part is fitted to the show's typical runtime instead, and starts with no episode picked: pick them in the table, or paste the run order from the case. These discs always wait for review. If TheDiscDB lists the long title as an episode, that episode is where the parts start. If it lists a title per episode, nothing is split. A TV label (season, volume) with one long title of three or more chapters counts as a TV disc; without one, use "This is a TV disc" on the Review card.
 
 ## Ripping
 
