@@ -147,6 +147,8 @@ class Settings(BaseSettings):
     blkid: str = "blkid"
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
+    # Splits a TV title holding several episodes at its chapters (MKVToolNix).
+    mkvmerge: str = "mkvmerge"
     # Labels that are a catalogue number ("EO51710") are looked up on the web:
     # a self-hosted SearXNG.
     catalogue_search: Literal["off", "searxng"] = "off"

@@ -109,6 +109,10 @@ class TranscodeMixin:
         if job.mode == "backup":  # kept exactly as on the disc
             await self._finalise_backup(job)
             return
+        if job.media == MediaKind.tv and job.tv and job.tv.split and job.tv.split.state != "split":
+            if not await self._split_title(job_id):
+                return
+            job = self.db.get_job(job_id)
         if self.s.transcode_enabled and not (job.transcode and job.transcode.state == "done"):
             await self._transcode(job_id)
             job = self.db.get_job(job_id)

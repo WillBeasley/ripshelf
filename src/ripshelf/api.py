@@ -60,6 +60,7 @@ from .models import (
     TvConfirmRequest,
     TvMatchTextRequest,
     TvProposeRequest,
+    TvSplitRequest,
 )
 
 SSE_HEARTBEAT_S = 15
@@ -371,6 +372,21 @@ async def tv_match_text(job_id: int, body: TvMatchTextRequest, request: Request)
 async def tv_confirm(job_id: int, body: TvConfirmRequest, request: Request):
     m = manager(request)
     return await _job_action(request, job_id, lambda i: m.tv_confirm(i, body.mapping))
+
+
+@api.post("/jobs/{job_id}/tv/split", response_model=Job)
+async def tv_split(job_id: int, body: TvSplitRequest, request: Request):
+    """Where the long title holding the episodes is cut (chapters), or keep it whole."""
+    m = manager(request)
+    return await _job_action(request, job_id, lambda i: m.tv_split(i, body.cuts, body.off))
+
+
+@api.get("/jobs/{job_id}/split-thumbs/{title_index}/{chapter}.jpg", include_in_schema=False)
+async def split_thumbnail(job_id: int, title_index: int, chapter: int, request: Request):
+    p = manager(request).split_thumb_path(job_id, title_index, chapter)
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
 
 
 @api.get("/jobs/{job_id}/thumbs/{title_index}.jpg", include_in_schema=False)

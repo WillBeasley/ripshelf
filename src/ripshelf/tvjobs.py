@@ -5,6 +5,9 @@
          -> review (always, for TV) with the mapping table, confirm
          -> thumbnails + order check against the play-all, once ripped
          -> finalise every mapped title into TV/Show (Year)/Season NN/
+
+A disc with its episodes in one long title has that title split at chapters
+(tv/split.py) after the rip, and the parts are mapped as titles of their own.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from .models import (
     CollectionDisc,
     DiscKind,
     DiscMatch,
+    DiscMatchTitle,
     Episode,
     EpisodeRef,
     Evidence,
@@ -37,15 +41,18 @@ from .models import (
     SeasonCell,
     SeasonGrid,
     Show,
+    TitleInfo,
     TitleMap,
     TitleMapUpdate,
     TitleRole,
+    TitleSplit,
     TvPlan,
 )
 from .providers import thediscdb
 from .providers.tvmaze import Tvmaze, TvmazeError
 from .tv import mapping as tvmap
 from .tv import naming, shape, tmdb_tv, verify
+from .tv import split as tvsplit
 from .tv.labels import TvLabel, parse_tv_label, split_show_name
 from .tv.tvdb import Tvdb, TvdbError
 
@@ -75,7 +82,11 @@ class TvMixin:
         tvl = parse_tv_label(job.disc.label)
         evidence = list(sh.evidence)
         evidence += [h[0].upper() + h[1:] for h in tvl.hints]
-        is_tv = sh.looks_like_tv or (tvl.looks_like_tv and len(sh.episodes) >= 2)
+        long = max(job.titles, key=lambda t: t.duration_s, default=None)
+        one_long = bool(long and long.duration_s >= shape.FEATURE_MIN_S and long.chapters >= tvsplit.MIN_CHAPTERS)
+        is_tv = sh.looks_like_tv or (tvl.looks_like_tv and (len(sh.episodes) >= 2 or one_long))
+        if is_tv and not sh.looks_like_tv and len(sh.episodes) < 2:
+            evidence.append(f"title {long.index} is long, with {long.chapters} chapters, so maybe several episodes")
         if job.disc_match:  # the disc database knows
             is_tv = job.disc_match.media == MediaKind.tv
             evidence.insert(0, f"TheDiscDB lists it as {'a TV disc' if is_tv else 'a film'}")
@@ -107,6 +118,11 @@ class TvMixin:
         plan = plan or job.tv
         roles = {m.title_index: m.role for m in plan.mapping} if plan else {}
         eps = [t for t in job.titles if roles.get(t.index) == TitleRole.episode]
+        if plan and plan.split:  # its parts, in place of the long title
+            src = plan.split.title_index
+            eps = sorted([*eps, *self._part_titles(plan)],
+                         key=lambda t: (t.index, 0) if not tvsplit.is_part(t.index) else (src, 1, t.index))
+            return eps
         bluray = job.disc.kind in (DiscKind.bluray, DiscKind.uhd)
         pa = next((t for t in job.titles if roles.get(t.index) == TitleRole.play_all), None)
         order = shape.play_all_order(pa, eps, bluray)
@@ -242,7 +258,8 @@ class TvMixin:
         """Fill the job's TV plan for ``show``, with episodes and a proposed mapping."""
         job = self.db.get_job(job_id)
         plan = job.tv or TvPlan()
-        ordered = self._ordered_episode_titles(job)
+        old_split = self._unsplit(plan)
+        ordered = self._ordered_episode_titles(job, plan)
         others = {m.title_index: m.model_copy(update={"episodes": []}) for m in plan.mapping
                   if m.role != TitleRole.episode}
         pal = any(t.framerate == "25" for t in ordered)
@@ -306,7 +323,14 @@ class TvMixin:
             placed = _disc_numbers(job)
             plan.label_placed = placed.season == season and (placed.disc or placed.volume) is not None
             plan.episodes = episodes
+            split_note = self._plan_split(job, plan, show, old_split)
+            if split_note:
+                notes.append(split_note)
+                ordered = self._ordered_episode_titles(job, plan)
+                others = {m.title_index: m.model_copy(update={"episodes": []}) for m in plan.mapping
+                          if m.role != TitleRole.episode}
             plan.mapping = tvmap.propose(ordered, others, episodes, plan.start_episode, pal)
+            self._label_parts(plan)
             plan.disc_db = False
             mapped = self._disc_match_mapping(job, plan, show)
             if mapped:
@@ -336,6 +360,8 @@ class TvMixin:
         if show.tmdb_id != match.tmdb_id and not (match.tvdb_id and show.tvdb_id == match.tvdb_id):
             return None
         said = {t.scan_index: t for t in match.titles if t.scan_index is not None}
+        if plan.split:  # mapped through its parts (see _plan_split)
+            said.pop(plan.split.title_index, None)
         eps = {i: t for i, t in said.items() if t.kind == "episode" and t.season == plan.season and t.episode}
         if not eps:
             return None
@@ -359,6 +385,197 @@ class TvMixin:
         return (f"TheDiscDB knows this disc. It's season {plan.season}, episodes "
                 f"{numbers[0]}–{numbers[-1]}" if len(numbers) > 1 else
                 f"TheDiscDB knows this disc. It's season {plan.season}, episode {numbers[0]}")
+
+    # --- one long title holding the episodes ---------------------------------------------
+
+    def _unsplit(self, plan: TvPlan) -> TitleSplit | None:
+        """Take the parts out of the mapping, giving the long title its role back."""
+        sp = plan.split
+        if sp:
+            plan.mapping = [m for m in plan.mapping if not tvsplit.is_part(m.title_index)]
+            for m in plan.mapping:
+                if m.title_index == sp.title_index:
+                    m.role, m.note = sp.was, None
+            plan.split = None
+        return sp
+
+    def _disc_db_episodes(self, job: JobRecord, plan: TvPlan, show: Show) -> dict[int, DiscMatchTitle]:
+        """Titles the disc database lists as episodes of this season (scan index -> its title)."""
+        match = job.disc_match
+        if not (match and match.media == MediaKind.tv and "thediscdb" in providers.enabled(self.s, "tv")):
+            return {}
+        if show.tmdb_id != match.tmdb_id and not (match.tvdb_id and show.tvdb_id == match.tvdb_id):
+            return {}
+        return {t.scan_index: t for t in match.titles if t.scan_index is not None and t.kind == "episode"
+                and t.season == plan.season and t.episode}
+
+    def _plan_split(self, job: JobRecord, plan: TvPlan, show: Show, old: TitleSplit | None) -> str | None:
+        """Mark the long title that holds this disc's episodes, when there is one, to be
+        split at its chapters. Its parts take its place in the mapping."""
+        if plan.split_off or plan.compilation:
+            return None
+        roles = {m.title_index: m.role for m in plan.mapping}
+        cand = tvsplit.detect(job.titles, roles, plan.episodes)
+        if not cand:
+            return None
+        listed = self._disc_db_episodes(job, plan, show)
+        if any(i != cand.title_index for i in listed):
+            return None  # the disc database has a title per episode
+        title = next(t for t in job.titles if t.index == cand.title_index)
+        row = next((m for m in plan.mapping if m.title_index == title.index), None)
+        if row is None:
+            row = TitleMap(title_index=title.index, duration_s=title.duration_s, role=TitleRole.episode)
+            plan.mapping = sorted([*plan.mapping, row], key=lambda m: m.title_index)
+        sp = old if old and old.title_index == title.index else TitleSplit(
+            title_index=title.index, duration_s=title.duration_s, expected=cand.episodes, reason=cand.reason)
+        sp.expected, sp.reason, sp.was = cand.episodes, cand.reason, row.role
+        row.role, row.episodes, row.match_cost = TitleRole.skip, [], None
+        row.note = f"holds about {cand.episodes} episodes, so it's split at chapters into the parts below"
+        plan.split = sp
+        notes = [f"{cand.reason[0].upper()}{cand.reason[1:]}, so it's split into episodes at its chapters"]
+        first = listed.get(title.index)
+        if first:
+            plan.start_episode = first.episode
+            notes.append(f"TheDiscDB says it starts with episode {first.episode}")
+        if sp.chapters and not sp.edited:
+            self._cut(job, plan)
+        return "; ".join(notes)
+
+    def _cut(self, job: JobRecord, plan: TvPlan) -> None:
+        """Propose where to cut, from the chapters and the season's runtimes."""
+        sp = plan.split
+        eps = sorted((e for e in plan.episodes if e.season == plan.season and e.episode >= (plan.start_episode or 1)),
+                     key=lambda e: e.episode)
+        pal = any(t.framerate == "25" for t in job.titles)
+        got = tvsplit.propose_cuts(sp.chapters, sp.duration_s, sp.breaks, eps, pal)
+        sp.cuts, sp.proposed, sp.confidence, sp.note = got.cuts, list(got.cuts), got.confidence, got.note
+
+    def _part_titles(self, plan: TvPlan) -> list[TitleInfo]:
+        sp = plan.split
+        if not sp or sp.state not in ("ready", "split"):
+            return []
+        return [TitleInfo(index=tvsplit.part_index(k), duration_s=round(b - a), size_bytes=0, chapters=0)
+                for k, (a, b, _) in enumerate(tvsplit.parts(sp.chapters, sp.duration_s, sp.cuts))]
+
+    def _label_parts(self, plan: TvPlan) -> None:
+        sp = plan.split
+        if not sp:
+            return
+        bounds = tvsplit.parts(sp.chapters, sp.duration_s, sp.cuts) if sp.chapters else []
+        for m in plan.mapping:
+            k = m.title_index - tvsplit.PART_BASE
+            if tvsplit.is_part(m.title_index) and k < len(bounds):
+                m.part_of, m.start_s = sp.title_index, round(bounds[k][0], 2)
+
+    def _remap(self, job: JobRecord, plan: TvPlan) -> None:
+        """Propose the episodes again for the parts as they are now (no network needed)."""
+        plan.mapping = [m for m in plan.mapping if not tvsplit.is_part(m.title_index)]
+        ordered = self._ordered_episode_titles(job, plan)
+        others = {m.title_index: m.model_copy(update={"episodes": []}) for m in plan.mapping
+                  if m.role != TitleRole.episode}
+        pal = any(t.framerate == "25" for t in job.titles)
+        plan.mapping = tvmap.propose(ordered, others, plan.episodes, plan.start_episode, pal)
+        self._label_parts(plan)
+
+    async def _analyse_split(self, job_id: int) -> None:
+        """Read the long title's chapters from the rip, look for breaks at each chapter mark,
+        grab a frame after each, and propose the cuts."""
+        job = self.db.get_job(job_id)
+        sp = job.tv.split if job and job.tv else None
+        if not sp or sp.state != "waiting" or sp.title_index not in job.rip.files:
+            return
+        idx, path = sp.title_index, Path(job.rip.files[sp.title_index])
+        chapters = await tvsplit.read_chapters(self.s.ffprobe, path)
+        length = await verify.duration(self.s.ffprobe, path) or float(sp.duration_s)
+        breaks: list[float | None] = [None] * len(chapters or [])
+        if chapters and len(chapters) >= 2:
+            thumbs = self.work_dir(job) / "thumbs"
+            gate = asyncio.Semaphore(4)
+
+            async def look(k: int, at: float) -> None:
+                async with gate:
+                    if 0 < k <= tvsplit.MAX_CHECKED:
+                        breaks[k] = await tvsplit.break_score(self.s.ffmpeg, path, at)
+                    await verify.thumbnail(self.s.ffmpeg, path, thumbs / f"split-{idx}-{k}.jpg",
+                                           at_s=max(0.0, min(at + tvsplit.THUMB_AFTER_S, length - 1)))
+
+            await asyncio.gather(*(look(k, at) for k, at in enumerate(chapters)))
+        job = self.db.get_job(job_id)
+        sp = job.tv.split if job.tv else None
+        if not sp or sp.title_index != idx or sp.state != "waiting":
+            return
+        if not chapters or len(chapters) < 2:
+            sp.state, sp.error = "failed", "the rip has no chapters to split at"
+            self._event(job, "warning", f"Title {idx} can't be split into episodes: {sp.error}")
+        else:
+            sp.state, sp.chapters, sp.breaks, sp.duration_s = "ready", chapters, breaks, round(length, 3)
+            if not sp.edited:
+                self._cut(job, job.tv)
+            self._remap(job, job.tv)
+            self._event(job, "info", f"Title {idx} has {len(chapters)} chapters. Proposed {len(sp.cuts) + 1} "
+                        f"episodes ({sp.note}), confidence {sp.confidence:.0%}")
+        self._check_plan(job)
+        self._save(job)
+
+    async def tv_split(self, job_id: int, cuts: list[int] | None, off: bool | None) -> JobRecord:
+        """Change where the long title is cut, keep it whole (``off``), or split it after all."""
+        job = self._tv_job(job_id)
+        plan = job.tv
+        if not plan or not plan.show:
+            raise ValueError("pick the show first")
+        if plan.compilation:
+            raise ValueError("a compilation's titles are picked by name, so it isn't split")
+        if off:
+            self._unsplit(plan)
+            plan.split_off = True
+            self._event(job, "info", "Keeping the long title whole")
+        elif off is False:
+            plan.split_off = False
+            if not plan.split and not self._plan_split(job, plan, plan.show, None):
+                raise ValueError("no title on this disc is long enough to hold several episodes")
+            if plan.split.state == "waiting" and job.rip.state == RipState.done:
+                self._spawn(self.drives[job.drive_id], self._after_tv_rip(job.id), job.id)
+        if cuts is not None:
+            sp = plan.split
+            if not sp or sp.state != "ready":
+                raise ValueError("there are no chapters to cut at yet")
+            bad = [c for c in cuts if not 0 < c < len(sp.chapters)]
+            if bad:
+                raise ValueError(f"chapter {bad[0]} can't start an episode (pick 1 to {len(sp.chapters) - 1})")
+            sp.cuts, sp.edited = sorted(set(cuts)), True
+        plan.user_edited = True
+        self._remap(job, plan)
+        self._check_plan(job)
+        self._save(job)
+        return job
+
+    async def _split_title(self, job_id: int) -> bool:
+        """Split the long title into one file per part (mkvmerge, no re-encoding). False if it failed."""
+        job = self.db.get_job(job_id)
+        sp = job.tv.split
+        src = job.rip.files.get(sp.title_index)
+        if not src or not Path(src).exists():
+            self._fail(job, Problem(code="rip_incomplete", message=f"the ripped file of title {sp.title_index} "
+                                    "is missing", actions=["retry"]))
+            return False
+        n = len(sp.cuts) + 1
+        self._set_state(job, JobState.finalising, f"Splitting title {sp.title_index} into {n} episodes")
+        self._set_step(job, "Splitting into episodes", f"Title {sp.title_index} at chapters "
+                       + ", ".join(str(c + 1) for c in sp.cuts) + ", without re-encoding")
+        try:
+            files = await tvsplit.split_file(self.s.mkvmerge, Path(src), self.scratch_dir(job) / "split", sp.cuts)
+        except tvsplit.SplitError as e:
+            self._fail(job, Problem(code="split_failed", message=f"Could not split title {sp.title_index}: {e}",
+                                    hint="Splitting needs mkvmerge, from MKVToolNix (the image has it)",
+                                    actions=["retry"]))
+            return False
+        job = self.db.get_job(job_id)
+        for k, f in enumerate(files):
+            job.rip.files[tvsplit.part_index(k)] = str(f)
+        job.tv.split.state = "split"
+        self._event(job, "finalise", f"Split title {sp.title_index} into {len(files)} files")
+        self._save(job)
+        return True
 
     async def _episode_list(self, show: Show, season: int, episodes: list[Episode],
                             tmdb: Tmdb) -> tuple[list[Episode], str | None]:
@@ -453,6 +670,12 @@ class TvMixin:
         plan = job.tv
         known = {(e.season, e.episode): e for e in plan.episodes} if plan.episodes else None
         plan.problems = ([] if plan.show else ["pick the show"]) + tvmap.problems(plan.mapping, known)
+        sp = plan.split
+        if sp and sp.state == "waiting":
+            plan.problems.append(f"title {sp.title_index} holds several episodes, and its chapters are read "
+                                 "once it's ripped")
+        elif sp and sp.state == "failed":
+            plan.problems.append(f"title {sp.title_index} can't be split ({sp.error}), so keep it whole")
         if not job.rip.all_titles and job.rip.state == RipState.done:
             plan.problems.append("only the main title was ripped, so put the disc back to rip the episodes")
         plan.consistent = not plan.problems
@@ -563,6 +786,8 @@ class TvMixin:
             return False, ["auto-confirm is off"]
         if not plan or not plan.show:
             return False, ["no show"]
+        if plan.split:
+            return False, ["one long title holds the episodes, so where it's cut needs a review"]
         if plan.user_edited:
             return False, ["changed by hand"]
         if plan.compilation:
@@ -670,8 +895,10 @@ class TvMixin:
 
     def missing_titles(self, job: JobRecord) -> list[int]:
         """Titles the mapping copies that haven't been ripped (yet)."""
-        needed = [m.title_index for m in job.tv.mapping if m.role in (TitleRole.episode, TitleRole.extra)]
-        return [i for i in needed if i not in job.rip.files or not Path(job.rip.files[i]).exists()]
+        unsplit = job.tv.split.title_index if job.tv.split and job.tv.split.state != "split" else None
+        needed = {unsplit if unsplit is not None and m.part_of == unsplit else m.title_index
+                  for m in job.tv.mapping if m.role in (TitleRole.episode, TitleRole.extra)}
+        return sorted(i for i in needed if i not in job.rip.files or not Path(job.rip.files[i]).exists())
 
     async def set_media(self, job_id: int, media: MediaKind) -> JobRecord:
         """The user says this disc is TV (or a film) after all."""
@@ -786,7 +1013,9 @@ class TvMixin:
                     t = next((t for t in job.titles if t.index == idx), None)
                     length = t.duration_s if t else None
                 await verify.thumbnail(self.s.ffmpeg, Path(f), out, length=length)
-        if not self.s.verify_order:
+        await self._analyse_split(job_id)
+        job = self.db.get_job(job_id)
+        if not self.s.verify_order or job.tv.split:
             await self._maybe_auto_confirm(job_id)
             return
         plan = job.tv
@@ -809,7 +1038,19 @@ class TvMixin:
         job = self.db.get_job(job_id)
         if not job:
             return None
+        m = next((m for m in job.tv.mapping if m.title_index == title_index), None) if job.tv else None
+        if m and m.part_of is not None and job.tv.split:  # the frame after the part's first chapter
+            first = next((c for a, _, c in tvsplit.parts(job.tv.split.chapters, job.tv.split.duration_s,
+                                                          job.tv.split.cuts) if round(a, 2) == m.start_s), None)
+            return self.split_thumb_path(job_id, m.part_of, first) if first is not None else None
         p = self.work_dir(job) / "thumbs" / f"{int(title_index)}.jpg"
+        return p if p.exists() else None
+
+    def split_thumb_path(self, job_id: int, title_index: int, chapter: int) -> Path | None:
+        job = self.db.get_job(job_id)
+        if not job:
+            return None
+        p = self.work_dir(job) / "thumbs" / f"split-{int(title_index)}-{int(chapter)}.jpg"
         return p if p.exists() else None
 
     # --- finalise -----------------------------------------------------------------------
@@ -927,7 +1168,10 @@ class TvMixin:
             "titles": {str(m.title_index): {
                 "role": m.role.value, "duration_s": m.duration_s,
                 "episodes": [f"S{e.season:02d}E{e.episode:02d}" for e in m.episodes],
+                **({"part_of": m.part_of, "start_s": m.start_s} if m.part_of is not None else {}),
                 **copied.get(m.title_index, {})} for m in plan.mapping},
+            "split": {"title": plan.split.title_index, "chapters": plan.split.chapters,
+                      "cuts": plan.split.cuts, "proposed": plan.split.proposed} if plan.split else None,
         }
 
     # --- collections ----------------------------------------------------------------------
