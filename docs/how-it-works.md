@@ -17,6 +17,17 @@ detected → scanning → identifying → ripping → [transcoding] → finalisi
 
 [providers.md](providers.md) lists the providers and the order they're asked in.
 
+### TV discs with every episode in one title
+
+Some TV DVDs have no title per episode, only one long title with a few chapters in each episode. When a title is at least 1.8 times the season's typical episode runtime, has at least one chapter per episode, and no other title is one episode long, ripshelf rips it whole and then splits it:
+
+1. The chapter starts are read from the rip (ffprobe), and each chapter mark is checked for black frames and silence (ffmpeg), which is what a break between episodes usually looks like.
+2. Consecutive chapters are grouped into episodes to fit the runtimes from TMDB, TheTVDB or TVmaze, starting at the disc's first episode. A chapter mark with black and silence makes a cut there more likely. The proposal comes with a confidence score.
+3. The Review card (and the job's details) show the title as a timeline with a tick at each chapter, the proposed cuts, and a frame from just after each cut. Click a tick to cut there or not, then pick each part's episode in the table as usual. "Keep it as one title" maps the title as a single title instead.
+4. On confirm, `mkvmerge` (MKVToolNix, included in the image) splits the file at the chosen chapters without re-encoding. The parts are then transcoded and copied like any episode.
+
+These discs always wait for review. If TheDiscDB lists the long title as an episode, that episode is where the parts start. If it lists a title per episode, nothing is split. A TV label (season, volume) with one long title of three or more chapters counts as a TV disc; without one, use "This is a TV disc" on the Review card.
+
 ## Ripping
 
 MakeMKV rips the main feature of a film, or every episode of a TV disc. A drive can instead make a [full disc backup](backup.md). Each drive has its own MakeMKV data folder (LibreDrive data, firmware dumps), so UHD drives and older drives can sit side by side.

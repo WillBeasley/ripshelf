@@ -461,6 +461,12 @@
 						{#if tools.windows}<Command text="winget install -e --id Gyan.FFmpeg" />{/if}
 					</div>
 				{/if}
+				{#if tools?.mkvmerge && !tools.mkvmerge.found}
+					<div class="notice">
+						<p>mkvmerge (MKVToolNix) isn't installed, so a TV disc with every episode in one long title can't be split into episodes.{tools.windows ? ' Install it:' : ''}</p>
+						{#if tools.windows}<Command text="winget install -e --id MoritzBunkus.MKVToolNix" />{/if}
+					</div>
+				{/if}
 				{#if tools && !tools.java.found}
 					<div class="notice">
 						<p>No Java found. MakeMKV needs it for some Blu-ray menus (BD-J).{tools.windows ? ' Install it:' : ''}</p>

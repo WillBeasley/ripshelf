@@ -30,7 +30,8 @@ import type {
 	Show,
 	Status,
 	TitleMapUpdate,
-	TvProposeRequest
+	TvProposeRequest,
+	TvSplitRequest
 } from './api-types';
 
 export type MediaServer = 'emby' | 'jellyfin' | 'plex';
@@ -102,7 +103,10 @@ export const api = {
 	tvMatchText: (id: number, text: string) => call<Job>('POST', `/jobs/${id}/tv/match-text`, { text }),
 	tvConfirm: (id: number, mapping: TitleMapUpdate[]) =>
 		call<Job>('POST', `/jobs/${id}/tv/confirm`, { mapping }),
+	tvSplit: (id: number, body: TvSplitRequest) => call<Job>('POST', `/jobs/${id}/tv/split`, body),
 	thumbUrl: (id: number, title: number) => `/api/jobs/${id}/thumbs/${title}.jpg`,
+	splitThumbUrl: (id: number, title: number, chapter: number) =>
+		`/api/jobs/${id}/split-thumbs/${title}/${chapter}.jpg`,
 	collections: () => call<Collection[]>('GET', '/collections'),
 	collection: (id: number) => call<CollectionDetail>('GET', `/collections/${id}`),
 	eject: (driveId: string) => call<void>('POST', `/drives/${driveId}/eject`),

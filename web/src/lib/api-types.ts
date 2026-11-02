@@ -43,6 +43,10 @@ export type JobState =
  */
 export type TitleRole = "episode" | "play_all" | "duplicate" | "extra" | "skip";
 /**
+ * the title's role before it was split
+ */
+export type TitleRole1 = "episode" | "play_all" | "duplicate" | "extra" | "skip";
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "RipState".
  */
@@ -130,6 +134,7 @@ export interface Api {
   TitleMap?: TitleMap;
   TitleMapUpdate?: TitleMapUpdate;
   TitleRole?: TitleRole;
+  TitleSplit?: TitleSplit;
   Tool?: Tool;
   TranscodeFile?: TranscodeFile;
   TranscodeInfo?: TranscodeInfo;
@@ -138,6 +143,7 @@ export interface Api {
   TvMatchTextRequest?: TvMatchTextRequest;
   TvPlan?: TvPlan;
   TvProposeRequest?: TvProposeRequest;
+  TvSplitRequest?: TvSplitRequest;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -966,6 +972,14 @@ export interface TvPlan {
    * why it was (or wasn't) confirmed without review
    */
   auto_evidence: string[];
+  /**
+   * a long title holding several episodes, split at chapters
+   */
+  split: TitleSplit | null;
+  /**
+   * the user keeps the long title whole
+   */
+  split_off: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -991,6 +1005,60 @@ export interface TitleMap {
    * duplicate of this title
    */
   same_as: number | null;
+  /**
+   * a part of this title, split at its chapters
+   */
+  part_of: number | null;
+  /**
+   * where the part starts in that title
+   */
+  start_s: number | null;
+}
+/**
+ * One long title holding several episodes, to be split at its chapter marks.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "TitleSplit".
+ */
+export interface TitleSplit {
+  title_index: number;
+  duration_s: number;
+  /**
+   * about how many episodes it holds, from the season's runtimes
+   */
+  expected: number;
+  reason: string;
+  was: TitleRole1;
+  /**
+   * waiting for the rip, chapters read, chapters unreadable, split into files
+   */
+  state: "waiting" | "ready" | "failed" | "split";
+  error: string | null;
+  /**
+   * chapter start times (s), read from the rip
+   */
+  chapters: number[];
+  /**
+   * per chapter, 0..1: black frames and silence at its mark (null = not checked)
+   */
+  breaks: (number | null)[];
+  /**
+   * chapters (0-based) where an episode starts
+   */
+  cuts: number[];
+  /**
+   * the cuts as first proposed
+   */
+  proposed: number[];
+  /**
+   * 0..1, how well the proposed parts fit the runtimes
+   */
+  confidence: number | null;
+  note: string | null;
+  /**
+   * cuts changed by hand, so kept when the mapping is re-proposed
+   */
+  edited: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1809,6 +1877,10 @@ export interface SetupTools {
   makemkv_registered: boolean;
   ffmpeg: Tool;
   ffprobe: Tool;
+  /**
+   * MKVToolNix, which splits a TV title holding several episodes
+   */
+  mkvmerge: Tool | null;
   java: Tool1;
   /**
    * MakeMKV came with ripshelf and its licence isn't accepted yet
@@ -1892,4 +1964,18 @@ export interface TvProposeRequest {
   disc_number: number | null;
   start_episode: number | null;
   compilation: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "TvSplitRequest".
+ */
+export interface TvSplitRequest {
+  /**
+   * chapters (0-based) where an episode starts
+   */
+  cuts: number[] | null;
+  /**
+   * true keeps the long title whole, false splits it again
+   */
+  off: boolean | null;
 }

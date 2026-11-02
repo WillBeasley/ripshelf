@@ -7,6 +7,7 @@
 	import { closeJob } from '../nav';
 	import ContributionPanel from './ContributionPanel.svelte';
 	import Progress from './Progress.svelte';
+	import SplitTimeline from './SplitTimeline.svelte';
 	import StatePill from './StatePill.svelte';
 
 	let { jobId }: { jobId: number } = $props();
@@ -164,6 +165,12 @@
 			<p class="mono">{job.destination ?? 'Not decided until the disc is identified'}</p>
 			{#if job.destination && job.state !== 'done'}<p class="small muted">planned</p>{/if}
 		</section>
+
+		{#if job.tv?.split || job.tv?.split_off}
+			<section>
+				<SplitTimeline {job} />
+			</section>
+		{/if}
 
 		{#if job.tv?.auto_evidence?.length}
 			<section>
