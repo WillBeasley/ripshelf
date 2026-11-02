@@ -194,8 +194,12 @@ class TvMixin:
             self._event(job, "warning", "The disc label is generic; search for the show by hand")
         else:
             try:
-                eps = [t.duration_s for t in self._ordered_episode_titles(job)]
+                ordered = self._ordered_episode_titles(job)
+                eps = [t.duration_s for t in ordered]
                 typical = sorted(eps)[len(eps) // 2] if eps else None
+                if len(ordered) == 1 and ordered[0].duration_s >= shape.FEATURE_MIN_S \
+                        and ordered[0].chapters >= tvsplit.MIN_CHAPTERS:
+                    typical = None  # one long title, maybe several episodes, so no episode length
                 shows = await self._find_shows(tmdb, name, typical) if name else []
                 if name:
                     self._event(job, "info", f"{self._show_sources()}: {len(shows)} shows for “{name}”")
@@ -513,7 +517,7 @@ class TvMixin:
                 self._cut(job, job.tv)
             self._remap(job, job.tv)
             self._event(job, "info", f"Title {idx} has {len(chapters)} chapters. Proposed {len(sp.cuts) + 1} "
-                        f"episodes ({sp.note}), confidence {sp.confidence:.0%}")
+                        f"episodes: {sp.note}; confidence {sp.confidence:.0%}")
         self._check_plan(job)
         self._save(job)
 
@@ -542,7 +546,8 @@ class TvMixin:
             bad = [c for c in cuts if not 0 < c < len(sp.chapters)]
             if bad:
                 raise ValueError(f"chapter {bad[0]} can't start an episode (pick 1 to {len(sp.chapters) - 1})")
-            sp.cuts, sp.edited = sorted(set(cuts)), True
+            sp.cuts = sorted(set(cuts))
+            sp.edited = sp.cuts != sp.proposed
         plan.user_edited = True
         self._remap(job, plan)
         self._check_plan(job)
@@ -563,7 +568,7 @@ class TvMixin:
         self._set_step(job, "Splitting into episodes", f"Title {sp.title_index} at chapters "
                        + ", ".join(str(c + 1) for c in sp.cuts) + ", without re-encoding")
         try:
-            files = await tvsplit.split_file(self.s.mkvmerge, Path(src), self.scratch_dir(job) / "split", sp.cuts)
+            files = await tvsplit.split_file(tvsplit.default_mkvmerge(self.s.mkvmerge), Path(src), self.scratch_dir(job) / "split", sp.cuts)
         except tvsplit.SplitError as e:
             self._fail(job, Problem(code="split_failed", message=f"Could not split title {sp.title_index}: {e}",
                                     hint="Splitting needs mkvmerge, from MKVToolNix (the image has it)",

@@ -62,6 +62,7 @@ from .models import (
     TvProposeRequest,
     TvSplitRequest,
 )
+from .tv import split as tvsplit
 
 SSE_HEARTBEAT_S = 15
 SECRETS = {"tmdb_api_key", "tvdb_api_key", "tvdb_pin", "omdb_api_key", "thediscdb_api_key", "emby_api_key", "jellyfin_api_key", "plex_token", "makemkv_key", "pushover_user_key",
@@ -603,7 +604,7 @@ async def import_private_data(
 
 @api.get("/setup/tools", response_model=SetupTools)
 async def setup_tools(request: Request):
-    """Whether MakeMKV, ffmpeg and Java are where ripshelf will look for them."""
+    """Whether MakeMKV, ffmpeg, mkvmerge and Java are where ripshelf will look for them."""
     s = settings(request)
 
     def tool(command: str) -> Tool:
@@ -613,7 +614,7 @@ async def setup_tools(request: Request):
 
     registered = bool(s.makemkv_key) or (proc.WINDOWS and runner.registry_key() is not None)
     return SetupTools(makemkv=tool(s.makemkvcon), makemkv_registered=registered or s.fake_hardware,
-                      ffmpeg=tool(s.ffmpeg), ffprobe=tool(s.ffprobe), java=tool("java"), windows=proc.WINDOWS,
+                      ffmpeg=tool(s.ffmpeg), ffprobe=tool(s.ffprobe), mkvmerge=tool(tvsplit.default_mkvmerge(s.mkvmerge)), java=tool("java"), windows=proc.WINDOWS,
                       makemkv_eula_pending=s.makemkv_eula_pending())
 
 

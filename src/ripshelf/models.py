@@ -940,6 +940,7 @@ class SetupTools(BaseModel):
     makemkv_registered: bool = Field(description="a MakeMKV key is set here (or, on Windows, in MakeMKV itself)")
     ffmpeg: Tool
     ffprobe: Tool
+    mkvmerge: Tool | None = Field(None, description="MKVToolNix, which splits a TV title holding several episodes")
     java: Tool = Field(description="a Java runtime, which MakeMKV needs for some Blu-ray menus (BD-J)")
     makemkv_eula_pending: bool = Field(False, description="MakeMKV came with ripshelf and its licence isn't accepted yet")
     windows: bool = False

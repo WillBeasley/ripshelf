@@ -18,7 +18,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
+import shutil
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
@@ -160,7 +162,7 @@ def propose_cuts(chapters: list[float], total_s: float, breaks: list[float | Non
     seen = [breaks[c] for c in cuts if c < len(breaks) and breaks[c] is not None]
     confidence = fit if not seen else 0.7 * fit + 0.3 * (sum(seen) / len(seen))
     clean = sum(1 for b in seen if b >= 0.99)
-    note = f"{n} episodes, " + (f"{sum(1 for c in costs if c == 0)} of {n} runtimes match")
+    note = f"{sum(1 for c in costs if c == 0)} of {n} runtimes match"
     if cuts:
         note += f", {clean} of {len(cuts)} cuts at black and silence" if seen else ", breaks not checked"
     if n > len(episodes):
@@ -241,6 +243,16 @@ async def break_score(ffmpeg: str, path: Path, at_s: float) -> float | None:
     if not got or got[0] != 0:
         return None
     return score_break(got[2].decode(errors="replace"), mark)
+
+
+def default_mkvmerge(command: str) -> str:
+    """The default "mkvmerge" is on the PATH on Linux; on Windows MKVToolNix installs it to Program Files."""
+    if command != "mkvmerge" or not procs.WINDOWS or shutil.which(command):
+        return command
+    for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+        if base and (Path(base) / "MKVToolNix" / "mkvmerge.exe").is_file():
+            return str(Path(base) / "MKVToolNix" / "mkvmerge.exe")
+    return command
 
 
 def split_command(mkvmerge: str, src: Path, out_dir: Path, cuts: list[int]) -> list[str]:
