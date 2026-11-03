@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { live } from '$lib/live.svelte';
-	import ReviewCard from '$lib/components/ReviewCard.svelte';
-	import TvReviewCard from '$lib/components/TvReviewCard.svelte';
-	import ClashCard from '$lib/components/ClashCard.svelte';
+	import { live } from '#lib/live.svelte.ts';
+	import ReviewCard from '#lib/components/ReviewCard.svelte';
+	import TvReviewCard from '#lib/components/TvReviewCard.svelte';
+	import ClashCard from '#lib/components/ClashCard.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 

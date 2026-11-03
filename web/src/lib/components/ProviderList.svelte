@@ -1,7 +1,7 @@
 <script lang="ts">
 	// One kind's metadata providers. Drag (or the arrow buttons, or the arrow keys on
 	// the handle) to set the order they are asked in, the checkbox to switch one off.
-	import type { ProviderInfo, ProviderSlot } from '$lib/api-types';
+	import type { ProviderInfo, ProviderSlot } from '#lib/api-types.ts';
 
 	let {
 		title,

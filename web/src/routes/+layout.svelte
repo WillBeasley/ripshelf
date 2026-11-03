@@ -2,9 +2,9 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { live } from '$lib/live.svelte';
-	import { alerts } from '$lib/alerts.svelte';
-	import JobPanel from '$lib/components/JobPanel.svelte';
+	import { live } from '#lib/live.svelte.ts';
+	import { alerts } from '#lib/alerts.svelte.ts';
+	import JobPanel from '#lib/components/JobPanel.svelte';
 
 	let { children } = $props();
 

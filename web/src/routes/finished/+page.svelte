@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { live } from '$lib/live.svelte';
-	import { jobTitle, kindLabel, when } from '$lib/format';
-	import { openJob } from '$lib/nav';
-	import Poster from '$lib/components/Poster.svelte';
-	import StatePill from '$lib/components/StatePill.svelte';
-	import { api } from '$lib/api';
-	import { Action } from '$lib/actions.svelte';
+	import { live } from '#lib/live.svelte.ts';
+	import { jobTitle, kindLabel, when } from '#lib/format.ts';
+	import { openJob } from '#lib/nav.ts';
+	import Poster from '#lib/components/Poster.svelte';
+	import StatePill from '#lib/components/StatePill.svelte';
+	import { api } from '#lib/api.ts';
+	import { Action } from '#lib/actions.svelte.ts';
 
 	const act = new Action();
 	let selecting = $state(false);

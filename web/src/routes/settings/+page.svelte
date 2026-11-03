@@ -8,20 +8,20 @@
 		SettingsUpdate,
 		SettingsView,
 		TranscodeSource
-	} from '$lib/api-types';
+	} from '#lib/api-types.ts';
 
 	type RipMode = 'titles' | 'backup';
-	import { api, type MediaServer } from '$lib/api';
-	import { Action } from '$lib/actions.svelte';
-	import { live } from '$lib/live.svelte';
-	import { alerts } from '$lib/alerts.svelte';
-	import DriveName from '$lib/components/DriveName.svelte';
-	import SetupProblems from '$lib/components/SetupProblems.svelte';
-	import TestButton from '$lib/components/TestButton.svelte';
-	import FolderStatus from '$lib/components/FolderStatus.svelte';
-	import HardwarePanel from '$lib/components/HardwarePanel.svelte';
-	import RemoteWorkers from '$lib/components/RemoteWorkers.svelte';
-	import ProviderList from '$lib/components/ProviderList.svelte';
+	import { api, type MediaServer } from '#lib/api.ts';
+	import { Action } from '#lib/actions.svelte.ts';
+	import { live } from '#lib/live.svelte.ts';
+	import { alerts } from '#lib/alerts.svelte.ts';
+	import DriveName from '#lib/components/DriveName.svelte';
+	import SetupProblems from '#lib/components/SetupProblems.svelte';
+	import TestButton from '#lib/components/TestButton.svelte';
+	import FolderStatus from '#lib/components/FolderStatus.svelte';
+	import HardwarePanel from '#lib/components/HardwarePanel.svelte';
+	import RemoteWorkers from '#lib/components/RemoteWorkers.svelte';
+	import ProviderList from '#lib/components/ProviderList.svelte';
 
 	type Lists = { movie: ProviderSlot[]; tv: ProviderSlot[]; episodes: ProviderSlot[] };
 

@@ -1,8 +1,8 @@
 <script lang="ts">
 	// "Test" next to a connection setting tries it with the values as typed, without saving.
-	import type { SettingsTestRequest, SettingsTestResult, SettingsUpdate } from '$lib/api-types';
-	import { api } from '$lib/api';
-	import { Action } from '$lib/actions.svelte';
+	import type { SettingsTestRequest, SettingsTestResult, SettingsUpdate } from '#lib/api-types.ts';
+	import { api } from '#lib/api.ts';
+	import { Action } from '#lib/actions.svelte.ts';
 
 	let {
 		check,

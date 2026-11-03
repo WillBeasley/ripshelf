@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { NewRemoteWorker, RemoteWorkers } from '$lib/api-types';
-	import { api } from '$lib/api';
-	import { Action } from '$lib/actions.svelte';
-	import { when } from '$lib/format';
+	import type { NewRemoteWorker, RemoteWorkers } from '#lib/api-types.ts';
+	import { api } from '#lib/api.ts';
+	import { Action } from '#lib/actions.svelte.ts';
+	import { when } from '#lib/format.ts';
 
 	const act = new Action();
 	let list = $state<RemoteWorkers | null>(null);
