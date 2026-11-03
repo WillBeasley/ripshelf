@@ -216,13 +216,16 @@
 		['bluray', 'Blu-ray'],
 		['uhd', '4K UHD']
 	];
-	const events: [string, string][] = [
-		['disc', 'Disc inserted'],
-		['review', 'Needs review'],
-		['exists', 'Already in library'],
-		['done', 'Ripped'],
-		['failed', 'Failed'],
-		['setup', 'Setup problem']
+	const events: [string, string, string][] = [
+		['disc', 'Disc inserted', 'A disc goes into a drive'],
+		['review', 'Needs review', 'It could not be identified for sure'],
+		['exists', 'Already in library', 'A copy is already there, so you decide'],
+		['ripped', 'Rip finished', 'MakeMKV is done, and whether it transcodes or copies next'],
+		['transcoded', 'Transcode finished', 'With how many files were transcoded'],
+		['copied', 'Copied to library', 'The files are in the library, with where'],
+		['done', 'Done', 'Everything is finished and the media servers are told'],
+		['failed', 'Failed', 'A job stopped with a problem'],
+		['setup', 'Setup problem', 'Something in Settings needs fixing']
 	];
 	const eventPriority = (e: string) => {
 		const p = f.notify_events[e];
@@ -792,9 +795,10 @@
 				{@render secret('pushover_app_token', 'Application API token', view.pushover_app_token_set)}
 				<label class="field">Device (optional, else all your devices) <input bind:value={f.pushover_device} /></label>
 				<div class="events">
-					{#each events as [e, label] (e)}
+					{#each events as [e, label, hint] (e)}
 						<label class="field">
 							{label}
+							<span class="small muted">{hint}</span>
 							<select value={eventPriority(e)} onchange={(ev) => setEventPriority(e, ev.currentTarget.value)}>
 								{#each priorities as [v, plabel] (v)}<option value={v}>{plabel}</option>{/each}
 							</select>
@@ -973,6 +977,9 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
 		gap: 10px;
+	}
+	.events select {
+		margin-top: auto; /* level across a row whatever the hint's length */
 	}
 	.sources {
 		display: grid;

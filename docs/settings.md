@@ -66,7 +66,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_BACKUP_KEEP` | 7 | daily database backups kept, 0 turns them off (Settings → Drives and MakeMKV → Database backups) |
 | `RIPSHELF_PUBLIC_URL` | none | this UI's address, used in notification links |
 | `RIPSHELF_PUSHOVER_USER_KEY` / `PUSHOVER_APP_TOKEN` / `PUSHOVER_DEVICE` | none | notifications (Pushover only) |
-| `RIPSHELF_NOTIFY_EVENTS` | `{"disc": null, "review": 1, "done": 0, "failed": 1, "setup": 0}` | which events notify, with their Pushover priority (-2 to 1). `null` is off |
+| `RIPSHELF_NOTIFY_EVENTS` | `{"disc": null, "review": 1, "exists": 1, "ripped": 0, "transcoded": null, "copied": null, "done": 0, "failed": 1, "setup": 0}` | which events notify, with their Pushover priority (-2 to 1). `null` is off, and an event left out gets its default ([how-it-works.md](how-it-works.md#notifications)) |
 | `RIPSHELF_NOTIFY_BATCH_S` | 120 | further notifications of one kind within this many seconds come as one summary. 0 sends every one |
 | `RIPSHELF_EMBY_URL` / `EMBY_API_KEY` | none | Emby refresh |
 | `RIPSHELF_EMBY_MOVIES_LIBRARY` / `EMBY_MOVIES_PATH`, `EMBY_TV_LIBRARY` / `EMBY_TV_PATH` | none | the Emby library for films and for TV, and its folder as Emby sees it. "Fetch libraries" in Settings sets these |

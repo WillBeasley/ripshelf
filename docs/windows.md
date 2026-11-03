@@ -15,6 +15,7 @@ winget install -e --id Git.Git                # to get (and update) the source
 winget install -e --id OpenJS.NodeJS.LTS      # builds the web UI, once
 winget install -e --id Gyan.FFmpeg            # optional, for transcoding and episode checks
 winget install -e --id Microsoft.OpenJDK.21   # optional, for Blu-ray menus (BD-J), which some discs need
+winget install -e --id MoritzBunkus.MKVToolNix # optional, to split TV discs with every episode in one title
 ```
 
 Then open a new terminal, so the new programs are on the PATH.
@@ -27,6 +28,7 @@ Then open a new terminal, so the new programs are on the PATH.
 | **Node.js** | only needed once, to build the web UI (and again after updates that change it). |
 | **ffmpeg** (optional) | transcoding, and checking the episode order of TV discs. On Windows, transcoding uses x265 on the CPU. |
 | **Java** (optional) | some Blu-rays need their menus (BD-J) read to find the right playlist. |
+| **MKVToolNix** (optional) | splits a TV disc's one long title into episodes. ripshelf finds `mkvmerge` in Program Files. |
 
 ## Installation
 

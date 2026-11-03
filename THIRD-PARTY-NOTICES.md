@@ -14,6 +14,7 @@ The image is built from `python:3.12-slim-bookworm` (Debian 12) by the [Dockerfi
 | **blues.jar** (MakeMKV's BD-J helper) | GPL-2.0 | Ships inside the MakeMKV release, as listed in its EULA's Appendix A. |
 | **FFmpeg program** (`ffmpeg`, `ffprobe`, `libavcodec59` and friends) | GPL-2.0-or-later as Debian builds it (`--enable-gpl`, with x264 and x265) | Debian 12 packages, unmodified, used for transcoding. ripshelf runs `ffmpeg` as a separate program, and MakeMKV does not use these libraries. |
 | **x264, x265** | GPL-2.0-or-later | Debian packages, pulled in by FFmpeg. |
+| **MKVToolNix** (`mkvmerge`) | GPL-2.0-or-later | Debian package, unmodified. ripshelf runs `mkvmerge` as a separate program to split a TV title holding several episodes at its chapters. |
 | **OpenJDK 17** (`default-jre-headless`) | GPL-2.0 with the Classpath Exception | Debian package. MakeMKV uses it for BD-J menus. |
 | **Intel media driver** (`intel-media-va-driver-non-free`, amd64 only) | MIT and BSD-3-Clause | Debian `non-free` package, because it contains GPU kernels without their source. Freely redistributable. |
 | **libva, vainfo** | MIT | Debian packages. |

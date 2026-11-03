@@ -23,12 +23,16 @@ EVENTS = {
     "disc": "Disc inserted",
     "review": "Needs review",
     "exists": "Already in library",
-    "done": "Ripped",
+    "ripped": "Rip finished",
+    "transcoded": "Transcode finished",
+    "copied": "Copied to library",
+    "done": "Done",
     "failed": "Failed",
     "setup": "Setup problem",
 }
 # Where a summary of several notifications of one kind links to.
-SUMMARY_PATHS = {"disc": "/", "review": "/review", "exists": "/review", "done": "/finished", "failed": "/", "setup": "/settings"}
+SUMMARY_PATHS = {"disc": "/", "review": "/review", "exists": "/review", "ripped": "/", "transcoded": "/",
+                 "copied": "/", "done": "/finished", "failed": "/", "setup": "/settings"}
 
 
 @dataclass

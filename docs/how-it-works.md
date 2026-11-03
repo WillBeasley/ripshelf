@@ -17,6 +17,17 @@ detected → scanning → identifying → ripping → [transcoding] → finalisi
 
 [providers.md](providers.md) lists the providers and the order they're asked in.
 
+### TV discs with every episode in one title
+
+Some TV DVDs have no title per episode, only one long title with a few chapters in each episode. When a title is at least 1.8 times the season's typical episode runtime, has at least one chapter per episode, and no other title is one episode long, ripshelf rips it whole and then splits it:
+
+1. The chapter starts are read from the rip (ffprobe), and each chapter mark is checked for black frames and silence (ffmpeg), which is what a break between episodes usually looks like.
+2. Consecutive chapters are grouped into episodes to fit the runtimes from TMDB, TheTVDB or TVmaze, starting at the disc's first episode. A chapter mark with black and silence makes a cut there more likely. The proposal comes with a confidence score.
+3. The Review card (and the job's details) show the title as a timeline with a tick at each chapter, the proposed cuts, and a frame from just after each cut. Click a tick to cut there or not, then pick each part's episode in the table as usual. "Keep it as one title" maps the title as a single title instead.
+4. On confirm, `mkvmerge` (MKVToolNix, included in the image) splits the file at the chosen chapters without re-encoding. The parts are then transcoded and copied like any episode.
+
+On a compilation disc (episodes from anywhere in the show), each part is fitted to the show's typical runtime instead, and starts with no episode picked: pick them in the table, or paste the run order from the case. These discs always wait for review. If TheDiscDB lists the long title as an episode, that episode is where the parts start. If it lists a title per episode, nothing is split. A TV label (season, volume) with one long title of three or more chapters counts as a TV disc; without one, use "This is a TV disc" on the Review card.
+
 ## Ripping
 
 MakeMKV rips the main feature of a film, or every episode of a TV disc. A drive can instead make a [full disc backup](backup.md). Each drive has its own MakeMKV data folder (LibreDrive data, firmware dumps), so UHD drives and older drives can sit side by side.
@@ -39,6 +50,24 @@ Files are copied into the library, checked by SHA-256, and never overwritten. Th
 - TV goes in `TV/Show (Year)/Season 01/Show - S01E03 - Name.mkv`
 
 Titles on a TV disc that aren't episodes go to extras, Season 00, or are skipped (Settings). Afterwards Emby, Jellyfin and Plex (whichever are set up) are told about the new files, Pushover notifies you, and the disc is ejected.
+
+## Notifications
+
+Pushover tells you about each job as it goes. Under Settings → Notifications each event can be off or have its own priority:
+
+| Event | When | Default |
+|---|---|---|
+| Disc inserted | a disc goes into a drive | off |
+| Needs review | it couldn't be identified for sure | high |
+| Already in library | a copy is already there, so you decide | high |
+| Rip finished | MakeMKV is done. It says what happens next: transcoding to H.265, or copying straight into the library (and why) | normal |
+| Transcode finished | the transcode step is done, with how many files were transcoded and the size saved | off |
+| Copied to library | the files are copied and checked, with where they went | off |
+| Done | everything is finished and the media servers are told | normal |
+| Failed | a job stopped with a problem | high |
+| Setup problem | something in Settings needs fixing | normal |
+
+Each event comes once per job (a TV disc's episodes are one notification, with a count), with a link to the job. Rips from remote workers come back to the controller, which transcodes, copies and notifies, so they work the same way. Settings saved before an event existed give it its default.
 
 ## Drives
 

@@ -100,9 +100,9 @@ async def verify_order(ffmpeg: str, ffprobe: str, play_all: Path, ordered: list[
 
 
 async def thumbnail(ffmpeg: str, path: Path, out: Path, at_fraction: float = 0.1,
-                    length: float | None = None) -> bool:
+                    length: float | None = None, at_s: float | None = None) -> bool:
     out.parent.mkdir(parents=True, exist_ok=True)
-    at = (length or 60) * at_fraction
+    at = at_s if at_s is not None else (length or 60) * at_fraction
     res = await _run([ffmpeg, "-v", "error", "-y", "-ss", f"{at:.2f}", "-i", str(path), "-frames:v", "1",
                       "-vf", "scale=320:-2", "-q:v", "4", str(out)])
     return res is not None and out.exists()

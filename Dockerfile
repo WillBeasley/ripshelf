@@ -49,6 +49,7 @@ COPY --from=ffmpeg-lgpl /opt/sources /usr/share/doc/makemkv/source
 # RIPSHELF_ACCEPT_MAKEMKV_EULA=yes; until then ripshelf doesn't run MakeMKV. The
 # EULA text stays in /usr/share/doc/makemkv, as it requires when repackaged, and
 # the sources of the LGPL and GPL parts are kept in /usr/share/doc/makemkv/source.
+# mkvmerge (mkvtoolnix) splits a TV title holding several episodes at its chapters.
 # Build deps are removed again; the runtime libraries stay. The Intel media driver
 # (iHD, non-free) is for VAAPI and Quick Sync. Debian's ffmpeg reaches Quick Sync
 # through libmfx1, whose own runtime predates 12th gen (Alder Lake) and fails with
@@ -59,7 +60,7 @@ RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firm
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential pkg-config wget ca-certificates libc6-dev libssl-dev \
         libexpat1-dev zlib1g-dev \
-        libssl3 libexpat1 zlib1g p7zip-full util-linux ffmpeg \
+        libssl3 libexpat1 zlib1g p7zip-full util-linux ffmpeg mkvtoolnix \
         vainfo default-jre-headless \
  && if [ "$(dpkg --print-architecture)" = amd64 ]; then \
         DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

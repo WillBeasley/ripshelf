@@ -217,6 +217,29 @@ class TitleMap(BaseModel):
     note: str | None = Field(None, description="why this role/episode, for the review table")
     match_cost: float | None = Field(None, description="runtime disagreement, 0 = exact (proposals only)")
     same_as: int | None = Field(None, description="duplicate of this title")
+    part_of: int | None = Field(None, description="a part of this title, split at its chapters")
+    start_s: float | None = Field(None, description="where the part starts in that title")
+
+
+class TitleSplit(BaseModel):
+    """One long title holding several episodes, to be split at its chapter marks."""
+
+    title_index: int
+    duration_s: float
+    expected: int = Field(description="about how many episodes it holds, from the season's runtimes")
+    reason: str
+    was: TitleRole = Field(TitleRole.episode, description="the title's role before it was split")
+    state: Literal["waiting", "ready", "failed", "split"] = Field(
+        "waiting", description="waiting for the rip, chapters read, chapters unreadable, split into files")
+    error: str | None = None
+    chapters: list[float] = Field(default=[], description="chapter start times (s), read from the rip")
+    breaks: list[float | None] = Field(
+        default=[], description="per chapter, 0..1: black frames and silence at its mark (null = not checked)")
+    cuts: list[int] = Field(default=[], description="chapters (0-based) where an episode starts")
+    proposed: list[int] = Field(default=[], description="the cuts as first proposed")
+    confidence: float | None = Field(None, description="0..1, how well the proposed parts fit the runtimes")
+    note: str | None = None
+    edited: bool = Field(False, description="cuts changed by hand, so kept when the mapping is re-proposed")
 
 
 class TvPlan(BaseModel):
@@ -240,6 +263,8 @@ class TvPlan(BaseModel):
     disc_db: bool = Field(False, description="the mapping comes from a disc database's record of this disc")
     auto_confirmed: bool = False
     auto_evidence: list[str] = Field(default=[], description="why it was (or wasn't) confirmed without review")
+    split: TitleSplit | None = Field(None, description="a long title holding several episodes, split at chapters")
+    split_off: bool = Field(False, description="the user keeps the long title whole")
 
 
 class Problem(BaseModel):
@@ -497,7 +522,7 @@ SettingsCheck = Literal["tmdb", "tvdb", "tvmaze", "omdb", "thediscdb", "pushover
                         "catalogue", "makemkv", "paths"]
 MediaServer = Literal["emby", "jellyfin", "plex"]
 TvEpisodeOrder = Literal["tmdb", "tvdb_aired", "tvdb_dvd"]
-NotifyEvent = Literal["disc", "review", "exists", "done", "failed", "setup"]
+NotifyEvent = Literal["disc", "review", "exists", "ripped", "transcoded", "copied", "done", "failed", "setup"]
 PushoverPriority = Annotated[int, Field(ge=-2, le=1)]
 TranscodeCrop = Literal["off", "when_transcoding", "always"]
 CatalogueSearch = Literal["off", "searxng"]
@@ -733,6 +758,11 @@ class TitleMapUpdate(BaseModel):
     episodes: list[EpisodeRef] = []
 
 
+class TvSplitRequest(BaseModel):
+    cuts: list[int] | None = Field(None, description="chapters (0-based) where an episode starts")
+    off: bool | None = Field(None, description="true keeps the long title whole, false splits it again")
+
+
 class TvConfirmRequest(BaseModel):
     mapping: list[TitleMapUpdate]
 
@@ -910,6 +940,7 @@ class SetupTools(BaseModel):
     makemkv_registered: bool = Field(description="a MakeMKV key is set here (or, on Windows, in MakeMKV itself)")
     ffmpeg: Tool
     ffprobe: Tool
+    mkvmerge: Tool | None = Field(None, description="MKVToolNix, which splits a TV title holding several episodes")
     java: Tool = Field(description="a Java runtime, which MakeMKV needs for some Blu-ray menus (BD-J)")
     makemkv_eula_pending: bool = Field(False, description="MakeMKV came with ripshelf and its licence isn't accepted yet")
     windows: bool = False

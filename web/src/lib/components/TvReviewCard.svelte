@@ -7,6 +7,7 @@
 	import { openJob } from '../nav';
 	import Evidence from './Evidence.svelte';
 	import Poster from './Poster.svelte';
+	import SplitTimeline from './SplitTimeline.svelte';
 
 	let { job }: { job: Job } = $props();
 	const act = new Action();
@@ -26,6 +27,9 @@
 	});
 
 	const epKey = (e: EpisodeRef) => `${e.season}:${e.episode}`;
+	// Parts of a split title are numbered 1000 and up; call them by the title they're from.
+	const rowName = (r: TitleMap) =>
+		r.part_of != null ? `Title ${r.part_of}, part ${(r.title_index % 1000) + 1}` : `Title ${r.title_index}`;
 	const code = (e: EpisodeRef) =>
 		`S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}`;
 	const byKey = $derived(new Map((plan?.episodes ?? []).map((e) => [epKey(e), e])));
@@ -48,7 +52,7 @@
 		const out: string[] = [];
 		if (!plan?.show) out.push('Pick the show');
 		for (const r of rows)
-			if (r.role === 'episode' && !r.episodes.length) out.push(`Title ${r.title_index} needs an episode`);
+			if (r.role === 'episode' && !r.episodes.length) out.push(`${rowName(r)} needs an episode`);
 		if (clashes.size) out.push('An episode is on two titles');
 		if (!rows.some((r) => r.role === 'episode')) out.push('No title is mapped to an episode');
 		return out;
@@ -60,8 +64,10 @@
 	const missing = $derived(
 		checking
 			? rows
-					.filter((r) => (r.role === 'episode' || r.role === 'extra') && !(String(r.title_index) in (job.rip.files ?? {})))
-					.map((r) => r.title_index)
+					.filter((r) => r.role === 'episode' || r.role === 'extra')
+					// A part of a title not split yet needs that title.
+					.map((r) => (r.part_of != null && plan?.split?.state !== 'split' ? r.part_of : r.title_index))
+					.filter((i, n, all) => all.indexOf(i) === n && !(String(i) in (job.rip.files ?? {})))
 			: []
 	);
 	const canConfirm = $derived(!localProblems.length && !serverProblems.length && !act.busy && !missing.length);
@@ -179,7 +185,7 @@
 	let thumbFailed = $state<Record<number, boolean>>({});
 </script>
 
-<article class="card review">
+<article class="card review" id="job-{job.id}">
 	<header class="spread">
 		<div class="facts">
 			<h2 class="mono label">{job.disc.label ?? 'No volume label'}</h2>
@@ -287,6 +293,8 @@
 		<span class="badge bad">✗ {plan.order_note}</span>
 	{/if}
 
+	<SplitTimeline {job} />
+
 	<table class="map">
 		<tbody>
 			{#each rows as row (row.title_index)}
@@ -306,7 +314,10 @@
 						{/if}
 					</td>
 					<td class="what">
-						<div><strong>Title {row.title_index}</strong> <span class="muted">{duration(row.duration_s)}</span></div>
+						<div>
+							<strong>{rowName(row)}</strong> <span class="muted">{duration(row.duration_s)}</span>
+							{#if row.start_s}<span class="small muted">from {duration(row.start_s)}</span>{/if}
+						</div>
 						{#if skipped}
 							<div class="small muted">{roleLabel[row.role]}: skipped{row.note ? ` (${row.note})` : ''}</div>
 						{:else}

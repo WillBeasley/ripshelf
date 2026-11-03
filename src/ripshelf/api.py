@@ -60,7 +60,9 @@ from .models import (
     TvConfirmRequest,
     TvMatchTextRequest,
     TvProposeRequest,
+    TvSplitRequest,
 )
+from .tv import split as tvsplit
 
 SSE_HEARTBEAT_S = 15
 SECRETS = {"tmdb_api_key", "tvdb_api_key", "tvdb_pin", "omdb_api_key", "thediscdb_api_key", "emby_api_key", "jellyfin_api_key", "plex_token", "makemkv_key", "pushover_user_key",
@@ -373,6 +375,21 @@ async def tv_confirm(job_id: int, body: TvConfirmRequest, request: Request):
     return await _job_action(request, job_id, lambda i: m.tv_confirm(i, body.mapping))
 
 
+@api.post("/jobs/{job_id}/tv/split", response_model=Job)
+async def tv_split(job_id: int, body: TvSplitRequest, request: Request):
+    """Where the long title holding the episodes is cut (chapters), or keep it whole."""
+    m = manager(request)
+    return await _job_action(request, job_id, lambda i: m.tv_split(i, body.cuts, body.off))
+
+
+@api.get("/jobs/{job_id}/split-thumbs/{title_index}/{chapter}.jpg", include_in_schema=False)
+async def split_thumbnail(job_id: int, title_index: int, chapter: int, request: Request):
+    p = manager(request).split_thumb_path(job_id, title_index, chapter)
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
+
+
 @api.get("/jobs/{job_id}/thumbs/{title_index}.jpg", include_in_schema=False)
 async def thumbnail(job_id: int, title_index: int, request: Request):
     p = manager(request).thumbnail_path(job_id, title_index)
@@ -587,7 +604,7 @@ async def import_private_data(
 
 @api.get("/setup/tools", response_model=SetupTools)
 async def setup_tools(request: Request):
-    """Whether MakeMKV, ffmpeg and Java are where ripshelf will look for them."""
+    """Whether MakeMKV, ffmpeg, mkvmerge and Java are where ripshelf will look for them."""
     s = settings(request)
 
     def tool(command: str) -> Tool:
@@ -597,7 +614,7 @@ async def setup_tools(request: Request):
 
     registered = bool(s.makemkv_key) or (proc.WINDOWS and runner.registry_key() is not None)
     return SetupTools(makemkv=tool(s.makemkvcon), makemkv_registered=registered or s.fake_hardware,
-                      ffmpeg=tool(s.ffmpeg), ffprobe=tool(s.ffprobe), java=tool("java"), windows=proc.WINDOWS,
+                      ffmpeg=tool(s.ffmpeg), ffprobe=tool(s.ffprobe), mkvmerge=tool(tvsplit.default_mkvmerge(s.mkvmerge)), java=tool("java"), windows=proc.WINDOWS,
                       makemkv_eula_pending=s.makemkv_eula_pending())
 
 

@@ -147,6 +147,8 @@ class Settings(BaseSettings):
     blkid: str = "blkid"
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
+    # Splits a TV title holding several episodes at its chapters (MKVToolNix).
+    mkvmerge: str = "mkvmerge"
     # Labels that are a catalogue number ("EO51710") are looked up on the web:
     # a self-hosted SearXNG.
     catalogue_search: Literal["off", "searxng"] = "off"
@@ -254,7 +256,8 @@ class Settings(BaseSettings):
     pushover_app_token: SecretStr | None = None
     pushover_device: str | None = None
     # Which events notify, with their Pushover priority (-2..1). None or missing is off.
-    notify_events: dict[str, int | None] = {"disc": None, "review": 1, "exists": 1, "done": 0, "failed": 1,
+    notify_events: dict[str, int | None] = {"disc": None, "review": 1, "exists": 1, "ripped": 0,
+                                            "transcoded": None, "copied": None, "done": 0, "failed": 1,
                                             "setup": 0}
     # More notifications of one kind within this many seconds of the first are
     # sent as one summary at the end of the window (0 sends every one at once).
