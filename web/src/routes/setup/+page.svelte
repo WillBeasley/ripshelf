@@ -1,15 +1,15 @@
 <script lang="ts">
 	// First-start setup, the basics, one step at a time. Each step is saved when you
 	// move on, so leaving half-way loses nothing; everything here is in Settings too.
-	import type { ProviderSlot, ServerLibrary, SettingsUpdate, SettingsView, SetupTools } from '$lib/api-types';
+	import type { ProviderSlot, ServerLibrary, SettingsUpdate, SettingsView, SetupTools } from '#lib/api-types.ts';
 	import { goto } from '$app/navigation';
-	import { api } from '$lib/api';
-	import { Action } from '$lib/actions.svelte';
-	import { live } from '$lib/live.svelte';
-	import TestButton from '$lib/components/TestButton.svelte';
-	import FolderStatus from '$lib/components/FolderStatus.svelte';
-	import Command from '$lib/components/Command.svelte';
-	import SetupProblems from '$lib/components/SetupProblems.svelte';
+	import { api } from '#lib/api.ts';
+	import { Action } from '#lib/actions.svelte.ts';
+	import { live } from '#lib/live.svelte.ts';
+	import TestButton from '#lib/components/TestButton.svelte';
+	import FolderStatus from '#lib/components/FolderStatus.svelte';
+	import Command from '#lib/components/Command.svelte';
+	import SetupProblems from '#lib/components/SetupProblems.svelte';
 
 	const steps = ['Drives', 'MakeMKV', 'Folders', 'Film and TV data', 'Extras (optional)'] as const;
 	let step = $state(0);

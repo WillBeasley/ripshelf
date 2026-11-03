@@ -1,9 +1,9 @@
 <script lang="ts">
 	// Under a folder field, the free space, or that it doesn't exist yet, with a button to make it.
-	import type { FolderState } from '$lib/api-types';
-	import { api } from '$lib/api';
-	import { Action } from '$lib/actions.svelte';
-	import { gb } from '$lib/format';
+	import type { FolderState } from '#lib/api-types.ts';
+	import { api } from '#lib/api.ts';
+	import { Action } from '#lib/actions.svelte.ts';
+	import { gb } from '#lib/format.ts';
 
 	let { path }: { path: string } = $props();
 	const act = new Action();

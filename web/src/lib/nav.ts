@@ -4,13 +4,13 @@ import { page } from '$app/state';
 // The job detail panel is a ?job= query on whichever page is open, so
 // notification links like /finished?job=12 land on the right page with it open.
 export function openJob(id: number) {
-	const url = new URL(page.url);
+	const url = new URL(page.url.href);
 	url.searchParams.set('job', String(id));
-	goto(url, { noScroll: true, keepFocus: true });
+	goto(url, { reset: false });
 }
 
 export function closeJob() {
-	const url = new URL(page.url);
+	const url = new URL(page.url.href);
 	url.searchParams.delete('job');
-	goto(url, { noScroll: true, keepFocus: true, replaceState: true });
+	goto(url, { reset: false, replace: true });
 }

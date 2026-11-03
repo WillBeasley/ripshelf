@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { Collection } from '$lib/api-types';
-	import { api } from '$lib/api';
-	import Poster from '$lib/components/Poster.svelte';
+	import type { Collection } from '#lib/api-types.ts';
+	import { api } from '#lib/api.ts';
+	import Poster from '#lib/components/Poster.svelte';
 
 	let items = $state<Collection[] | null>(null);
 	let error = $state<string | null>(null);

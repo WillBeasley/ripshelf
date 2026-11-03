@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import type { CollectionDetail, SeasonCell } from '$lib/api-types';
-	import { api } from '$lib/api';
-	import { openJob } from '$lib/nav';
-	import Poster from '$lib/components/Poster.svelte';
+	import type { CollectionDetail, SeasonCell } from '#lib/api-types.ts';
+	import { api } from '#lib/api.ts';
+	import { openJob } from '#lib/nav.ts';
+	import Poster from '#lib/components/Poster.svelte';
 
 	let c = $state<CollectionDetail | null>(null);
 	let error = $state<string | null>(null);

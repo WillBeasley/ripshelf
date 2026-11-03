@@ -1,8 +1,8 @@
 <script lang="ts">
 	// ripshelf's own log (not a job's MakeMKV log), newest at the bottom, followed live.
-	import type { LogEntry } from '$lib/api-types';
-	import { api } from '$lib/api';
-	import { when } from '$lib/format';
+	import type { LogEntry } from '#lib/api-types.ts';
+	import { api } from '#lib/api.ts';
+	import { when } from '#lib/format.ts';
 
 	const MAX = 3000;
 	let level = $state('INFO');

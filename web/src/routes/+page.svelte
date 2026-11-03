@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { live } from '$lib/live.svelte';
-	import DriveCard from '$lib/components/DriveCard.svelte';
-	import SetupProblems from '$lib/components/SetupProblems.svelte';
-	import StoragePanel from '$lib/components/StoragePanel.svelte';
-	import DriveStatsPanel from '$lib/components/DriveStatsPanel.svelte';
-	import AfterDriveJobs from '$lib/components/AfterDriveJobs.svelte';
-	import { api } from '$lib/api';
-	import { Action } from '$lib/actions.svelte';
+	import { live } from '#lib/live.svelte.ts';
+	import DriveCard from '#lib/components/DriveCard.svelte';
+	import SetupProblems from '#lib/components/SetupProblems.svelte';
+	import StoragePanel from '#lib/components/StoragePanel.svelte';
+	import DriveStatsPanel from '#lib/components/DriveStatsPanel.svelte';
+	import AfterDriveJobs from '#lib/components/AfterDriveJobs.svelte';
+	import { api } from '#lib/api.ts';
+	import { Action } from '#lib/actions.svelte.ts';
 
 	const act = new Action();
 	let note = $state<string | null>(null);
