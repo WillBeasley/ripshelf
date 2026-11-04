@@ -37,7 +37,7 @@
 	{/if}
 	<div class="grid">
 		{#each live.reviewJobs as job (job.id)}
-			{#if job.state === 'clash' || (job.state === 'checking' && !(job.media === 'tv' && job.checking_from === 'review'))}
+			{#if job.state === 'clash' || (job.state === 'checking' && job.checking_from !== 'review')}
 				<ClashCard {job} />
 			{:else if job.media === 'tv'}
 				<div class="wide"><TvReviewCard {job} /></div>

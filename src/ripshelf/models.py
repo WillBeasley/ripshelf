@@ -814,6 +814,34 @@ class SearchRequest(BaseModel):
     year: int | None = None
 
 
+class WebSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=300)
+
+
+class WebResult(BaseModel):
+    """One page from a web search (SearXNG), for identifying a disc by hand."""
+
+    title: str
+    url: str
+    snippet: str = ""
+    suggestion: str | None = Field(None, description="the film or show name in the page title, to search TMDB for")
+
+
+class TitleSnapshots(BaseModel):
+    """Frames from one of the disc's titles, from its file in scratch."""
+
+    title_index: int
+    duration_s: int
+    ripped: float = Field(0.0, description="how much of the title is in scratch, 0..1")
+    frames: list[int] = Field(default=[], description="frame numbers ready to fetch (more appear as the rip goes on)")
+    at_s: list[int] = Field(default=[], description="where each frame is in the title, in seconds")
+
+
+class Snapshots(BaseModel):
+    titles: list[TitleSnapshots] = []
+    note: str | None = Field(None, description="why there are no frames (yet)")
+
+
 class ImportPrivateDataResult(BaseModel):
     drive_ids: list[str]
     files: int
@@ -927,6 +955,7 @@ class Status(BaseModel):
     fake_hardware: bool
     problems: list[SetupProblem]
     review_count: int
+    web_search: bool = Field(False, description="a SearXNG address is set, so Review can search the web")
 
 
 class Tool(BaseModel):

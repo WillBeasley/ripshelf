@@ -7,7 +7,9 @@
 	import { openJob } from '../nav';
 	import Evidence from './Evidence.svelte';
 	import Poster from './Poster.svelte';
+	import Snapshots from './Snapshots.svelte';
 	import SplitTimeline from './SplitTimeline.svelte';
+	import WebSearch from './WebSearch.svelte';
 
 	let { job }: { job: Job } = $props();
 	const act = new Action();
@@ -135,6 +137,12 @@
 		found = (await act.run(() => api.tvSearch(showQuery.trim()))) ?? null;
 	}
 
+	// A name from the web search, searched on TMDB like a typed one.
+	async function useName(name: string) {
+		showQuery = name;
+		found = (await act.run(() => api.tvSearch(name))) ?? null;
+	}
+
 	async function choose(show: Show) {
 		found = null;
 		await act.run(() =>
@@ -225,7 +233,8 @@
 			</div>
 		</section>
 	{:else}
-		<p class="small muted">No show picked yet. Search for it below.</p>
+		<p class="small muted">No show picked yet. Search TMDB below, search the web for the label, or eject the disc to look at it.</p>
+		<WebSearch {job} onUse={useName} useLabel="Search TMDB shows for" />
 	{/if}
 
 	{#if plan?.candidates?.length && plan.candidates.length > 1}
@@ -372,6 +381,8 @@
 			{/each}
 		</tbody>
 	</table>
+
+	<Snapshots {job} />
 
 	{#if localProblems.length || serverProblems.length}
 		<ul class="problems small">

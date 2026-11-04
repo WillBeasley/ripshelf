@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from . import __version__, art, discfs, integrations, library, providers
+from . import __version__, art, discfs, integrations, library, providers, snapshots
 from .bus import EventBus
 from .config import EULA_PENDING, Settings
 from .contributejobs import ContributeMixin
@@ -75,6 +75,7 @@ from .models import (
     RipProgressEvent,
     RipState,
     SetupProblem,
+    Snapshots,
     Status,
     StatusChanged,
     TitleInfo,
@@ -83,6 +84,7 @@ from .models import (
 from .proc import WINDOWS
 from .providers import films, thediscdb
 from .transcodejobs import TranscodeMixin
+from .tv import verify
 from .tvjobs import TvMixin
 from .workers.hub import RemoteBackend, RemoteMakeMKV, Worker, WorkerHub
 
@@ -168,6 +170,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
         self.support = SupportFiles(settings.makemkv_files_dir)
         self.hub = WorkerHub(on_drives_changed=self._remote_drives,
                              local_ids=lambda: {i for i, d in self.drives.items() if not d.remote})
+        self.grabber = snapshots.Grabber()
+        self._lengths: dict[tuple[str, int], float | None] = {}  # (finished file, size) -> its length
 
     # --- lifecycle ------------------------------------------------------------
 
@@ -1141,7 +1145,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
             title_arg, expected, what = self._rip_args(job)
             args = ["-r", "--progress=-same", "mkv", f"dev:{d.hw.device}", title_arg, str(out_dir)]
         # A paused TV rip (Eject to check) carries on with the titles it hadn't finished.
-        resume = [t for t in job.titles if t.index not in job.rip.files] if job.rip.paused else None
+        resume = [t for t in job.titles if t.index not in job.rip.files] \
+            if job.rip.paused and job.rip.all_titles else None
         runs = [args]
         if resume is not None:
             expected = sum(t.size_bytes for t in resume)
@@ -1660,7 +1665,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
         carries on where it was; another disc (or none) ends the job.
 
         A TV disc can be checked mid-rip (``pause_rip``). The rip stops, the titles already
-        ripped are kept, and only the unfinished ones are ripped once the disc is back.
+        ripped are kept, and only the unfinished ones are ripped once the disc is back. A film's
+        rip starts again once the disc is back (its part-written file stays for the snapshots).
         """
         job = self.db.get_job(job_id)
         if job is None or job.state not in (JobState.review, JobState.clash):
@@ -1671,10 +1677,12 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
         if d.scan:
             raise ValueError("MakeMKV is scanning the disc, so wait for it")
         if d.rip:
-            if job.media != MediaKind.tv or job.mode == "backup" or not job.rip.all_titles:
+            if job.mode == "backup" or (job.media == MediaKind.tv and not job.rip.all_titles):
                 raise ValueError("MakeMKV is using the drive, so wait for it or cancel the job")
             if not pause_rip:
-                raise ValueError("the rip is running. It pauses, keeping the titles already ripped")
+                raise ValueError("the rip is running. It pauses, keeping the titles already ripped"
+                                 if job.media == MediaKind.tv else
+                                 "the rip is running. It stops, and starts again when the disc is back")
         self._check_enabled(d)
         if d.rip:
             await self._pause_rip(job, d)
@@ -1693,13 +1701,20 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
 
     async def _pause_rip(self, job: JobRecord, d: DriveRuntime) -> None:
         """Stop a TV rip, keeping its finished titles. MakeMKV rips the titles one after
-        another, so the newest file is the one it was writing, and that one is redone."""
+        another, so the newest file is the one it was writing, and that one is redone.
+        A film's one title is ripped again from the start."""
         d.rip.cancel()
         for _ in range(200):
             if d.rip is None:
                 break
             await asyncio.sleep(0.05)
         job = self.db.get_job(job.id)
+        if job.media != MediaKind.tv:
+            job.rip.paused = True
+            job.rip.state = RipState.pending
+            self._event(job, "rip", "Rip stopped; it starts again when the disc is back")
+            self._save(job)
+            return
         out_dir = self.scratch_dir(job)
         files = self._collect_files(job, out_dir)
         if files:
@@ -1851,6 +1866,60 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
             return None
         return JobDetail(**job.public().model_dump(), events=self.db.events(job_id), titles=job.titles)
 
+    # --- snapshots ------------------------------------------------------------------
+
+    def _snapshot_dir(self, job: JobRecord) -> Path:
+        return self.work_dir(job) / "snapshots"
+
+    async def _title_length(self, path: Path) -> float | None:
+        key = (str(path), path.stat().st_size)
+        if key not in self._lengths:
+            self._lengths[key] = await verify.duration(self.s.ffprobe, path)
+        return self._lengths[key]
+
+    async def snapshots(self, job_id: int) -> Snapshots:
+        """The frames each title can give now: from its file in scratch, or kept from earlier."""
+        job = self.db.get_job(job_id)
+        if job is None:
+            raise ValueError("no such job")
+        if job.mode == "backup":
+            return Snapshots(note="This disc is backed up whole, so there are no title files to take frames from")
+        out_dir, kept = self.scratch_dir(job), self._snapshot_dir(job)
+        views = []
+        for t in job.titles:
+            path = snapshots.title_file(out_dir, t, job.rip.files)
+            if path is not None:
+                finished = t.index in job.rip.files or (job.rip.state == RipState.done and not job.rip.all_titles)
+                length = await self._title_length(path) if finished else None
+                view = snapshots.plan(t, path, finished, length)
+            else:  # finished and filed, or cancelled: the frames made before are still here
+                view = snapshots.plan(t, None, False, None)
+                at = snapshots.positions(t.duration_s)
+                view.frames = [i for i in range(snapshots.COUNT) if (kept / f"{t.index}-{i}.jpg").exists()]
+                view.at_s = [int(at[i]) for i in view.frames]
+            if view.frames:
+                views.append(view)
+        note = None
+        if not views:
+            note = ("Frames appear once MakeMKV has ripped a few minutes of a title" if job.rip.state in (
+                RipState.pending, RipState.running) else "No ripped titles to take frames from")
+        return Snapshots(titles=views, note=note)
+
+    async def snapshot(self, job_id: int, title_index: int, frame: int) -> Path | None:
+        """One frame as a JPEG, made the first time it's asked for."""
+        job = self.db.get_job(job_id)
+        if job is None or not 0 <= frame < snapshots.COUNT:
+            return None
+        out = self._snapshot_dir(job) / f"{int(title_index)}-{int(frame)}.jpg"
+        if out.exists():
+            return out
+        view = next((v for v in (await self.snapshots(job_id)).titles if v.title_index == title_index), None)
+        t = next((t for t in job.titles if t.index == title_index), None)
+        path = snapshots.title_file(self.scratch_dir(job), t, job.rip.files) if t else None
+        if view is None or path is None or frame not in view.frames:
+            return None
+        return await self.grabber.frame(self.s.ffmpeg, path, view.at_s[view.frames.index(frame)], out)
+
     def log_tail(self, job_id: int, kind: str, lines: int = 40) -> list[str]:
         path = self.s.jobs_dir / str(job_id) / f"{kind}.log"
         if not path.exists():
@@ -1937,7 +2006,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
     def status(self) -> Status:
         return Status(version=__version__, makemkv_version=self.makemkv_version,
                       fake_hardware=self.s.fake_hardware, problems=self.problems(),
-                      review_count=self.db.count_state(JobState.review))
+                      review_count=self.db.count_state(JobState.review),
+                      web_search=bool((self.s.searxng_url or "").strip()))
 
     def publish_status(self) -> None:
         st = self.status()

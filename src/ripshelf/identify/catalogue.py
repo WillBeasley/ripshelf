@@ -23,11 +23,12 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from ..models import Candidate, Evidence
+from ..models import Candidate, Evidence, WebResult
 from .label import DISC_NUMBER, NOISE_TOKENS, YEAR
 from .scoring import _order, normalise, title_similarity
 
 MAX_TITLES = 3
+MAX_WEB_RESULTS = 12
 # A title only one page names is a lead, not a fact.
 MIN_SUPPORT = 2
 SINGLE_PAGE_CAP = 0.85
@@ -93,7 +94,7 @@ def _mentions(text: str, catno: str) -> bool:
 
 def clean_title(page_title: str, catno: str) -> str | None:
     """The film or show name in a shop's page title, or None when there is none."""
-    s = page_title.replace(catno, " ")
+    s = page_title.replace(catno, " ") if catno else page_title
     parts = [p for p in _SEPARATORS.split(s) if p.strip()]
     # The first part with words that is not a domain ("Filmbutikken-eksempel.dk").
     part = next((p for p in parts if re.search(r"[A-Za-z]{2}", p)
@@ -129,7 +130,7 @@ def rank_titles(titles: list[str]) -> list[tuple[str, int]]:
 
 
 def query_for(catno: str, kind: str | None) -> str:
-    fmt = "blu-ray" if kind in ("bd", "uhd") else "dvd"
+    fmt = "blu-ray" if kind in ("bd", "bluray", "uhd") else "dvd"
     return f'"{catno}" {fmt}'
 
 
@@ -157,6 +158,32 @@ async def search(settings, query: str, client: httpx.AsyncClient) -> list[dict]:
     except (ValueError, KeyError, TypeError):
         raise CatalogueError("web search sent a reply without results") from None
     return [x for x in results if isinstance(x, dict)]
+
+
+async def web_search(settings, query: str, client: httpx.AsyncClient | None = None) -> list[WebResult]:
+    """A web search typed in Review, with the film or show name each page title seems to give.
+
+    It needs only the SearXNG address, not the automatic catalogue lookup.
+    """
+    if not (settings.searxng_url or "").strip():
+        raise CatalogueError("no SearXNG address is set (Settings → Identification → Web search)")
+    own = client is None
+    client = client or httpx.AsyncClient(timeout=20, headers={"User-Agent": "ripshelf"})
+    try:
+        results = await search(settings.model_copy(update={"catalogue_search": "searxng"}), query, client)
+    finally:
+        if own:
+            await client.aclose()
+    out: list[WebResult] = []
+    for x in results:
+        url, title = str(x.get("url") or ""), str(x.get("title") or "").strip()
+        if not url.startswith(("https://", "http://")) or not title:
+            continue  # only links the page can open safely
+        out.append(WebResult(title=title[:300], url=url[:2000], snippet=str(x.get("content") or "")[:500],
+                             suggestion=clean_title(title, "")))
+        if len(out) == MAX_WEB_RESULTS:
+            break
+    return out
 
 
 async def lookup(settings, catno: str, kind: str | None = None,

@@ -258,8 +258,8 @@ async def test_eject_to_check_and_a_different_disc_ends_the_job(harness, keyed, 
 async def test_eject_to_check_is_refused_mid_rip_and_when_not_waiting(harness, settings):
     async with harness(PM) as h:  # no TMDB key, so review while the rip runs
         job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == RipState.running)
-        with pytest.raises(ValueError, match="MakeMKV is using the drive"):
-            await h.m.check_disc(job.id)
+        with pytest.raises(ValueError, match="It stops, and starts again"):
+            await h.m.check_disc(job.id)  # needs the confirm (pause_rip)
         done = await h.wait_job(lambda j: j.rip.state == RipState.done)
         checking = await h.m.check_disc(done.id)  # review with the rip finished is fine
         assert checking.state == JobState.checking
