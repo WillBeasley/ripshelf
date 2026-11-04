@@ -180,8 +180,9 @@ async def catalogue(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
         "catalogue_search": v.catalogue_search or s.catalogue_search,
         "searxng_url": _value(s, v, "searxng_url"),
     })
-    if test.catalogue_search == "off":
-        return _fail("Catalogue lookup is off")
+    if test.catalogue_search == "off" and not (test.searxng_url or "").strip():
+        return _fail("Catalogue lookup is off and no SearXNG address is set")
+    test.catalogue_search = "searxng"  # the address alone is enough for the web search in Review
     started = time.monotonic()
     try:
         found = await catalogue_lookup.lookup(test, "EO51710", "dvd")
