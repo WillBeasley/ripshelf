@@ -124,8 +124,10 @@ def detect(titles: list[TitleInfo], roles: dict[int, TitleRole], episodes: list[
 
 
 def enough_chapters(chapters: int, episodes: int) -> bool:
-    """Whether a title's chapters can be where its episodes start (else it's searched for breaks)."""
-    return chapters >= max(MIN_CHAPTERS, episodes)
+    """Whether a title's chapters can be where its episodes start (else it's searched for
+    breaks): one per episode will do, as on a Fraggle Rock DVD with two episodes in one
+    title and a chapter at the start of each."""
+    return chapters >= max(2, episodes)
 
 
 # --- where to cut --------------------------------------------------------------------
