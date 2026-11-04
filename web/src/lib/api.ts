@@ -30,10 +30,12 @@ import type {
 	SettingsView,
 	SetupTools,
 	Show,
+	Snapshots,
 	Status,
 	TitleMapUpdate,
 	TvProposeRequest,
-	TvSplitRequest
+	TvSplitRequest,
+	WebResult
 } from './api-types';
 
 export type MediaServer = 'emby' | 'jellyfin' | 'plex';
@@ -84,6 +86,9 @@ export const api = {
 		call<Job>('POST', `/jobs/${id}/confirm`, { candidate }),
 	search: (id: number, query: string, year: number | null) =>
 		call<Candidate[]>('POST', `/jobs/${id}/search`, { query, year }),
+	webSearch: (query: string) => call<WebResult[]>('POST', '/web-search', { query }),
+	snapshots: (id: number) => call<Snapshots>('GET', `/jobs/${id}/snapshots`),
+	snapshotUrl: (id: number, title: number, frame: number) => `/api/jobs/${id}/snapshots/${title}/${frame}.jpg`,
 	retry: (id: number) => call<Job>('POST', `/jobs/${id}/retry`),
 	resolveClash: (id: number, action: ClashAction) => call<Job>('POST', `/jobs/${id}/clash`, { action }),
 	checkDisc: (id: number, pauseRip = false) =>

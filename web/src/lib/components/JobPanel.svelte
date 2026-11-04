@@ -7,6 +7,7 @@
 	import { closeJob } from '../nav';
 	import ContributionPanel from './ContributionPanel.svelte';
 	import Progress from './Progress.svelte';
+	import Snapshots from './Snapshots.svelte';
 	import SplitTimeline from './SplitTimeline.svelte';
 	import StatePill from './StatePill.svelte';
 
@@ -214,6 +215,10 @@
 				{#if job.finished_at}<dt>Finished</dt><dd>{when(job.finished_at)}</dd>{/if}
 			</dl>
 		</section>
+
+		{#if job.mode !== 'backup' && job.state !== 'detected' && job.state !== 'scanning'}
+			<Snapshots {job} />
+		{/if}
 
 		{#if job.identity || job.disc_match}
 			<ContributionPanel {job} />

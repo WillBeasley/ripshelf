@@ -132,6 +132,7 @@ export interface Api {
   SetupProblem?: SetupProblem;
   SetupTools?: SetupTools;
   Show?: Show;
+  Snapshots?: Snapshots;
   Status?: Status;
   StatusChanged?: StatusChanged;
   StorageFolder?: StorageFolder;
@@ -139,6 +140,7 @@ export interface Api {
   TitleMap?: TitleMap;
   TitleMapUpdate?: TitleMapUpdate;
   TitleRole?: TitleRole;
+  TitleSnapshots?: TitleSnapshots;
   TitleSplit?: TitleSplit;
   Tool?: Tool;
   TranscodeFile?: TranscodeFile;
@@ -149,6 +151,8 @@ export interface Api {
   TvPlan?: TvPlan;
   TvProposeRequest?: TvProposeRequest;
   TvSplitRequest?: TvSplitRequest;
+  WebResult?: WebResult;
+  WebSearchRequest?: WebSearchRequest;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -2065,6 +2069,39 @@ export interface Tool1 {
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "Snapshots".
+ */
+export interface Snapshots {
+  titles: TitleSnapshots[];
+  /**
+   * why there are no frames (yet)
+   */
+  note: string | null;
+}
+/**
+ * Frames from one of the disc's titles, from its file in scratch.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "TitleSnapshots".
+ */
+export interface TitleSnapshots {
+  title_index: number;
+  duration_s: number;
+  /**
+   * how much of the title is in scratch, 0..1
+   */
+  ripped: number;
+  /**
+   * frame numbers ready to fetch (more appear as the rip goes on)
+   */
+  frames: number[];
+  /**
+   * where each frame is in the title, in seconds
+   */
+  at_s: number[];
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "Status".
  */
 export interface Status {
@@ -2073,6 +2110,10 @@ export interface Status {
   fake_hardware: boolean;
   problems: SetupProblem[];
   review_count: number;
+  /**
+   * a SearXNG address is set, so Review can search the web
+   */
+  web_search: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -2132,4 +2173,26 @@ export interface TvSplitRequest {
    * true keeps the long title whole, false splits it again
    */
   off: boolean | null;
+}
+/**
+ * One page from a web search (SearXNG), for identifying a disc by hand.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "WebResult".
+ */
+export interface WebResult {
+  title: string;
+  url: string;
+  snippet: string;
+  /**
+   * the film or show name in the page title, to search TMDB for
+   */
+  suggestion: string | null;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "WebSearchRequest".
+ */
+export interface WebSearchRequest {
+  query: string;
 }

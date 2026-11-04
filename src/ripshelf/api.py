@@ -16,6 +16,7 @@ from pydantic import SecretStr
 from . import applog, art, checks, integrations, proc, providers, system
 from .bus import next_item
 from .config import FOLDERS, REQUIRED_FOLDERS, Settings
+from .identify import catalogue
 from .makemkv import files as mkfiles
 from .makemkv import runner
 from .models import (
@@ -60,12 +61,15 @@ from .models import (
     SettingsView,
     SetupTools,
     Show,
+    Snapshots,
     Status,
     Tool,
     TvConfirmRequest,
     TvMatchTextRequest,
     TvProposeRequest,
     TvSplitRequest,
+    WebResult,
+    WebSearchRequest,
 )
 from .providers import contribute as contribute_provider
 from .providers import release_info
@@ -402,6 +406,33 @@ async def movie_search(request: Request, q: Annotated[str, Query(min_length=1, m
         return await manager(request).movie_search(q, year)
     except ValueError as e:
         raise bad_request(e) from None
+
+
+@api.post("/web-search", response_model=list[WebResult])
+async def web_search(body: WebSearchRequest, request: Request):
+    """Search the web (SearXNG) by hand, for a disc nothing identified."""
+    try:
+        return await catalogue.web_search(settings(request), body.query.strip())
+    except catalogue.CatalogueError as e:
+        msg = str(e)
+        raise HTTPException(400, msg[:1].upper() + msg[1:]) from None
+
+
+@api.get("/jobs/{job_id}/snapshots", response_model=Snapshots)
+async def job_snapshots(job_id: int, request: Request):
+    """Frames from the disc's ripped titles (and the part of a title being ripped)."""
+    try:
+        return await manager(request).snapshots(job_id)
+    except ValueError:
+        raise HTTPException(404) from None
+
+
+@api.get("/jobs/{job_id}/snapshots/{title_index}/{frame}.jpg", include_in_schema=False)
+async def job_snapshot(job_id: int, title_index: int, frame: int, request: Request):
+    p = await manager(request).snapshot(job_id, title_index, frame)
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
 
 
 @api.get("/tv/search", response_model=list[Show])

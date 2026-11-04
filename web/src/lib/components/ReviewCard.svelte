@@ -8,6 +8,8 @@
 	import Evidence from './Evidence.svelte';
 	import Poster from './Poster.svelte';
 	import ScoreMeter from './ScoreMeter.svelte';
+	import Snapshots from './Snapshots.svelte';
+	import WebSearch from './WebSearch.svelte';
 
 	let { job }: { job: Job } = $props();
 	const act = new Action();
@@ -43,6 +45,24 @@
 
 	async function confirm(c: Candidate) {
 		await act.run(() => api.confirm(job.id, c));
+	}
+
+	// A name from the web search, searched on TMDB like a typed one.
+	async function useName(name: string) {
+		query = name;
+		year = '';
+		const found = await act.run(() => api.search(job.id, name, null));
+		if (found) picked = null;
+	}
+
+	const checking = $derived(job.state === 'checking');
+
+	// Open the tray to look at the disc. Mid-rip the rip stops, and starts again once the disc is back.
+	function ejectToCheck() {
+		const ripping = job.rip.state === 'running';
+		if (ripping && !window.confirm('Eject to check the disc? The rip stops, and starts again from the beginning when you put the same disc back.'))
+			return;
+		act.run(() => api.checkDisc(job.id, ripping));
 	}
 </script>
 
@@ -96,7 +116,14 @@
 		<p class="muted small">
 			{candidates.length
 				? 'The searches only found extras (making-ofs, shorts). Search by title, or pick one below.'
-				: 'No candidates. Search by title instead.'}
+				: 'No candidates. Search by title, search the web for the label, or eject the disc to look at it.'}
+		</p>
+		<WebSearch {job} onUse={useName} />
+	{/if}
+
+	{#if checking}
+		<p class="checking small">
+			Ejected to check. Put the same disc back to carry on; you can still search meanwhile, and confirm once it's back.
 		</p>
 	{/if}
 
@@ -115,13 +142,17 @@
 
 	{#if !searching}
 		<div class="actions">
-			{#if best}
+			{#if best && !checking}
 				<button class="primary confirm" disabled={act.busy} onclick={() => confirm(best)}>
 					Confirm {best.title}{best.year ? ` (${best.year})` : ''}
 				</button>
 			{/if}
 			<div class="row">
-				<button disabled={act.busy} onclick={startSearch}>Search instead</button>
+				<button disabled={act.busy} onclick={startSearch}>Search TMDB</button>
+				{#if !checking}
+					<button disabled={act.busy} title="Open the tray to look at the disc without losing the job"
+						onclick={ejectToCheck}>Eject to check</button>
+				{/if}
 			</div>
 			<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.setMedia(job.id, 'tv'))}>
 				This is a TV disc
@@ -129,6 +160,13 @@
 		</div>
 	{/if}
 	{#if act.error}<p class="small error-text">{act.error}</p>{/if}
+
+	{#if best && !searching}
+		<details>
+			<summary class="small">Search the web</summary>
+			<div class="web"><WebSearch {job} onUse={useName} /></div>
+		</details>
+	{/if}
 
 	{#if others.length && !searching}
 		<div>
@@ -152,9 +190,19 @@
 			</ul>
 		</div>
 	{/if}
+
+	<Snapshots {job} open={!best} />
 </article>
 
 <style>
+	.checking {
+		background: var(--warn-bg);
+		border-radius: 9px;
+		padding: 8px 12px;
+	}
+	.web {
+		margin-top: 8px;
+	}
 	.review {
 		display: flex;
 		flex-direction: column;
