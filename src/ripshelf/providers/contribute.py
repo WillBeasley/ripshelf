@@ -1,10 +1,17 @@
 """Contributing discs to TheDiscDB (opt-in, Settings → Metadata providers).
 
 TheDiscDB takes discs from rippers through its import API (built for the Engram
-ripper; written here from the API's description, not from Engram's code):
+ripper; see EngramEndpoints.cs in TheDiscDb/web for what it reads):
 
-  POST {base}/api/engram/disc                         the disc, as JSON (below)
+  POST {base}/api/engram/disc                           the disc, as JSON (below)
   POST {base}/api/engram/disc/{content_hash}/logs/scan  MakeMKV's scan (text/plain)
+  POST {base}/api/engram/release/{release_id}/images/{front|back}
+                                                        a cover picture (multipart "file")
+
+Of the release's details, the import keeps only the UPC (which fills in its form) and the
+covers. The ASIN, release date, locale and region are typed into TheDiscDB's form when the
+release is finished, and so are audio and subtitle track names and chapter names, which the
+import has no fields for.
 
 The disc is keyed by its content hash (the one the lookups use), so sending it
 again replaces the earlier copy. Discs sent with the same ``release_id`` become one
@@ -36,7 +43,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from .. import __version__
-from ..models import ContributionTitle, DiscKind, MediaKind, TitleRole
+from ..models import ContributionTitle, CoverSide, DiscKind, MediaKind, TitleRole
 
 if TYPE_CHECKING:
     from ..config import Settings
@@ -128,6 +135,20 @@ def auto_send(s: Settings, job: JobRecord) -> bool:
     return s.thediscdb_contribute == "auto" and job.identity_source == "user"
 
 
+# --- covers ---------------------------------------------------------------------------
+
+COVER_EXTS = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+
+
+def cover_path(covers_dir: Path, side: CoverSide) -> Path | None:
+    """The cover picture saved for this side, if any (``front.jpg``, ``back.png``...)."""
+    for ext in COVER_EXTS:
+        p = covers_dir / f"{side}.{ext}"
+        if p.is_file():
+            return p
+    return None
+
+
 # --- the payload ----------------------------------------------------------------------
 
 
@@ -216,6 +237,7 @@ def payload(job: JobRecord, release_id: str, disc_number: int | None, exported_a
                else {"match_confidence": 1.0, "match_source": "user"}),
         }))
     season = job.tv.season if job.media == MediaKind.tv and job.tv else None
+    d = job.contribution.details if job.contribution else None
     return _compact({
         "engram_version": f"ripshelf/{__version__}",
         "export_version": "1",
@@ -233,6 +255,11 @@ def payload(job: JobRecord, release_id: str, disc_number: int | None, exported_a
             "classification_confidence": confidence,
         }),
         "titles": titles,
+        # TheDiscDB's import keeps the UPC and fills its form with it. It doesn't read the
+        # ASIN or the date yet (Engram sends them too), but they're there if it starts to.
+        "upc": d.upc if d else None,
+        "asin": d.asin if d and not d.asin_unavailable else None,
+        "release_date": d.release_date.isoformat() if d and d.release_date else None,
     })
 
 
@@ -273,8 +300,9 @@ class Contributor:
                                   + (f" ({detail})" if detail else ""))
         return r
 
-    async def send(self, body: dict, scan: str) -> dict:
-        """Post the disc, then its scan log (TheDiscDB needs the disc first). Returns the disc reply."""
+    async def send(self, body: dict, scan: str, covers: dict[str, Path] | None = None) -> dict:
+        """Post the disc, then its scan log (TheDiscDB needs the disc first), then the
+        release's cover pictures. Returns the disc reply."""
         ch = body["disc"]["content_hash"]
         if not HASH.fullmatch(ch) or not RELEASE_ID.fullmatch(body["disc"].get("release_id", "")):
             raise ContributeError("the content hash or release id is malformed")
@@ -285,6 +313,16 @@ class Contributor:
             reply = {}
         await self._post(f"/api/engram/disc/{ch}/logs/scan", "scan log", content=scan.encode(),
                          headers={"Content-Type": "text/plain; charset=utf-8"})
+        release_id = body["disc"]["release_id"]
+        for side, path in (covers or {}).items():
+            ctype = COVER_EXTS.get(path.suffix.lstrip(".").lower())
+            try:
+                data = path.read_bytes()
+            except OSError:
+                raise ContributeError(f"the {side} cover couldn't be read") from None
+            # Multipart with a "file" field, as TheDiscDB's endpoint takes it.
+            await self._post(f"/api/engram/release/{release_id}/images/{side}", f"{side} cover",
+                             files={"file": (f"{side}{path.suffix}", data, ctype or "image/jpeg")})
         return reply if isinstance(reply, dict) else {}
 
     async def aclose(self) -> None:

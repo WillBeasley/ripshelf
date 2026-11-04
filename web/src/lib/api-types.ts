@@ -68,6 +68,7 @@ export interface Api {
   ContributionReleaseRequest?: ContributionReleaseRequest;
   ContributionTitle?: ContributionTitle;
   ContributionView?: ContributionView;
+  CoverFromUrlRequest?: CoverFromUrlRequest;
   DeleteJobsRequest?: DeleteJobsRequest;
   DeleteJobsResult?: DeleteJobsResult;
   DiscFacts?: DiscFacts;
@@ -109,6 +110,10 @@ export interface Api {
   Problem?: Problem;
   ProviderInfo?: ProviderInfo;
   ProviderSlot?: ProviderSlot;
+  ReleaseDetails?: ReleaseDetails1;
+  ReleaseLookup?: ReleaseLookup;
+  ReleaseLookupRequest?: ReleaseLookupRequest;
+  ReleaseProduct?: ReleaseProduct;
   RemoteWorker?: RemoteWorker;
   RemoteWorkers?: RemoteWorkers;
   RipInfo?: RipInfo;
@@ -391,6 +396,11 @@ export interface Contribution {
    * titles sent as extras, with their names; titles that aren't the film, an episode or one of these are left out
    */
   extras: ContributionExtra[];
+  details: ReleaseDetails;
+  /**
+   * cover pictures added, sent with the disc
+   */
+  covers: ("front" | "back")[];
 }
 /**
  * A title sent to TheDiscDB as an extra, under the name the user gave it.
@@ -400,8 +410,37 @@ export interface Contribution {
  */
 export interface ContributionExtra {
   title_index: number;
-  kind: "Extra" | "Featurette" | "DeletedScene" | "Trailer";
+  kind: "Extra" | "Featurette" | "DeletedScene" | "Trailer" | "Interview" | "Scene" | "Music" | "Short" | "Other";
   name: string;
+}
+/**
+ * the release's UPC, ASIN, date, locale and region
+ */
+export interface ReleaseDetails {
+  /**
+   * the barcode on the box, 12 (UPC) or 13 (EAN) digits
+   */
+  upc: string | null;
+  /**
+   * Amazon's product id for this release
+   */
+  asin: string | null;
+  /**
+   * Amazon doesn't sell this release
+   */
+  asin_unavailable: boolean;
+  /**
+   * when this release came out
+   */
+  release_date: string | null;
+  /**
+   * language and country the release is for, such as en-GB
+   */
+  locale: string | null;
+  /**
+   * the disc's playback regions, such as 2, B or Region free
+   */
+  region_code: string | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -491,6 +530,13 @@ export interface ContributionView {
    * the disc's titles, for naming the extras
    */
   titles: ContributionTitle[];
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "CoverFromUrlRequest".
+ */
+export interface CoverFromUrlRequest {
+  url: string;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1423,6 +1469,114 @@ export interface ProviderInfo {
 export interface ProviderSlot {
   name: "thediscdb" | "tmdb" | "tvdb" | "tvmaze" | "omdb";
   enabled: boolean;
+}
+/**
+ * What TheDiscDB asks about the release (the box) rather than the disc. Its import
+ * takes the UPC and the covers, and the rest is typed into its form when finishing, so
+ * ripshelf keeps them to show there.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ReleaseDetails".
+ */
+export interface ReleaseDetails1 {
+  /**
+   * the barcode on the box, 12 (UPC) or 13 (EAN) digits
+   */
+  upc: string | null;
+  /**
+   * Amazon's product id for this release
+   */
+  asin: string | null;
+  /**
+   * Amazon doesn't sell this release
+   */
+  asin_unavailable: boolean;
+  /**
+   * when this release came out
+   */
+  release_date: string | null;
+  /**
+   * language and country the release is for, such as en-GB
+   */
+  locale: string | null;
+  /**
+   * the disc's playback regions, such as 2, B or Region free
+   */
+  region_code: string | null;
+}
+/**
+ * Suggestions for the release details, for the user to take or leave.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ReleaseLookup".
+ */
+export interface ReleaseLookup {
+  /**
+   * listings that may be this release, best first
+   */
+  products: ReleaseProduct[];
+  suggested: ReleaseDetails2;
+  /**
+   * where each value came from, and what couldn't be found
+   */
+  notes: string[];
+}
+/**
+ * A product listing a lookup found: maybe this release.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ReleaseProduct".
+ */
+export interface ReleaseProduct {
+  upc: string | null;
+  title: string;
+  brand: string | null;
+  asin: string | null;
+  /**
+   * product pictures, usable as the front cover
+   */
+  images: string[];
+}
+/**
+ * What TheDiscDB asks about the release (the box) rather than the disc. Its import
+ * takes the UPC and the covers, and the rest is typed into its form when finishing, so
+ * ripshelf keeps them to show there.
+ */
+export interface ReleaseDetails2 {
+  /**
+   * the barcode on the box, 12 (UPC) or 13 (EAN) digits
+   */
+  upc: string | null;
+  /**
+   * Amazon's product id for this release
+   */
+  asin: string | null;
+  /**
+   * Amazon doesn't sell this release
+   */
+  asin_unavailable: boolean;
+  /**
+   * when this release came out
+   */
+  release_date: string | null;
+  /**
+   * language and country the release is for, such as en-GB
+   */
+  locale: string | null;
+  /**
+   * the disc's playback regions, such as 2, B or Region free
+   */
+  region_code: string | null;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ReleaseLookupRequest".
+ */
+export interface ReleaseLookupRequest {
+  /**
+   * look this barcode up; without one, the release is searched for by title and format
+   */
+  upc: string | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

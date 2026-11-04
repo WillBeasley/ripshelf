@@ -4,6 +4,7 @@
 	import { api } from '../api';
 	import { Action } from '../actions.svelte';
 	import { duration, size, when } from '../format';
+	import ReleaseDetails from './ReleaseDetails.svelte';
 
 	type Kind = ContributionExtra['kind'] | '';
 	const kinds: [Kind, string][] = [
@@ -11,7 +12,12 @@
 		['Extra', 'Extra'],
 		['Featurette', 'Featurette'],
 		['DeletedScene', 'Deleted scene'],
-		['Trailer', 'Trailer']
+		['Trailer', 'Trailer'],
+		['Interview', 'Interview'],
+		['Scene', 'Scene'],
+		['Music', 'Music'],
+		['Short', 'Short'],
+		['Other', 'Other']
 	];
 	const kindLabel: Record<string, string> = Object.fromEntries(kinds);
 
@@ -100,7 +106,7 @@
 					Sending…
 				{:else if status === 'sent'}
 					Sent{c?.sent_at ? ` ${when(c.sent_at)}` : ''}{c?.updated ? ' (replaced the earlier copy)' : ''}. Finish
-					the release on TheDiscDB (release date, region, cover) and submit it for review.
+					the release on TheDiscDB (its form asks for the details below) and submit it for review.
 				{:else if status === 'failed'}
 					<span class="error-text">Not sent. {c?.error ?? 'Unknown error'}</span>
 				{:else if view.todo}
@@ -163,6 +169,9 @@
 						<button class="link small" disabled={act.busy} onclick={edit}>Change</button>
 					</p>
 				{/if}
+			{/if}
+			{#if c?.items_confirmed && !draft}
+				<ReleaseDetails jobId={job.id} {view} onview={(v) => (view = v)} />
 			{/if}
 			{#if c?.release_id}
 				<p class="small muted">

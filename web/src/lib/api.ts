@@ -20,6 +20,8 @@ import type {
 	NewRemoteWorker,
 	NewRemoteWorkerRequest,
 	Preset,
+	ReleaseDetails,
+	ReleaseLookup,
 	RemoteWorkers,
 	ServerLibrary,
 	SettingsTestRequest,
@@ -37,6 +39,7 @@ import type {
 } from './api-types';
 
 export type MediaServer = 'emby' | 'jellyfin' | 'plex';
+export type CoverSide = 'front' | 'back';
 
 type ClashAction = ClashRequest['action'];
 
@@ -99,6 +102,20 @@ export const api = {
 		call<ContributionView>('PUT', `/jobs/${id}/thediscdb/extras`, { extras }),
 	contributionRelease: (id: number, newRelease: boolean) =>
 		call<ContributionView>('POST', `/jobs/${id}/thediscdb/release`, { new_release: newRelease }),
+	contributionDetails: (id: number, details: ReleaseDetails) =>
+		call<ContributionView>('PUT', `/jobs/${id}/thediscdb/details`, details),
+	releaseLookup: (id: number, upc: string | null) =>
+		call<ReleaseLookup>('POST', `/jobs/${id}/thediscdb/lookup`, { upc }),
+	coverUrl: (id: number, side: CoverSide, v: string | number) => `/api/jobs/${id}/thediscdb/cover/${side}?v=${v}`,
+	uploadCover: (id: number, side: CoverSide, file: File) => {
+		const form = new FormData();
+		form.append('file', file);
+		return call<ContributionView>('PUT', `/jobs/${id}/thediscdb/cover/${side}`, form);
+	},
+	coverFromUrl: (id: number, side: CoverSide, url: string) =>
+		call<ContributionView>('POST', `/jobs/${id}/thediscdb/cover/${side}/from-url`, { url }),
+	deleteCover: (id: number, side: CoverSide) =>
+		call<ContributionView>('DELETE', `/jobs/${id}/thediscdb/cover/${side}`),
 	movieSearch: (q: string, year: number | null) =>
 		call<Candidate[]>('GET', `/movies/search?q=${encodeURIComponent(q)}${year ? `&year=${year}` : ''}`),
 	setPreset: (id: number, preset: Preset) => call<Job>('PUT', `/jobs/${id}/preset`, preset),

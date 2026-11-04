@@ -83,6 +83,10 @@ class Tmdb:
     async def movie(self, tmdb_id: int) -> dict:
         return await self._get(f"/movie/{tmdb_id}")
 
+    async def release_dates(self, tmdb_id: int) -> dict:
+        """The film's release dates by country; type 5 is a physical (disc) release."""
+        return await self._get(f"/movie/{tmdb_id}/release_dates")
+
     async def find(self, external_id: str | int, source: str) -> dict:
         """TMDB's films and shows with an IMDb ("imdb_id") or TheTVDB ("tvdb_id") id."""
         return await self._get(f"/find/{external_id}", external_source=source)
