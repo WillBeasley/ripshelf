@@ -4,7 +4,8 @@
 	import { Action } from '../actions.svelte';
 	import { duration, percent } from '../format';
 
-	// One long title holding the disc's episodes: its chapters, and where it's cut.
+	// One long title holding the disc's episodes: the marks it can be cut at (its chapters, or
+	// breaks found in it, or cuts put in by hand), and where it's cut.
 	let { job }: { job: Job } = $props();
 	const act = new Action();
 
@@ -44,16 +45,42 @@
 
 	const breakLabel = (b: number | null | undefined) =>
 		b == null ? 'not checked' : b >= 1 ? 'black and silence' : b > 0 ? 'black or silence' : 'no break seen';
+	const scanned = $derived(sp?.marks_from === 'scan');
+	const kind = (k: number) => sp?.kinds[k] ?? 'chapter';
+	// "chapter 3", "break 2", "your cut", numbered among their own kind.
+	function markName(k: number): string {
+		const own = sp ? sp.chapters.slice(0, k + 1).filter((_, i) => kind(i) === kind(k)).length : 0;
+		return kind(k) === 'manual' ? 'your cut' : kind(k) === 'break' ? `break ${own}` : `chapter ${own}`;
+	}
 	let thumbFailed = $state<Record<number, boolean>>({});
+
+	// A cut anywhere: clicked on the bar or typed. The server moves it to a break within 10 s.
+	let typed = $state('');
+	function seconds(text: string): number | null {
+		const bits = text.trim().split(':');
+		if (!bits.every((b) => /^\d+(\.\d+)?$/.test(b)) || bits.length > 3) return null;
+		return bits.reduce((acc, b) => acc * 60 + Number(b), 0);
+	}
+	const typedAt = $derived(seconds(typed));
+	async function cutAt(at: number) {
+		if (!editable || !(at > 0 && at < total)) return;
+		const done = await act.run(() => api.tvSplit(job.id, { cuts, off: null, cut_at: at }));
+		if (done) typed = '';
+	}
+	function clickBar(e: MouseEvent) {
+		if (!e.detail) return; // Enter or Space, which has no position
+		const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		cutAt(((e.clientX - box.left) / box.width) * total);
+	}
 </script>
 
-{#snippet thumb(chapter: number)}
-	{#if sp && !thumbFailed[chapter]}
+{#snippet thumb(mark: number)}
+	{#if sp && !thumbFailed[sp.chapters[mark]]}
 		<img
-			src={api.splitThumbUrl(job.id, sp.title_index, chapter)}
+			src={api.splitThumbUrl(job.id, sp.title_index, mark, sp.chapters[mark])}
 			alt=""
 			loading="lazy"
-			onerror={() => (thumbFailed[chapter] = true)}
+			onerror={() => (thumbFailed[sp.chapters[mark]] = true)}
 		/>
 	{:else}
 		<div class="nothumb"></div>
@@ -65,23 +92,38 @@
 		<div>
 			<h3>Title {sp.title_index} holds about {sp.expected} episodes</h3>
 			<p class="small muted">
-				{sp.reason.charAt(0).toUpperCase()}{sp.reason.slice(1)}. It's split at chapter marks, without re-encoding.
+				{sp.reason.charAt(0).toUpperCase()}{sp.reason.slice(1)}. It's split {scanned
+					? 'at black frames and silence found in it'
+					: 'at chapter marks'}, without re-encoding.
 			</p>
 		</div>
 
 		{#if sp.state === 'waiting'}
-			<p class="small muted">Its chapters are read once it's ripped, and the cuts are proposed then.</p>
+			<p class="small muted">
+				Its chapters are read once it's ripped, and the cuts are proposed then. With too few chapters, it's
+				searched for black frames and silence instead, which takes a few minutes.
+			</p>
 		{:else if sp.state === 'failed'}
 			<p class="small error-text">It can't be split: {sp.error}.</p>
 		{:else}
 			<p class="small">
 				{sp.state === 'split' ? `Split into ${parts.length} files` : `${parts.length} episodes`} from
-				{sp.chapters.length} chapters{sp.confidence != null && !sp.edited
+				{scanned ? `${sp.chapters.length - 1} breaks found` : `${sp.chapters.length} chapters`}{sp.confidence != null && !sp.edited
 					? ` · ${percent(sp.confidence)} confident`
 					: ''}{sp.note && !sp.edited ? ` · ${sp.note}` : ''}{sp.edited ? ' · cuts changed by hand' : ''}
 			</p>
 
-			<div class="timeline" role="group" aria-label="Chapters of title {sp.title_index}">
+			<div class="timeline" role="group" aria-label="Marks of title {sp.title_index}">
+				{#if editable}
+					<button
+						class="bar"
+						tabindex="-1"
+						disabled={act.busy}
+						aria-label="Cut where you click"
+						title="Cut here (moved to a break within 10 s)"
+						onclick={clickBar}
+					></button>
+				{/if}
 				{#each parts as p (p.k)}
 					<div class="part" class:alt={p.k % 2 === 1} style:left={pos(p.start)} style:width={pos(p.end - p.start)}>
 						<span>{p.k + 1}</span>
@@ -93,11 +135,12 @@
 							class="tick"
 							class:cut={cuts.includes(k)}
 							class:brk={(sp.breaks[k] ?? 0) >= 1}
+							class:manual={kind(k) === 'manual'}
 							style:left={pos(t)}
 							disabled={!editable || act.busy}
 							aria-pressed={cuts.includes(k)}
-							aria-label="Cut at chapter {k + 1} ({duration(t)})"
-							title="Chapter {k + 1} at {duration(t)}: {breakLabel(sp.breaks[k])}"
+							aria-label="Cut at {markName(k)} ({duration(t)})"
+							title="{markName(k)} at {duration(t)}: {breakLabel(sp.breaks[k])}"
 							onclick={() => toggle(k)}
 						></button>
 					{/if}
@@ -112,7 +155,7 @@
 						<div class="small">
 							<strong>Part {p.k + 1}</strong> · {duration(p.end - p.start)}
 							<div class="muted">
-								{p.first === 0 ? 'from the start' : `at chapter ${p.first + 1}, ${duration(p.start)}`}{p.first
+								{p.first === 0 ? 'from the start' : `at ${markName(p.first)}, ${duration(p.start)}`}{p.first
 									? ` · ${breakLabel(sp.breaks[p.first])}`
 									: ''}
 							</div>
@@ -123,7 +166,10 @@
 
 			{#if editable}
 				<details>
-					<summary class="small">Every chapter ({sp.chapters.length}), to cut somewhere else</summary>
+					<summary class="small">
+						{scanned ? `Every break found (${sp.chapters.length - 1})` : `Every chapter (${sp.chapters.length})`}, to cut
+						somewhere else
+					</summary>
 					<ul class="marks">
 						{#each sp.chapters as t, k (k)}
 							{#if k > 0}
@@ -132,7 +178,7 @@
 										{@render thumb(k)}
 										<span class="small">
 											<input type="checkbox" checked={cuts.includes(k)} disabled={act.busy} onchange={() => toggle(k)} />
-											Ch. {k + 1} · {duration(t)}
+											{markName(k).charAt(0).toUpperCase()}{markName(k).slice(1)} · {duration(t)}
 										</span>
 										<span class="small muted">{breakLabel(sp.breaks[k])}</span>
 									</label>
@@ -141,27 +187,35 @@
 						{/each}
 					</ul>
 				</details>
+				<form class="row" onsubmit={(e) => (e.preventDefault(), typedAt != null && cutAt(typedAt))}>
+					<label class="field tiny">Cut at <input bind:value={typed} placeholder="25:10" inputmode="decimal" /></label>
+					<button type="submit" disabled={act.busy || typedAt == null || !(typedAt > 0 && typedAt < total)}>Add cut</button>
+				</form>
 				<div class="row">
-					<button class="primary" disabled={!dirty || act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts, off: null }))}>
+					<button class="primary" disabled={!dirty || act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts, off: null, cut_at: null }))}>
 						Use these cuts
 					</button>
 					<button disabled={act.busy || proposed} onclick={() => (cuts = [...(sp?.proposed ?? [])])}>
 						Back to the proposal
 					</button>
 				</div>
-				<p class="small muted">Click a chapter mark to cut there or not. New cuts propose the episodes again, so pick episodes once the cuts are right.</p>
+				<p class="small muted">
+					Click a mark to cut there or not, or click anywhere else on the bar (or type a time) to cut there. A new
+					cut moves to black frames or silence within 10 s, and the file is cut at the next keyframe. New cuts
+					propose the episodes again, so pick episodes once the cuts are right.
+				</p>
 			{/if}
 		{/if}
 
 		{#if changeable && sp.state !== 'split'}
-			<button class="link small keep" disabled={act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts: null, off: true }))}>
+			<button class="link small keep" disabled={act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts: null, off: true, cut_at: null }))}>
 				Keep it as one title
 			</button>
 		{/if}
 		{#if act.error}<p class="small error-text">{act.error}</p>{/if}
 	</section>
 {:else if job.tv?.split_off && changeable}
-	<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts: null, off: false }))}>
+	<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts: null, off: false, cut_at: null }))}>
 		Split the long title into episodes after all
 	</button>
 	{#if act.error}<p class="small error-text">{act.error}</p>{/if}
@@ -230,6 +284,20 @@
 		top: 5px;
 		bottom: 5px;
 	}
+	.tick.manual::after {
+		background: var(--warn);
+		opacity: 1;
+	}
+	.bar {
+		position: absolute;
+		inset: 0;
+		padding: 0;
+		border: none;
+		border-radius: 0;
+		background: transparent;
+		cursor: crosshair;
+		min-height: 0;
+	}
 	.tick.cut::after {
 		top: 0;
 		bottom: 0;
@@ -294,6 +362,12 @@
 	.marks .nothumb {
 		width: 100%;
 	}
+	.marks input[type='checkbox'] {
+		width: auto;
+		height: auto;
+		margin: 0 4px 0 0;
+		vertical-align: middle;
+	}
 	.marks li.on img {
 		outline: 2px solid var(--accent);
 	}
@@ -301,6 +375,12 @@
 		display: flex;
 		gap: 8px;
 		flex-wrap: wrap;
+	}
+	.tiny {
+		width: 7em;
+	}
+	.row {
+		align-items: flex-end;
 	}
 	.keep {
 		align-self: flex-start;

@@ -515,6 +515,7 @@ async def test_chapterless_title_end_to_end(harness, keyed, settings, mkv_script
             sp = job.tv.split
             assert [round(t) for t in sp.chapters] == [0, 900, 1800, 2700, 3480]
             assert sp.kinds[3] == "manual" and sp.cuts == [2, 3, 4] and sp.proposed == [2, 4] and sp.edited
+            assert sp.breaks[3] == 0.0  # looked, and found no break
             # Near a break it moves to the break, which is already a mark.
             job = await h.m.tv_split(job.id, [2, 4], None, cut_at=905)
             assert job.tv.split.cuts == [1, 2, 4] and len(job.tv.split.chapters) == 5
