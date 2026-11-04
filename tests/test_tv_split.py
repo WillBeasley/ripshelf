@@ -57,13 +57,19 @@ def test_a_whole_shows_runtimes_dont_hide_it():
     assert split.detect(titles, {}, eps(3, 30, 28, 33, 29, 90)).title_index == 0
 
 
-@pytest.mark.parametrize("chapters, says", [(0, "no chapters"), (1, "no chapters"), (2, "only 2 chapters")])
-def test_too_few_chapters_still_detected(chapters, says):
-    # Searched for breaks instead (a 50 min title of two 25 min episodes, no chapters).
-    got = split.detect([title(0, 50.4, chapters)], {}, eps(25, 25))
-    assert got.title_index == 0 and got.episodes == 2 and f"50 min with {says}" in got.reason
-    assert not split.enough_chapters(chapters, 2) and split.enough_chapters(3, 2)
-    assert not split.enough_chapters(4, 5)
+@pytest.mark.parametrize("chapters, says", [(0, "no chapters"), (1, "no chapters"), (2, "2 chapters")])
+def test_few_chapters_still_detected(chapters, says):
+    # A 50 min title of two 24 min episodes, with a chapter for each or none.
+    got = split.detect([title(0, 50.4, chapters)], {}, eps(24, 24))
+    assert got.title_index == 0 and got.episodes == 2 and f"50 min with {says}," in got.reason
+    assert split.enough_chapters(chapters, 2) == (chapters == 2)
+    assert split.enough_chapters(3, 2) and not split.enough_chapters(4, 5)
+
+
+def test_one_chapter_per_episode_is_enough():
+    """Fraggle Rock UK DVD: 50:22, chapter 2 at 24:38.56, episodes of 24 min."""
+    got = split.propose_cuts([0.0, 1478.56], 3022.72, [None, 1.0], eps(24, 24))
+    assert got.cuts == [1] and got.confidence == 1.0
     assert split.may_hold_several(title(0, 40)) and not split.may_hold_several(title(0, 39))
 
 
