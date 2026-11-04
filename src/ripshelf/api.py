@@ -466,12 +466,12 @@ async def tv_confirm(job_id: int, body: TvConfirmRequest, request: Request):
 async def tv_split(job_id: int, body: TvSplitRequest, request: Request):
     """Where the long title holding the episodes is cut (chapters), or keep it whole."""
     m = manager(request)
-    return await _job_action(request, job_id, lambda i: m.tv_split(i, body.cuts, body.off))
+    return await _job_action(request, job_id, lambda i: m.tv_split(i, body.cuts, body.off, body.cut_at))
 
 
 @api.get("/jobs/{job_id}/split-thumbs/{title_index}/{chapter}.jpg", include_in_schema=False)
 async def split_thumbnail(job_id: int, title_index: int, chapter: int, request: Request):
-    p = manager(request).split_thumb_path(job_id, title_index, chapter)
+    p = await manager(request).split_thumb(job_id, title_index, chapter)
     if not p:
         raise HTTPException(404)
     return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
@@ -479,7 +479,7 @@ async def split_thumbnail(job_id: int, title_index: int, chapter: int, request: 
 
 @api.get("/jobs/{job_id}/thumbs/{title_index}.jpg", include_in_schema=False)
 async def thumbnail(job_id: int, title_index: int, request: Request):
-    p = manager(request).thumbnail_path(job_id, title_index)
+    p = await manager(request).title_thumb(job_id, title_index)
     if not p:
         raise HTTPException(404)
     return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})

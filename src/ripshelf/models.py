@@ -222,7 +222,8 @@ class TitleMap(BaseModel):
 
 
 class TitleSplit(BaseModel):
-    """One long title holding several episodes, to be split at its chapter marks."""
+    """One long title holding several episodes, to be split at its chapter marks, or at
+    black frames and silence found in it when it has too few chapters."""
 
     title_index: int
     duration_s: float
@@ -232,10 +233,15 @@ class TitleSplit(BaseModel):
     state: Literal["waiting", "ready", "failed", "split"] = Field(
         "waiting", description="waiting for the rip, chapters read, chapters unreadable, split into files")
     error: str | None = None
-    chapters: list[float] = Field(default=[], description="chapter start times (s), read from the rip")
+    chapters: list[float] = Field(default=[], description="marks it can be cut at (s): its chapters, or breaks "
+                                  "found in it, and cuts put in by hand")
+    kinds: list[Literal["chapter", "start", "break", "manual"]] = Field(
+        default=[], description="per mark: a chapter, the start, a break found by a scan, a cut put in by hand")
+    marks_from: Literal["chapters", "scan"] = Field(
+        "chapters", description="the marks are its chapters, or breaks found by searching all of it")
     breaks: list[float | None] = Field(
-        default=[], description="per chapter, 0..1: black frames and silence at its mark (null = not checked)")
-    cuts: list[int] = Field(default=[], description="chapters (0-based) where an episode starts")
+        default=[], description="per mark, 0..1: black frames and silence at it (null = not checked)")
+    cuts: list[int] = Field(default=[], description="marks (0-based) where an episode starts")
     proposed: list[int] = Field(default=[], description="the cuts as first proposed")
     confidence: float | None = Field(None, description="0..1, how well the proposed parts fit the runtimes")
     note: str | None = None
@@ -823,7 +829,8 @@ class TitleMapUpdate(BaseModel):
 
 
 class TvSplitRequest(BaseModel):
-    cuts: list[int] | None = Field(None, description="chapters (0-based) where an episode starts")
+    cuts: list[int] | None = Field(None, description="marks (0-based) where an episode starts")
+    cut_at: float | None = Field(None, gt=0, description="also cut here (s), or at a break within 10 s of it")
     off: bool | None = Field(None, description="true keeps the long title whole, false splits it again")
 
 

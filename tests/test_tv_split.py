@@ -44,8 +44,6 @@ def test_detects_one_long_title_with_chapters():
 
 @pytest.mark.parametrize("why, titles, roles", [
     ("too short", [title(0, 50, 12)], {}),
-    ("too few chapters", [title(0, 91, 2)], {}),
-    ("fewer chapters than episodes", [title(0, 150, 4)], {}),
     ("a play-all", [title(0, 91, 12), title(1, 30), title(2, 31)], {0: TitleRole.play_all}),
     ("a title per episode too", [title(0, 91, 12), title(1, 30), title(2, 31)], {}),
 ])
@@ -57,6 +55,16 @@ def test_a_whole_shows_runtimes_dont_hide_it():
     # A compilation offers every episode of the show, including a 90 min special.
     titles = [title(0, 91, 12), title(1, 5), title(2, 6), title(3, 4)]
     assert split.detect(titles, {}, eps(3, 30, 28, 33, 29, 90)).title_index == 0
+
+
+@pytest.mark.parametrize("chapters, says", [(0, "no chapters"), (1, "no chapters"), (2, "only 2 chapters")])
+def test_too_few_chapters_still_detected(chapters, says):
+    # Searched for breaks instead (a 50 min title of two 25 min episodes, no chapters).
+    got = split.detect([title(0, 50.4, chapters)], {}, eps(25, 25))
+    assert got.title_index == 0 and got.episodes == 2 and f"50 min with {says}" in got.reason
+    assert not split.enough_chapters(chapters, 2) and split.enough_chapters(3, 2)
+    assert not split.enough_chapters(4, 5)
+    assert split.may_hold_several(title(0, 40)) and not split.may_hold_several(title(0, 39))
 
 
 def test_detection_needs_runtimes_and_picks_the_longest():
@@ -142,6 +150,40 @@ def test_mkvmerge_found_in_program_files_on_windows(tmp_path, monkeypatch):
     assert split.default_mkvmerge("mkvmerge") == "mkvmerge"
 
 
+def test_split_command_at_timestamps():
+    cmd = split.split_command("mkvmerge", Path("/s/t.mkv"), Path("/o"), [3, 1], [1511.25, 3725.0])
+    assert cmd[cmd.index("--split") + 1] == "timestamps:00:25:11.250,01:02:05.000"
+    assert split.timestamp(0.0004) == "00:00:00.000" and split.timestamp(59.9996) == "00:01:00.000"
+
+
+def test_find_breaks():
+    black = [(299.5, 300.5), (1507.0, 1509.0), (1509.5, 1510.0), (20.0, 21.0)]
+    silence = [(1506.8, 1509.4), (1800.0, 1801.5), (2000.0, 2000.5)]
+    got = split.find_breaks(black, silence, 0, 3022, edge_s=60)
+    # Black at 300 alone; 1508 and 1509.75 are one break (black and silence); long silence at
+    # 1800 alone; short silence at 2000 and black at 20 (near the start) don't count.
+    assert [(b.at, b.score) for b in got] == [(300.0, 0.5), (1508.0, 1.0), (1800.75, 0.5)]
+    assert split.find_breaks([], [], 0, 100) == []
+
+
+def test_parse_spans():
+    log = ("[blackdetect @ 0x1] black_start:10 black_end:11.5 black_duration:1.5\n"
+           "[silencedetect @ 0x2] silence_start: 9.9\n[silencedetect @ 0x2] silence_end: 11 | silence_duration: 1.1\n"
+           "[silencedetect @ 0x2] silence_start: 40\n")
+    assert split.parse_spans(log, 50) == ([(10.0, 11.5)], [(9.9, 11.0), (40.0, 50.0)])
+
+
+def test_cuts_from_breaks_fit_the_runtimes():
+    """A chapterless 50:22 title of two 25 min episodes: the break nearest 25 min wins,
+    and black and silence beat silence alone close by."""
+    marks = [0.0, 300.0, 1508.0, 1530.0, 1800.0, 2700.0]
+    breaks = [None, 0.5, 1.0, 0.5, 0.5, 1.0]
+    got = split.propose_cuts(marks, 3022, breaks, eps(25, 25))
+    assert got.cuts == [2] and got.confidence == 1.0
+    # Equal halves when the runtimes are unknown come from the show's typical runtime instead.
+    assert split.propose_cuts(marks, 3022, breaks, eps(25, None)).cuts == [2]
+
+
 def test_break_command_and_score():
     cmd, mark = split.break_command("ffmpeg", Path("t.mkv"), 1800)
     assert cmd[cmd.index("-ss") + 1] == "1796.000" and mark == 4.0
@@ -169,7 +211,7 @@ def fake_mkvmerge(where: Path, exit_code: int = 0) -> str:
         from pathlib import Path
         a = sys.argv[1:]
         out, src = Path(a[a.index("-o") + 1]), a[-1]
-        n = len(a[a.index("--split") + 1].split(":")[1].split(",")) + 1
+        n = len(a[a.index("--split") + 1].split(":", 1)[1].split(",")) + 1
         for k in range(1, n + 1):
             shutil.copy(src, out.with_name(f"{{out.stem}}-{{k:03d}}.mkv"))
         print("Error: no space" if {exit_code} else "ok")
@@ -199,15 +241,17 @@ async def test_split_file(tmp_path):
         await split.split_file(short, src, out, [2, 4])
 
 
-def long_video(path: Path, chapters: list[int], total: int, breaks: list[int]) -> Path:
-    """A tiny real video with chapters, black frames and silence at ``breaks`` (seconds)."""
+def long_video(path: Path, chapters: list[int], total: int, breaks: list[int], black_only: tuple = ()) -> Path:
+    """A tiny real video with chapters, black frames and silence at ``breaks`` (seconds), and
+    black frames alone at ``black_only``."""
     meta = path.with_suffix(".txt")
     meta.write_text(";FFMETADATA1\n" + "".join(
         f"[CHAPTER]\nTIMEBASE=1/1\nSTART={a}\nEND={b}\n" for a, b in zip(chapters, [*chapters[1:], total],
                                                                        strict=True)))
     quiet = "+".join(f"between(t,{b - 2},{b + 2})" for b in breaks)
+    dark = "+".join(f"between(t,{b - 2},{b + 2})" for b in [*breaks, *black_only])
     subprocess.run(["ffmpeg", "-v", "error", "-y",
-                    "-f", "lavfi", "-i", f"color=gray:s=64x36:r=2:d={total},drawbox=enable='{quiet}':c=black:t=fill",
+                    "-f", "lavfi", "-i", f"color=gray:s=64x36:r=2:d={total},drawbox=enable='{dark}':c=black:t=fill",
                     "-f", "lavfi", "-i", f"sine=f=440:r=8000:d={total},volume=enable='{quiet}':volume=0",
                     "-i", str(meta), "-map", "0:v", "-map", "1:a", "-map_metadata", "2", "-c:v", "libx264",
                     "-preset", "ultrafast", "-g", "2", "-c:a", "aac", "-b:a", "16k", "-ac", "1", "-shortest",
@@ -220,6 +264,25 @@ def seagull_rip(tmp_path_factory) -> Path:
     if not HAS_FFMPEG:
         pytest.skip("needs ffmpeg")
     return long_video(tmp_path_factory.mktemp("rip") / "long.mkv", CHAPTERS, TOTAL, [1800, 3480])
+
+
+@pytest.fixture(scope="module")
+def chapterless_rip(tmp_path_factory) -> Path:
+    """The same three episodes with one chapter, and black frames (no silence) at 15 min."""
+    if not HAS_FFMPEG:
+        pytest.skip("needs ffmpeg")
+    return long_video(tmp_path_factory.mktemp("rip") / "nochapters.mkv", [0], TOTAL, [1800, 3480], (900,))
+
+
+@needs_ffmpeg
+@pytest.mark.slow
+async def test_scan_and_snap_on_a_real_file(chapterless_rip):
+    found = await split.scan_breaks("ffmpeg", chapterless_rip, TOTAL)
+    assert [(round(b.at), b.score) for b in found] == [(900, 0.5), (1800, 1.0), (3480, 1.0)]
+    near = await split.snap("ffmpeg", chapterless_rip, 1793)
+    assert round(near.at) == 1800 and near.score == 1.0
+    assert await split.snap("ffmpeg", chapterless_rip, 2700) is None
+    assert await split.scan_breaks("ffmpeg", chapterless_rip.with_name("missing.mkv"), TOTAL) is None
 
 
 @needs_ffmpeg
@@ -235,6 +298,15 @@ async def test_chapters_and_breaks_from_a_real_file(seagull_rip):
 @pytest.mark.skipif(shutil.which("mkvmerge") is None, reason="needs mkvmerge (MKVToolNix)")
 async def test_real_mkvmerge_splits_at_chapters(seagull_rip, tmp_path):
     files = await split.split_file("mkvmerge", seagull_rip, tmp_path, [2, 4])
+    from ripshelf.tv import verify
+    lengths = [round(await verify.duration("ffprobe", f)) for f in files]
+    assert lengths == [1800, 1680, 1980]
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(shutil.which("mkvmerge") is None, reason="needs mkvmerge (MKVToolNix)")
+async def test_real_mkvmerge_splits_at_timestamps(chapterless_rip, tmp_path):
+    files = await split.split_file("mkvmerge", chapterless_rip, tmp_path, [1, 2], [1800.0, 3480.0])
     from ripshelf.tv import verify
     lengths = [round(await verify.duration("ffprobe", f)) for f in files]
     assert lengths == [1800, 1680, 1980]
@@ -276,11 +348,11 @@ def keyed(settings, tmp_path):
     return settings
 
 
-async def single_title_job(h, monkeypatch, settings, mkv_script, video: Path):
+async def single_title_job(h, monkeypatch, settings, mkv_script, video: Path, scan: str = SCAN):
     from ripshelf.dev import fake
 
     monkeypatch.setattr(fake.DRIVES[DRIVE][1], "label", LABEL)
-    settings.makemkvcon = mkv_script(info=SCAN, rip=rip_from(video))
+    settings.makemkvcon = mkv_script(info=scan, rip=rip_from(video))
     h.backend.insert(DRIVE)
     return await until(lambda: next((j for j in h.db.list_jobs() if j.state == JobState.review
                                      and j.tv and j.tv.split and j.tv.split.state != "waiting"), None), 40,
@@ -416,3 +488,46 @@ async def test_compilation_disc_in_one_title(harness, keyed, settings, mkv_scrip
     assert sorted(p.name for p in season.iterdir()) == [
         "Seagull Manor - S01E01 - A Hint of Style.mkv", "Seagull Manor - S01E04 - The Inn Critics.mkv",
         "Seagull Manor - S01E06 - The Tourists.mkv"]
+
+
+@needs_ffmpeg
+@pytest.mark.slow
+async def test_chapterless_title_end_to_end(harness, keyed, settings, mkv_script, monkeypatch, chapterless_rip):
+    """No chapters: the title is searched for breaks, cut at them, and split at timestamps."""
+    scan = SCAN.replace('TINFO:0,8,0,"6"', 'TINFO:0,8,0,"1"')
+    with respx.mock(assert_all_called=False) as router:
+        mock_show(router, "seagull-manor")
+        async with harness() as h:
+            job = await single_title_job(h, monkeypatch, settings, mkv_script, chapterless_rip, scan)
+            sp = job.tv.split
+            assert "with no chapters" in sp.reason
+            assert sp.state == "ready" and sp.marks_from == "scan" and sp.kinds == ["start", "break", "break", "break"]
+            assert [round(t) for t in sp.chapters] == [0, 900, 1800, 3480]
+            assert sp.cuts == [2, 3] and sp.breaks[1:] == [0.5, 1.0, 1.0]
+            parts = [m for m in job.tv.mapping if m.part_of == 0]
+            assert [m.episodes[0].episode for m in parts] == [1, 2, 3]
+            assert await h.m.split_thumb(job.id, 0, 1)  # grabbed when asked for
+            assert await h.m.title_thumb(job.id, 1001) == h.m.split_thumb_path(job.id, 0, 2)
+            assert await h.m.split_thumb(job.id, 0, 9) is None
+
+            # A cut by hand at 45:00 has no break near it, so it goes exactly there.
+            job = await h.m.tv_split(job.id, None, None, cut_at=2700)
+            sp = job.tv.split
+            assert [round(t) for t in sp.chapters] == [0, 900, 1800, 2700, 3480]
+            assert sp.kinds[3] == "manual" and sp.cuts == [2, 3, 4] and sp.proposed == [2, 4] and sp.edited
+            # Near a break it moves to the break, which is already a mark.
+            job = await h.m.tv_split(job.id, [2, 4], None, cut_at=905)
+            assert job.tv.split.cuts == [1, 2, 4] and len(job.tv.split.chapters) == 5
+            with pytest.raises(ValueError, match="inside the title"):
+                await h.m.tv_split(job.id, None, None, cut_at=99999)
+            job = await h.m.tv_split(job.id, [2, 4], None)
+            assert not job.tv.split.edited
+
+            await h.m.tv_confirm(job.id, [])
+            done = await h.wait_job(lambda j: j.state in (JobState.done, JobState.failed))
+            events = [e.message for e in h.db.events(done.id)]
+    assert done.state == JobState.done, done.problem
+    assert any("searched for black frames and silence" in e for e in events)
+    assert any("Split title 0 into 3 files" in e for e in events)
+    season = settings.library_dir / "TV/Seagull Manor (1975)/Season 01"
+    assert len(list(season.iterdir())) == 3

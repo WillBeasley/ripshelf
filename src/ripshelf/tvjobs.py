@@ -13,6 +13,7 @@ A disc with its episodes in one long title has that title split at chapters
 from __future__ import annotations
 
 import asyncio
+import bisect
 import logging
 import shutil
 import statistics
@@ -84,10 +85,10 @@ class TvMixin:
         evidence = list(sh.evidence)
         evidence += [h[0].upper() + h[1:] for h in tvl.hints]
         long = max(job.titles, key=lambda t: t.duration_s, default=None)
-        one_long = bool(long and long.duration_s >= shape.FEATURE_MIN_S and long.chapters >= tvsplit.MIN_CHAPTERS)
+        one_long = bool(long and tvsplit.may_hold_several(long))
         is_tv = sh.looks_like_tv or (tvl.looks_like_tv and (len(sh.episodes) >= 2 or one_long))
         if is_tv and not sh.looks_like_tv and len(sh.episodes) < 2:
-            evidence.append(f"title {long.index} is long, with {long.chapters} chapters, so maybe several episodes")
+            evidence.append(f"title {long.index} is {round(long.duration_s / 60)} min, so maybe several episodes")
         if job.disc_match:  # the disc database knows
             is_tv = job.disc_match.media == MediaKind.tv
             evidence.insert(0, f"TheDiscDB lists it as {'a TV disc' if is_tv else 'a film'}")
@@ -198,8 +199,7 @@ class TvMixin:
                 ordered = self._ordered_episode_titles(job)
                 eps = [t.duration_s for t in ordered]
                 typical = sorted(eps)[len(eps) // 2] if eps else None
-                if len(ordered) == 1 and ordered[0].duration_s >= shape.FEATURE_MIN_S \
-                        and ordered[0].chapters >= tvsplit.MIN_CHAPTERS:
+                if len(ordered) == 1 and tvsplit.may_hold_several(ordered[0]):
                     typical = None  # one long title, maybe several episodes, so no episode length
                 shows = await self._find_shows(tmdb, name, typical) if name else []
                 if name:
@@ -504,8 +504,11 @@ class TvMixin:
                          note="pick the episode, or paste the run order from the case") for t in ordered]
 
     async def _analyse_split(self, job_id: int) -> None:
-        """Read the long title's chapters from the rip, look for breaks at each chapter mark,
-        grab a frame after each, and propose the cuts."""
+        """Find the marks the long title can be cut at, and propose the cuts.
+
+        Those are its chapters, each checked for a break (black frames, silence) and
+        with a frame grabbed after it. With fewer chapters than episodes, the whole title
+        is searched for breaks instead, which decodes all of it."""
         job = self.db.get_job(job_id)
         sp = job.tv.split if job and job.tv else None
         if not sp or sp.state != "waiting" or sp.title_index not in job.rip.files:
@@ -513,38 +516,91 @@ class TvMixin:
         idx, path = sp.title_index, Path(job.rip.files[sp.title_index])
         chapters = await tvsplit.read_chapters(self.s.ffprobe, path)
         length = await verify.duration(self.s.ffprobe, path) or float(sp.duration_s)
-        breaks: list[float | None] = [None] * len(chapters or [])
-        if chapters and len(chapters) >= 2:
-            thumbs = self.work_dir(job) / "thumbs"
+        marks: list[float] = []
+        error = "ffprobe could not read the rip's chapters" if chapters is None else None
+        if chapters is not None and tvsplit.enough_chapters(len(chapters), sp.expected):
+            marks, kinds, source = chapters, ["chapter"] * len(chapters), "chapters"
+            breaks: list[float | None] = [None] * len(chapters)
             gate = asyncio.Semaphore(4)
 
             async def look(k: int, at: float) -> None:
                 async with gate:
                     if 0 < k <= tvsplit.MAX_CHECKED:
                         breaks[k] = await tvsplit.break_score(self.s.ffmpeg, path, at)
-                    await verify.thumbnail(self.s.ffmpeg, path, thumbs / f"split-{idx}-{k}.jpg",
-                                           at_s=max(0.0, min(at + tvsplit.THUMB_AFTER_S, length - 1)))
+                    await self._grab_mark(job, idx, path, at, length)
 
             await asyncio.gather(*(look(k, at) for k, at in enumerate(chapters)))
+        elif chapters is not None:
+            self._event(job, "info", f"Title {idx} has {len(chapters) or 'no'} chapters for about {sp.expected} "
+                        "episodes, so it's searched for black frames and silence to cut at (this decodes all of it)")
+            found = await tvsplit.scan_breaks(self.s.ffmpeg, path, length)
+            if found is None:
+                error = "ffmpeg could not search it for black frames and silence"
+            else:
+                marks = [0.0, *(br.at for br in found)]
+                kinds, source = ["start"] + ["break"] * len(found), "scan"
+                breaks = [None, *(br.score for br in found)]
+                error = None if found else "it has no chapters to cut at, and no black frames or silence either"
         job = self.db.get_job(job_id)
         sp = job.tv.split if job.tv else None
         if not sp or sp.title_index != idx or sp.state != "waiting":
             return
-        if not chapters or len(chapters) < 2:
-            sp.state, sp.error = "failed", "the rip has no chapters to split at"
+        if error or len(marks) < 2:
+            sp.state, sp.error = "failed", error or "the rip has no chapters to split at"
             self._event(job, "warning", f"Title {idx} can't be split into episodes: {sp.error}")
         else:
-            sp.state, sp.chapters, sp.breaks, sp.duration_s = "ready", chapters, breaks, round(length, 3)
+            sp.state, sp.chapters, sp.kinds, sp.breaks = "ready", marks, kinds, breaks
+            sp.marks_from, sp.duration_s = source, round(length, 3)
             if not sp.edited:
                 self._cut(job, job.tv)
             self._remap(job, job.tv)
-            self._event(job, "info", f"Title {idx} has {len(chapters)} chapters. Proposed {len(sp.cuts) + 1} "
+            what = f"{len(marks)} chapters" if source == "chapters" else f"{len(marks) - 1} breaks"
+            self._event(job, "info", f"Title {idx} has {what}. Proposed {len(sp.cuts) + 1} "
                         f"episodes: {sp.note}; confidence {sp.confidence:.0%}")
         self._check_plan(job)
         self._save(job)
 
-    async def tv_split(self, job_id: int, cuts: list[int] | None, off: bool | None) -> JobRecord:
-        """Change where the long title is cut, keep it whole (``off``), or split it after all."""
+    def _mark_thumb(self, job: JobRecord, title_index: int, at: float) -> Path:
+        # By time, not mark number, as a cut put in by hand renumbers the marks after it.
+        return self.work_dir(job) / "thumbs" / f"split-{int(title_index)}-{round(at * 1000)}.jpg"
+
+    async def _grab_mark(self, job: JobRecord, title_index: int, src: Path, at: float, length: float) -> Path | None:
+        out = self._mark_thumb(job, title_index, at)
+        if not out.exists():
+            await verify.thumbnail(self.s.ffmpeg, src, out,
+                                   at_s=max(0.0, min(at + tvsplit.THUMB_AFTER_S, length - 1)))
+        return out if out.exists() else None
+
+    async def _add_cut(self, job: JobRecord, at: float) -> str:
+        """Cut at ``at`` (s), or at the best break within ``SNAP_S`` of it, adding a mark there
+        unless one is already that close. Says where it went."""
+        sp = job.tv.split
+        if not 0 < at < sp.duration_s:
+            raise ValueError(f"a cut must be inside the title (0:00 to {_clock(sp.duration_s)})")
+        src = job.rip.files.get(sp.title_index)
+        br = await tvsplit.snap(self.s.ffmpeg, Path(src), at) if src and Path(src).exists() else None
+        where = br.at if br and 0 < br.at < sp.duration_s else at
+        how = ("at black frames and silence" if br.score >= 1 else "at black frames or silence") \
+            + f" near {_clock(at)}" if br else "with no break nearby"
+        kinds = sp.kinds + ["chapter"] * (len(sp.chapters) - len(sp.kinds))  # splits saved before kinds
+        near = min(range(len(sp.chapters)), key=lambda k: abs(sp.chapters[k] - where))
+        if abs(sp.chapters[near] - where) < tvsplit.SAME_BREAK_S and near > 0:
+            k = near
+        else:
+            k = bisect.bisect(sp.chapters, where)
+            sp.chapters.insert(k, round(where, 3))
+            kinds.insert(k, "manual")
+            sp.breaks.insert(k, br.score if br else None)
+            sp.cuts = [c + (c >= k) for c in sp.cuts]
+            sp.proposed = [c + (c >= k) for c in sp.proposed]
+        sp.kinds = kinds
+        sp.cuts = sorted({*sp.cuts, k})
+        return f"Cut title {sp.title_index} at {_clock(sp.chapters[k])}, {how}"
+
+    async def tv_split(self, job_id: int, cuts: list[int] | None, off: bool | None,
+                       cut_at: float | None = None) -> JobRecord:
+        """Change where the long title is cut, add a cut anywhere (``cut_at``), keep it whole
+        (``off``), or split it after all."""
         job = self._tv_job(job_id)
         plan = job.tv
         if not plan or not plan.show:
@@ -559,14 +615,17 @@ class TvMixin:
                 raise ValueError("no title on this disc is long enough to hold several episodes")
             if plan.split.state == "waiting" and job.rip.state == RipState.done:
                 self._spawn(self.drives[job.drive_id], self._after_tv_rip(job.id), job.id)
-        if cuts is not None:
+        if cuts is not None or cut_at is not None:
             sp = plan.split
             if not sp or sp.state != "ready":
                 raise ValueError("there are no chapters to cut at yet")
-            bad = [c for c in cuts if not 0 < c < len(sp.chapters)]
+            bad = [c for c in cuts or [] if not 0 < c < len(sp.chapters)]
             if bad:
                 raise ValueError(f"chapter {bad[0]} can't start an episode (pick 1 to {len(sp.chapters) - 1})")
-            sp.cuts = sorted(set(cuts))
+            if cuts is not None:
+                sp.cuts = sorted(set(cuts))
+            if cut_at is not None:
+                self._event(job, "info", await self._add_cut(job, cut_at))
             sp.edited = sp.cuts != sp.proposed
         plan.user_edited = True
         self._remap(job, plan)
@@ -584,11 +643,16 @@ class TvMixin:
                                     "is missing", actions=["retry"]))
             return False
         n = len(sp.cuts) + 1
+        # At the chapters when every cut is one, else at the cuts' times (each at the next keyframe).
+        on_chapters = all(c >= len(sp.kinds) or sp.kinds[c] == "chapter" for c in sp.cuts)
+        times = None if on_chapters else [sp.chapters[c] for c in sp.cuts]
+        where = (f"at chapters {', '.join(str(c + 1) for c in sp.cuts)}" if on_chapters
+                 else f"at {', '.join(_clock(t) for t in times)}")
         self._set_state(job, JobState.finalising, f"Splitting title {sp.title_index} into {n} episodes")
-        self._set_step(job, "Splitting into episodes", f"Title {sp.title_index} at chapters "
-                       + ", ".join(str(c + 1) for c in sp.cuts) + ", without re-encoding")
+        self._set_step(job, "Splitting into episodes", f"Title {sp.title_index} {where}, without re-encoding")
         try:
-            files = await tvsplit.split_file(tvsplit.default_mkvmerge(self.s.mkvmerge), Path(src), self.scratch_dir(job) / "split", sp.cuts)
+            files = await tvsplit.split_file(tvsplit.default_mkvmerge(self.s.mkvmerge), Path(src),
+                                             self.scratch_dir(job) / "split", sp.cuts, times)
         except tvsplit.SplitError as e:
             self._fail(job, Problem(code="split_failed", message=f"Could not split title {sp.title_index}: {e}",
                                     hint="Splitting needs mkvmerge, from MKVToolNix (the image has it)",
@@ -1063,20 +1127,47 @@ class TvMixin:
         job = self.db.get_job(job_id)
         if not job:
             return None
-        m = next((m for m in job.tv.mapping if m.title_index == title_index), None) if job.tv else None
-        if m and m.part_of is not None and job.tv.split:  # the frame after the part's first chapter
-            first = next((c for a, _, c in tvsplit.parts(job.tv.split.chapters, job.tv.split.duration_s,
-                                                          job.tv.split.cuts) if round(a, 2) == m.start_s), None)
-            return self.split_thumb_path(job_id, m.part_of, first) if first is not None else None
+        first = self._part_mark(job, title_index)
+        if first is not None:  # the frame after the part's first mark
+            return self.split_thumb_path(job_id, job.tv.split.title_index, first)
         p = self.work_dir(job) / "thumbs" / f"{int(title_index)}.jpg"
         return p if p.exists() else None
 
-    def split_thumb_path(self, job_id: int, title_index: int, chapter: int) -> Path | None:
+    async def title_thumb(self, job_id: int, title_index: int) -> Path | None:
+        """``thumbnail_path``, grabbing a part's frame now if it wasn't already."""
         job = self.db.get_job(job_id)
-        if not job:
+        first = self._part_mark(job, title_index) if job else None
+        if first is not None:
+            return await self.split_thumb(job_id, job.tv.split.title_index, first)
+        return self.thumbnail_path(job_id, title_index)
+
+    def _part_mark(self, job: JobRecord, title_index: int) -> int | None:
+        m = next((m for m in job.tv.mapping if m.title_index == title_index), None) if job.tv else None
+        if not (m and m.part_of is not None and job.tv.split):
             return None
-        p = self.work_dir(job) / "thumbs" / f"split-{int(title_index)}-{int(chapter)}.jpg"
+        sp = job.tv.split
+        return next((c for a, _, c in tvsplit.parts(sp.chapters, sp.duration_s, sp.cuts) if round(a, 2) == m.start_s),
+                    None)
+
+    def split_thumb_path(self, job_id: int, title_index: int, mark: int) -> Path | None:
+        job = self.db.get_job(job_id)
+        sp = job.tv.split if job and job.tv else None
+        if not sp or sp.title_index != title_index or not 0 <= mark < len(sp.chapters):
+            return None
+        p = self._mark_thumb(job, title_index, sp.chapters[mark])
         return p if p.exists() else None
+
+    async def split_thumb(self, job_id: int, title_index: int, mark: int) -> Path | None:
+        """The frame just after a mark, grabbed now if it wasn't already (a scan finds many)."""
+        p = self.split_thumb_path(job_id, title_index, mark)
+        if p:
+            return p
+        job = self.db.get_job(job_id)
+        sp = job.tv.split if job and job.tv else None
+        src = job.rip.files.get(title_index) if sp and sp.title_index == title_index else None
+        if not src or not Path(src).exists() or not 0 <= mark < len(sp.chapters):
+            return None
+        return await self._grab_mark(job, title_index, Path(src), sp.chapters[mark], sp.duration_s)
 
     # --- finalise -----------------------------------------------------------------------
 
@@ -1262,6 +1353,11 @@ def _disc_numbers(job: JobRecord) -> TvLabel:
         if named.season is not None:
             return named
     return tvl
+
+
+def _clock(s: float) -> str:
+    s = int(s)
+    return f"{s // 3600}:{s // 60 % 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
 
 
 def _contiguous(eps: list[Episode]) -> bool:
