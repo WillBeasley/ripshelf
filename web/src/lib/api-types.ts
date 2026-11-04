@@ -1065,7 +1065,8 @@ export interface TitleMap {
   start_s: number | null;
 }
 /**
- * One long title holding several episodes, to be split at its chapter marks.
+ * One long title holding several episodes, to be split at its chapter marks, or at
+ * black frames and silence found in it when it has too few chapters.
  *
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "TitleSplit".
@@ -1085,15 +1086,23 @@ export interface TitleSplit {
   state: "waiting" | "ready" | "failed" | "split";
   error: string | null;
   /**
-   * chapter start times (s), read from the rip
+   * marks it can be cut at (s): its chapters, or breaks found in it, and cuts put in by hand
    */
   chapters: number[];
   /**
-   * per chapter, 0..1: black frames and silence at its mark (null = not checked)
+   * per mark: a chapter, the start, a break found by a scan, a cut put in by hand
+   */
+  kinds: ("chapter" | "start" | "break" | "manual")[];
+  /**
+   * the marks are its chapters, or breaks found by searching all of it
+   */
+  marks_from: "chapters" | "scan";
+  /**
+   * per mark, 0..1: black frames and silence at it (null = not checked)
    */
   breaks: (number | null)[];
   /**
-   * chapters (0-based) where an episode starts
+   * marks (0-based) where an episode starts
    */
   cuts: number[];
   /**
@@ -2166,9 +2175,13 @@ export interface TvProposeRequest {
  */
 export interface TvSplitRequest {
   /**
-   * chapters (0-based) where an episode starts
+   * marks (0-based) where an episode starts
    */
   cuts: number[] | null;
+  /**
+   * also cut here (s), or at a break within 10 s of it
+   */
+  cut_at: number | null;
   /**
    * true keeps the long title whole, false splits it again
    */
