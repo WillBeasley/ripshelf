@@ -333,6 +333,11 @@ class Database:
         return [r[0] for r in self.conn.execute(
             "SELECT disc_number FROM contributions WHERE release_id=? AND disc_number IS NOT NULL", (release_id,))]
 
+    def release_jobs(self, release_id: str) -> list[int]:
+        """The jobs of the discs in a release, oldest first."""
+        return [r[0] for r in self.conn.execute(
+            "SELECT job_id FROM contributions WHERE release_id=? ORDER BY assigned_at, job_id", (release_id,))]
+
     def assign_release(self, job_id: int, release_id: str, group_key: str, disc_number: int | None) -> None:
         self.conn.execute(
             "INSERT OR REPLACE INTO contributions (job_id, release_id, group_key, disc_number, assigned_at) "

@@ -27,6 +27,8 @@ from .models import (
     ContributionExtrasRequest,
     ContributionReleaseRequest,
     ContributionView,
+    CoverFromUrlRequest,
+    CoverSide,
     DeleteJobsRequest,
     DeleteJobsResult,
     Drive,
@@ -46,6 +48,9 @@ from .models import (
     MediaServer,
     Preset,
     ProviderInfo,
+    ReleaseDetails,
+    ReleaseLookup,
+    ReleaseLookupRequest,
     SearchRequest,
     ServerLibrariesRequest,
     ServerLibrary,
@@ -62,6 +67,8 @@ from .models import (
     TvProposeRequest,
     TvSplitRequest,
 )
+from .providers import contribute as contribute_provider
+from .providers import release_info
 from .tv import split as tvsplit
 
 SSE_HEARTBEAT_S = 15
@@ -337,6 +344,55 @@ async def contribution_release(job_id: int, body: ContributionReleaseRequest, re
         raise HTTPException(404) from None
     except ValueError as e:
         raise bad_request(e) from None
+
+
+async def _contribution_call(fn):
+    try:
+        return await fn()
+    except KeyError:
+        raise HTTPException(404) from None
+    except ValueError as e:
+        raise bad_request(e) from None
+
+
+@api.put("/jobs/{job_id}/thediscdb/details", response_model=ContributionView)
+async def contribution_details(job_id: int, body: ReleaseDetails, request: Request):
+    """The release's UPC, ASIN, date, locale and region (shown when finishing on TheDiscDB)."""
+    return await _contribution_call(lambda: manager(request).contribution_details(job_id, body))
+
+
+@api.post("/jobs/{job_id}/thediscdb/lookup", response_model=ReleaseLookup)
+async def contribution_lookup(job_id: int, body: ReleaseLookupRequest, request: Request):
+    """Suggestions for the release's details, from the barcode or the title. Nothing is saved."""
+    return await _contribution_call(lambda: manager(request).release_lookup(job_id, body.upc))
+
+
+@api.get("/jobs/{job_id}/thediscdb/cover/{side}")
+async def contribution_cover(job_id: int, side: CoverSide, request: Request):
+    p = manager(request).cover_file(job_id, side)
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, media_type=contribute_provider.COVER_EXTS.get(p.suffix.lstrip("."), "image/jpeg"),
+                        headers={"Cache-Control": "no-cache"})
+
+
+@api.put("/jobs/{job_id}/thediscdb/cover/{side}", response_model=ContributionView)
+async def contribution_cover_upload(job_id: int, side: CoverSide, request: Request,
+                                    file: Annotated[UploadFile, File()]):
+    """A photo or scan of the cover (JPEG, PNG or WebP, at most 20 MB), sent with the disc."""
+    data = await file.read(release_info.MAX_COVER_BYTES + 1)
+    return await _contribution_call(lambda: manager(request).set_cover(job_id, side, data))
+
+
+@api.post("/jobs/{job_id}/thediscdb/cover/{side}/from-url", response_model=ContributionView)
+async def contribution_cover_from_url(job_id: int, side: CoverSide, body: CoverFromUrlRequest, request: Request):
+    """Use a product picture a lookup found as the cover."""
+    return await _contribution_call(lambda: manager(request).cover_from_url(job_id, side, body.url))
+
+
+@api.delete("/jobs/{job_id}/thediscdb/cover/{side}", response_model=ContributionView)
+async def contribution_cover_delete(job_id: int, side: CoverSide, request: Request):
+    return await _contribution_call(lambda: manager(request).delete_cover(job_id, side))
 
 
 @api.get("/movies/search", response_model=list[Candidate])

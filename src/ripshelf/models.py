@@ -6,11 +6,11 @@ TypeScript types from them, so change them here first.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
 from .makemkv.parse import RipProgress
 
@@ -357,8 +357,11 @@ class Preset(BaseModel):
 
 
 ContributeMode = Literal["off", "ask", "auto"]
-# TheDiscDB's item types for what isn't the film or an episode.
-ExtraKind = Literal["Extra", "Featurette", "DeletedScene", "Trailer"]
+# TheDiscDB's item types for what isn't the film or an episode: every type its site
+# offers. All but Trailer and DeletedScene count as extras when it identifies discs.
+ExtraKind = Literal["Extra", "Featurette", "DeletedScene", "Trailer", "Interview", "Scene", "Music",
+                    "Short", "Other"]
+CoverSide = Literal["front", "back"]
 
 
 class ContributionExtra(BaseModel):
@@ -367,6 +370,34 @@ class ContributionExtra(BaseModel):
     title_index: int
     kind: ExtraKind = "Extra"
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+
+
+class ReleaseDetails(BaseModel):
+    """What TheDiscDB asks about the release (the box) rather than the disc. Its import
+    takes the UPC and the covers, and the rest is typed into its form when finishing, so
+    ripshelf keeps them to show there."""
+
+    upc: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^(\d{12,13})?$")] | None = Field(
+        None, description="the barcode on the box, 12 (UPC) or 13 (EAN) digits")
+    asin: Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True,
+                                           pattern=r"^([A-Za-z0-9]{10})?$")] | None = Field(
+        None, description="Amazon's product id for this release")
+    asin_unavailable: bool = Field(False, description="Amazon doesn't sell this release")
+    release_date: date | None = Field(None, description="when this release came out")
+    locale: Annotated[str, StringConstraints(strip_whitespace=True, max_length=16,
+                                             pattern=r"^([A-Za-z]{2,3}(-[A-Za-z]{2})?)?$")] | None = Field(
+        None, description="language and country the release is for, such as en-GB")
+    region_code: Annotated[str, StringConstraints(strip_whitespace=True, max_length=20)] | None = Field(
+        None, description="the disc's playback regions, such as 2, B or Region free")
+
+    @field_validator("upc", "asin", "locale", "region_code", mode="after")
+    @classmethod
+    def _blank_is_none(cls, v: str | None) -> str | None:
+        return v or None
+
+    def empty(self) -> bool:
+        return not (self.upc or self.asin or self.asin_unavailable or self.release_date or self.locale
+                    or self.region_code)
 
 
 class Contribution(BaseModel):
@@ -386,6 +417,9 @@ class Contribution(BaseModel):
     extras: list[ContributionExtra] = Field(default=[], description="titles sent as extras, with their names; "
                                                                     "titles that aren't the film, an episode "
                                                                     "or one of these are left out")
+    details: ReleaseDetails = Field(default_factory=ReleaseDetails, description="the release's UPC, ASIN, "
+                                                                                "date, locale and region")
+    covers: list[CoverSide] = Field(default=[], description="cover pictures added, sent with the disc")
 
 
 class Job(BaseModel):
@@ -448,6 +482,36 @@ class ContributionView(BaseModel):
     base_url: str
     todo: str | None = Field(None, description="what the user has to do before it can be sent")
     titles: list[ContributionTitle] = Field(default=[], description="the disc's titles, for naming the extras")
+
+
+class ReleaseProduct(BaseModel):
+    """A product listing a lookup found: maybe this release."""
+
+    upc: str | None = None
+    title: str
+    brand: str | None = None
+    asin: str | None = None
+    images: list[str] = Field(default=[], description="product pictures, usable as the front cover")
+
+
+class ReleaseLookupRequest(BaseModel):
+    upc: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{12,13}$")] | None = Field(
+        None, description="look this barcode up; without one, the release is searched for by title and format")
+
+
+class ReleaseLookup(BaseModel):
+    """Suggestions for the release details, for the user to take or leave."""
+
+    products: list[ReleaseProduct] = Field(default=[], description="listings that may be this release, best "
+                                                                   "first")
+    suggested: ReleaseDetails = Field(default_factory=ReleaseDetails, description="values worked out without a "
+                                                                                  "product: the date from TMDB, "
+                                                                                  "the region read from the disc")
+    notes: list[str] = Field(default=[], description="where each value came from, and what couldn't be found")
+
+
+class CoverFromUrlRequest(BaseModel):
+    url: Annotated[str, StringConstraints(strip_whitespace=True, min_length=8, max_length=2000)]
 
 
 class ContributionExtrasRequest(BaseModel):
