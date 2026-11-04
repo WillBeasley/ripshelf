@@ -127,8 +127,9 @@ export const api = {
 		call<Job>('POST', `/jobs/${id}/tv/confirm`, { mapping }),
 	tvSplit: (id: number, body: TvSplitRequest) => call<Job>('POST', `/jobs/${id}/tv/split`, body),
 	thumbUrl: (id: number, title: number) => `/api/jobs/${id}/thumbs/${title}.jpg`,
-	splitThumbUrl: (id: number, title: number, chapter: number) =>
-		`/api/jobs/${id}/split-thumbs/${title}/${chapter}.jpg`,
+	// ``at`` (s) keeps the browser's copy right when a cut by hand renumbers the marks.
+	splitThumbUrl: (id: number, title: number, mark: number, at: number) =>
+		`/api/jobs/${id}/split-thumbs/${title}/${mark}.jpg?t=${Math.round(at * 1000)}`,
 	collections: () => call<Collection[]>('GET', '/collections'),
 	collection: (id: number) => call<CollectionDetail>('GET', `/collections/${id}`),
 	eject: (driveId: string) => call<void>('POST', `/drives/${driveId}/eject`),

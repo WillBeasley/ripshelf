@@ -19,14 +19,14 @@ detected → scanning → identifying → ripping → [transcoding] → finalisi
 
 ### TV discs with every episode in one title
 
-Some TV DVDs have no title per episode, only one long title with a few chapters in each episode. When a title is at least 1.8 times the season's typical episode runtime, has at least one chapter per episode, and no other title is one episode long, ripshelf rips it whole and then splits it:
+Some TV DVDs have no title per episode, only one long title with a few chapters in each episode. When a title is at least 1.8 times the season's typical episode runtime and no other title is one episode long, ripshelf rips it whole and then splits it:
 
-1. The chapter starts are read from the rip (ffprobe), and each chapter mark is checked for black frames and silence (ffmpeg), which is what a break between episodes usually looks like.
+1. The chapter starts are read from the rip (ffprobe), and each chapter mark is checked for black frames and silence (ffmpeg), which is what a break between episodes usually looks like. A title with fewer chapters than episodes (often none at all) is searched end to end for black frames and silence instead, and the breaks found are where it can be cut. That decodes the whole title, so it takes a few minutes for a DVD and longer for a Blu-ray.
 2. Consecutive chapters are grouped into episodes to fit the runtimes from TMDB, TheTVDB or TVmaze, starting at the disc's first episode. A chapter mark with black and silence makes a cut there more likely. The proposal comes with a confidence score.
-3. The Review card (and the job's details) show the title as a timeline with a tick at each chapter, the proposed cuts, and a frame from just after each cut. Click a tick to cut there or not, then pick each part's episode in the table as usual. "Keep it as one title" maps the title as a single title instead.
-4. On confirm, `mkvmerge` (MKVToolNix, included in the image) splits the file at the chosen chapters without re-encoding. The parts are then transcoded and copied like any episode.
+3. The Review card (and the job's details) show the title as a timeline with a tick at each chapter (or break found), the proposed cuts, and a frame from just after each cut. Click a tick to cut there or not. Click anywhere else on the bar, or type a time under it, to cut there: the cut moves to black frames or silence within 10 seconds when there are any. Then pick each part's episode in the table as usual. "Keep it as one title" maps the title as a single title instead.
+4. On confirm, `mkvmerge` (MKVToolNix, included in the image) splits the file at the chosen chapters, or at the cuts' times (each at the next keyframe), without re-encoding. The parts are then transcoded and copied like any episode.
 
-On a compilation disc (episodes from anywhere in the show), each part is fitted to the show's typical runtime instead, and starts with no episode picked: pick them in the table, or paste the run order from the case. These discs always wait for review. If TheDiscDB lists the long title as an episode, that episode is where the parts start. If it lists a title per episode, nothing is split. A TV label (season, volume) with one long title of three or more chapters counts as a TV disc; without one, use "This is a TV disc" on the Review card.
+On a compilation disc (episodes from anywhere in the show), each part is fitted to the show's typical runtime instead, and starts with no episode picked: pick them in the table, or paste the run order from the case. These discs always wait for review. If TheDiscDB lists the long title as an episode, that episode is where the parts start. If it lists a title per episode, nothing is split. A TV label (season, volume) with one title of 40 minutes or more counts as a TV disc; without one, use "This is a TV disc" on the Review card.
 
 ## Ripping
 

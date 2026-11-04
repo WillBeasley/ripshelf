@@ -440,7 +440,7 @@ class TvMixin:
             title_index=title.index, duration_s=title.duration_s, expected=cand.episodes, reason=cand.reason)
         sp.expected, sp.reason, sp.was = cand.episodes, cand.reason, row.role
         row.role, row.episodes, row.match_cost = TitleRole.skip, [], None
-        row.note = f"holds about {cand.episodes} episodes, so it's split at chapters into the parts below"
+        row.note = f"holds about {cand.episodes} episodes, so it's split into the parts below"
         plan.split = sp
         notes = [f"{cand.reason[0].upper()}{cand.reason[1:]}, so it's split into episodes at its chapters"]
         first = listed.get(title.index)
@@ -590,7 +590,7 @@ class TvMixin:
             k = bisect.bisect(sp.chapters, where)
             sp.chapters.insert(k, round(where, 3))
             kinds.insert(k, "manual")
-            sp.breaks.insert(k, br.score if br else None)
+            sp.breaks.insert(k, br.score if br else 0.0 if src else None)  # None: couldn't look
             sp.cuts = [c + (c >= k) for c in sp.cuts]
             sp.proposed = [c + (c >= k) for c in sp.proposed]
         sp.kinds = kinds
