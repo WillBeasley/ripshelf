@@ -67,7 +67,7 @@ def test_few_chapters_still_detected(chapters, says):
 
 
 def test_one_chapter_per_episode_is_enough():
-    """Fraggle Rock UK DVD: 50:22, chapter 2 at 24:38.56, episodes of 24 min."""
+    """A Burrow Folk DVD: 50:22, chapter 2 at 24:38.56, episodes of 24 min."""
     got = split.propose_cuts([0.0, 1478.56], 3022.72, [None, 1.0], eps(24, 24))
     assert got.cuts == [1] and got.confidence == 1.0
     assert split.may_hold_several(title(0, 40)) and not split.may_hold_several(title(0, 39))
