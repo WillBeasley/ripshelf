@@ -17,6 +17,7 @@ Start with [Installation](installation.md).
 |---|---|
 | [Metadata providers](providers.md) | TheDiscDB, TMDB, TheTVDB, TVmaze and OMDb, their keys, and the order they're asked in |
 | [Contributing to TheDiscDB](thediscdb-contributing.md) | sending discs you confirmed back to TheDiscDB (opt-in), what is sent and what never is |
+| [TV discs in one title](tv-splitting.md) | discs with every episode in one long title: how they're cut into episodes, and reviewing the cuts |
 | [Catalogue numbers](catalogue.md) | looking up labels that are a publisher's catalogue number, via a self-hosted SearXNG web search |
 
 ## Ripping and running

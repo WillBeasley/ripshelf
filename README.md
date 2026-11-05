@@ -115,6 +115,7 @@ ripshelf depends on these projects, and most of them are free to use:
 | [Settings](docs/settings.md) | every setting and its environment variable |
 | [Metadata providers](docs/providers.md) | TheDiscDB, TMDB, TheTVDB, TVmaze and OMDb, their keys, and the order they're asked in |
 | [Contributing to TheDiscDB](docs/thediscdb-contributing.md) | sending confirmed discs back to TheDiscDB (opt-in) |
+| [TV discs in one title](docs/tv-splitting.md) | discs with every episode in one long title, cut into episodes |
 | [Catalogue numbers](docs/catalogue.md) | looking up catalogue-number labels on the web |
 | [Full disc backups](docs/backup.md) | MakeMKV's backup ("ISO mode") instead of MKV titles |
 | [One container or one per drive](docs/modes.md) | the single container, or a worker container per drive |
