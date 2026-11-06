@@ -118,6 +118,12 @@ EDITABLE = {
     "notify_batch_s",
     "verify_order",
     "backup_keep",
+    "scanner_enabled",
+    "scanner_url",
+    "scanner_dpi",
+    "scanner_source",
+    "scanner_trim",
+    "scans_to_library",
 }
 
 
@@ -296,6 +302,16 @@ class Settings(BaseSettings):
     tv_auto_threshold: float = Field(0.9, ge=0.5, le=1)
     # Check episode order against the play-all after ripping (needs ffmpeg).
     verify_order: bool = True
+    # A network scanner (eSCL, also called AirScan) for scanning the box, as
+    # http://printer/eSCL. Off until set up in Settings.
+    scanner_enabled: bool = False
+    scanner_url: str | None = None
+    scanner_dpi: int = 300
+    scanner_source: Literal["platen", "feeder"] = "platen"
+    # Cut away the empty glass around what was scanned (the original is kept).
+    scanner_trim: bool = True
+    # Copy a job's scans into the film's or show's folder, in scans/.
+    scans_to_library: bool = True
 
     @property
     def settings_file(self) -> Path:

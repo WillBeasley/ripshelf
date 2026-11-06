@@ -22,6 +22,7 @@ from .models import MediaServer, SettingsTestResult, SettingsUpdate
 from .providers.omdb import Omdb, OmdbError
 from .providers.thediscdb import DiscDbError, TheDiscDb
 from .providers.tvmaze import Tvmaze, TvmazeError
+from .scanner.escl import Escl, ScannerError, base_url
 from .tv.tvdb import Tvdb, TvdbError
 
 
@@ -236,6 +237,37 @@ async def paths(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
                               details=[m for _, m in results])
 
 
+async def scanner(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
+    """Ask the scanner what it can do and what it's doing; nothing is scanned."""
+    url = _value(s, v, "scanner_url")
+    if not url:
+        return _fail("No scanner address")
+    try:
+        client = Escl(url)
+        caps = await client.capabilities()
+        st = await client.status()
+    except (ValueError, ScannerError) as e:
+        msg = str(e)
+        return _fail(msg[:1].upper() + msg[1:], f"Tried {_escl_base(url)}/ScannerCapabilities")
+    details = [f"Address: {client.base}"]
+    for name in caps.sources:
+        src = caps.source(name)
+        what = "Glass" if name == "platen" else "Feeder" + (" (both sides)" if caps.duplex else "")
+        mm = f"{src.max_width * 25.4 / 300:.0f} × {src.max_height * 25.4 / 300:.0f} mm"
+        details.append(f"{what}: up to {mm}, {', '.join(map(str, src.resolutions))} dpi")
+    if st.adf_state:
+        details.append(f"Feeder: {st.adf_state.removeprefix('ScannerAdf')}")
+    return SettingsTestResult(ok=True, message=f"{caps.model or 'The scanner'} answered ({st.state or 'state unknown'})",
+                              details=details)
+
+
+def _escl_base(url: str) -> str:
+    try:
+        return base_url(url)
+    except ValueError:
+        return url
+
+
 CHECKS = {
     "tmdb": tmdb,
     "tvdb": tvdb,
@@ -249,6 +281,7 @@ CHECKS = {
     "catalogue": catalogue,
     "makemkv": makemkv,
     "paths": paths,
+    "scanner": scanner,
 }
 
 # The secrets each check uses. A box left empty means "the saved one", so a pass

@@ -370,6 +370,58 @@ ExtraKind = Literal["Extra", "Featurette", "DeletedScene", "Trailer", "Interview
 CoverSide = Literal["front", "back"]
 
 
+# Pictures of the box: the front and back covers, the whole outer sheet (back, spine
+# and front side by side), its inside face, and booklet or insert pages.
+ScanKind = Literal["front", "back", "outside_full", "inside_full", "insert", "other"]
+ScanSource = Literal["scanner", "upload", "camera"]
+ScanRotate = Literal[0, 90, 180, 270]
+
+
+class ScanSplit(BaseModel):
+    """Where a whole outer sheet is cut into its back (left) and front (right) halves."""
+
+    position: float = Field(0.5, ge=0.2, le=0.8, description="the middle of the spine, as a fraction "
+                                                             "of the width")
+    spine: float = Field(0.05, ge=0, le=0.2, description="the spine's width, left out of both halves")
+    swap: bool = Field(False, description="the front is the left half")
+
+
+class CoverScan(BaseModel):
+    """A scan or photo of the disc's box, kept with the job (and filed in the library)."""
+
+    id: str
+    kind: ScanKind
+    source: ScanSource
+    page: int | None = Field(None, description="the page, for inserts scanned from the feeder")
+    created_at: datetime
+    content_type: str = Field(description="image/jpeg, image/png or image/webp")
+    width: int
+    height: int
+    sha256: str
+    size_bytes: int
+    rotate: ScanRotate = Field(0, description="turned clockwise by this much when shown or used")
+    crop: list[int] | None = Field(None, description="the picture within the scan, [left, top, right, "
+                                                     "bottom] in the original's pixels, when trimmed")
+    split: ScanSplit | None = Field(None, description="the cut last used for the covers, for a whole sheet")
+    library_path: str | None = Field(None, description="its copy in the library, once filed")
+
+
+ScannerSource = Literal["platen", "feeder"]
+ScannerState = Literal["scanning", "failed"]
+
+
+class ScannerRun(BaseModel):
+    """The scanner working for this job, or why it couldn't."""
+
+    state: ScannerState
+    kind: ScanKind
+    source: ScannerSource
+    duplex: bool = False
+    pages: int = Field(0, description="pages received so far")
+    started_at: datetime
+    message: str | None = None
+
+
 class ContributionExtra(BaseModel):
     """A title sent to TheDiscDB as an extra, under the name the user gave it."""
 
@@ -458,6 +510,8 @@ class Job(BaseModel):
     preset: Preset | None = Field(None, description="identified by hand before the scan finished; used once it does")
     disc_match: DiscMatch | None = Field(None, description="the disc as a disc database (TheDiscDB) knows it")
     contribution: Contribution | None = Field(None, description="this disc sent (or being sent) to TheDiscDB")
+    scans: list[CoverScan] = Field(default=[], description="scans and photos of the box")
+    scanner: ScannerRun | None = Field(None, description="a scan from the network scanner, under way or failed")
 
 
 class ContributionTitle(BaseModel):
@@ -518,6 +572,37 @@ class ReleaseLookup(BaseModel):
 
 class CoverFromUrlRequest(BaseModel):
     url: Annotated[str, StringConstraints(strip_whitespace=True, min_length=8, max_length=2000)]
+
+
+class ScanUpdate(BaseModel):
+    kind: ScanKind | None = None
+    page: int | None = Field(None, ge=1, le=999)
+    rotate: ScanRotate | None = None
+    trim: bool | None = Field(None, description="cut away the scanner's empty glass around the picture")
+
+
+class ScannerScanRequest(BaseModel):
+    kind: ScanKind
+    source: ScannerSource | None = Field(None, description="the glass or the feeder; the Settings default "
+                                                          "if left out")
+    duplex: bool = Field(False, description="both sides of each page (feeder only)")
+    dpi: int | None = Field(None, description="the Settings default if left out")
+
+
+class ScannerInfo(BaseModel):
+    """The network scanner, as it describes itself."""
+
+    enabled: bool
+    url: str | None = None
+    ok: bool = False
+    message: str | None = None
+    model: str | None = None
+    state: str | None = Field(None, description="Idle, Processing, Testing or Stopped")
+    adf_state: str | None = Field(None, description="the feeder's state, such as ScannerAdfLoaded")
+    sources: list[ScannerSource] = []
+    duplex: bool = False
+    resolutions: list[int] = []
+    busy_job: int | None = Field(None, description="the job the scanner is scanning for")
 
 
 class ContributionExtrasRequest(BaseModel):
@@ -589,7 +674,7 @@ class SetupProblem(BaseModel):
 
 TvUnmatched = Literal["extras", "specials", "skip"]
 SettingsCheck = Literal["tmdb", "tvdb", "tvmaze", "omdb", "thediscdb", "pushover", "emby", "jellyfin", "plex",
-                        "catalogue", "makemkv", "paths"]
+                        "catalogue", "makemkv", "paths", "scanner"]
 MediaServer = Literal["emby", "jellyfin", "plex"]
 TvEpisodeOrder = Literal["tmdb", "tvdb_aired", "tvdb_dvd"]
 NotifyEvent = Literal["disc", "review", "exists", "ripped", "transcoded", "copied", "done", "failed", "setup"]
@@ -709,6 +794,12 @@ class SettingsView(BaseModel):
     transcode_keep_original: bool = False
     transcode_parallel: int = 1
     vaapi_device: str = "/dev/dri/renderD128"
+    scanner_enabled: bool = False
+    scanner_url: str | None = None
+    scanner_dpi: int = 300
+    scanner_source: ScannerSource = "platen"
+    scanner_trim: bool = True
+    scans_to_library: bool = True
 
 
 class SettingsUpdate(BaseModel):
@@ -781,8 +872,12 @@ class SettingsUpdate(BaseModel):
     tv_dir: str | None = Field(None, description="empty for <library>/TV")
     disc_backups_dir: str | None = Field(None, description="empty for <library>/Disc backups")
     scratch_dir: str | None = None
-
-
+    scanner_enabled: bool | None = None
+    scanner_url: str | None = Field(None, max_length=300)
+    scanner_dpi: Literal[100, 150, 200, 300, 400, 600] | None = None
+    scanner_source: ScannerSource | None = None
+    scanner_trim: bool | None = None
+    scans_to_library: bool | None = None
 
 
 class SettingsTestRequest(BaseModel):

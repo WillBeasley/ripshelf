@@ -83,6 +83,7 @@ from .models import (
 )
 from .proc import WINDOWS
 from .providers import films, thediscdb
+from .scanjobs import ScansMixin
 from .transcodejobs import TranscodeMixin
 from .tv import verify
 from .tvjobs import TvMixin
@@ -148,7 +149,7 @@ class DriveRuntime:
     tasks: set[asyncio.Task] = field(default_factory=set)
 
 
-class Manager(TvMixin, TranscodeMixin, ContributeMixin):
+class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin):
     def __init__(self, settings: Settings, db: Database, backend: DriveBackend, bus: EventBus):
         self.s = settings
         self.db = db
@@ -167,6 +168,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
         self._setup_notified: set[str] = set()
         self._init_transcode()
         self._init_contribute()
+        self._init_scans()
         self.support = SupportFiles(settings.makemkv_files_dir)
         self.hub = WorkerHub(on_drives_changed=self._remote_drives,
                              local_ids=lambda: {i for i, d in self.drives.items() if not d.remote})
@@ -203,6 +205,9 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
             tasks += self._bg[job_id]
             self._cancel_bg(job_id)
         tasks += self._contrib_tasks.values()
+        if self._scanner_task:
+            self._scanner_task.cancel()
+            tasks.append(self._scanner_task)
         for d in self.drives.values():
             for proc in (d.scan, d.rip):
                 if proc:
@@ -1342,6 +1347,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
         job.problem = None
         self._set_state(job, JobState.done, f"Done: {dest.name}")
         self._spawn_notify(job, "done")
+        await self.file_scans(self.db.get_job(job.id))
 
     async def _refresh_servers(self, job: JobRecord, paths: list[str]) -> None:
         """Tell Emby, Jellyfin and Plex (those set up) about the new files. A failure is
@@ -1402,6 +1408,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin):
         job.problem = None
         self._set_state(job, JobState.done, f"Done: {dest.name}")
         self._spawn_notify(job, "done")
+        await self.file_scans(self.db.get_job(job.id))
 
     def _disc_json(self, job: JobRecord, dest: Path, sha: str) -> dict:
         d = self.drives.get(job.drive_id)

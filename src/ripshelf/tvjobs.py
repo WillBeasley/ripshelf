@@ -1264,6 +1264,7 @@ class TvMixin:
         job.problem = None
         self._set_state(job, JobState.done, f"Done: {plan.show.name}, {len(copied)} titles")
         self._spawn_notify(job, "done")
+        await self.file_scans(self.db.get_job(job.id))
 
     def _tv_disc_json(self, job: JobRecord, copied: dict[int, dict]) -> dict:
         plan = job.tv

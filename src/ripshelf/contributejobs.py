@@ -101,7 +101,8 @@ class ContributeMixin:
                         dest.mkdir(parents=True, exist_ok=True)
                         shutil.copyfile(src, dest / src.name)
                         c.covers.append(side)
-            if not c.details.empty() and c.covers:
+            self._inherit_scans(job, other)
+            if not c.details.empty() and c.covers and job.scans:
                 break
 
     def _covers_dir(self, job: JobRecord):

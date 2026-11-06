@@ -12,5 +12,8 @@ export RIPSHELF_DATA_DIR=var/fake/data RIPSHELF_SCRATCH_DIR=var/fake/scratch RIP
 export RIPSHELF_PORT="${RIPSHELF_PORT:-8381}"
 export RIPSHELF_SCAN_TIMEOUT_S="${RIPSHELF_SCAN_TIMEOUT_S:-30}" RIPSHELF_POLL_INTERVAL_S=1
 export RIPSHELF_FAKE_RIP_SECONDS="${RIPSHELF_FAKE_RIP_SECONDS:-60}"
+# A pretend network scanner, served by the backend itself.
+export RIPSHELF_SCANNER_ENABLED="${RIPSHELF_SCANNER_ENABLED:-1}"
+export RIPSHELF_SCANNER_URL="${RIPSHELF_SCANNER_URL:-http://127.0.0.1:$RIPSHELF_PORT/fake-escl/eSCL}"
 mkdir -p var/fake/library
 exec .venv/bin/ripshelf
