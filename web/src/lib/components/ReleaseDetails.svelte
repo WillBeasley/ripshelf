@@ -33,6 +33,12 @@
 	let found = $state<ReleaseLookup | null>(null);
 	let coverV = $state(Date.now());
 
+	// A cover set elsewhere (from a scan) is a new picture at the same address.
+	$effect(() => {
+		c?.covers.join();
+		coverV = Date.now();
+	});
+
 	// Keep the form in step with what is saved, unless the user is typing.
 	$effect(() => {
 		const s = saved;

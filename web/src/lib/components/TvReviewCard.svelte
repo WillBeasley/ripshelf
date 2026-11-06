@@ -6,6 +6,7 @@
 	import { live } from '../live.svelte';
 	import { openJob } from '../nav';
 	import Evidence from './Evidence.svelte';
+	import CoverScans from './CoverScans.svelte';
 	import Poster from './Poster.svelte';
 	import Snapshots from './Snapshots.svelte';
 	import SplitTimeline from './SplitTimeline.svelte';
@@ -383,6 +384,7 @@
 	</table>
 
 	<Snapshots {job} />
+	<CoverScans {job} />
 
 	{#if localProblems.length || serverProblems.length}
 		<ul class="problems small">

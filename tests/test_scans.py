@@ -473,3 +473,16 @@ async def test_a_ripped_film_files_its_scans(harness, settings):
         done = await h.wait_job(lambda j: j.state == JobState.done and j.scans[0].library_path, what="filing")
         folder = Path(done.destination).parent / "scans"
         assert [p.name for p in folder.iterdir()] == ["outside-full.png"]
+
+
+async def test_scans_from_before_the_disc_could_be_sent_become_its_covers(harness, settings):
+    async with harness() as h:
+        job = put(h, heron_job(identity=None, identity_source=None, state=JobState.review))
+        await h.m.add_scan(job.id, sheet(), "outside_full", "upload")
+        await h.m.add_scan(job.id, picture(colour=(0, 200, 0)), "front", "camera")
+        settings.thediscdb_contribute = "ask"
+        h.db.save_job(heron_job(job.id, scans=h.db.get_job(job.id).scans))  # confirmed now
+        view = h.m.contribution_view(job.id)
+        assert view.contribution.covers == ["back", "front"]
+        assert Image.open(h.m.cover_file(job.id, "front")).getpixel((5, 5))[1] > 180  # the front scan
+        assert Image.open(h.m.cover_file(job.id, "back")).getpixel((50, 10))[2] > 180  # the sheet's back half

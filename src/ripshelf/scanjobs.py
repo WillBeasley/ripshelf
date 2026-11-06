@@ -90,20 +90,27 @@ class ScansMixin:
         p = self._scans_dir(job) / f"{sc.id}.{EXTS[sc.content_type]}"
         return (p, sc.content_type) if p.is_file() else None
 
-    async def scan_thumb(self, job_id: int, scan_id: str) -> Path | None:
+    async def scan_thumb(self, job_id: int, scan_id: str, large: bool = False) -> Path | None:
+        """A JPEG of the scan as it's used (trimmed and turned): a thumbnail, or a large
+        copy for looking at. Made when first asked for."""
         found = self.scan_file(job_id, scan_id)
         if not found:
             return None
         job = self.db.get_job(job_id)
         sc = self._find(job, scan_id)
-        thumb = self._scans_dir(job) / f"{sc.id}.thumb.jpg"
-        if not thumb.is_file():
-            await asyncio.to_thread(self._write_thumb, found[0], sc, thumb)
-        return thumb
+        out = self._scans_dir(job) / f"{sc.id}.{'view' if large else 'thumb'}.jpg"
+        if not out.is_file():
+            await asyncio.to_thread(self._write_thumb, found[0], sc, out, large)
+        return out
 
     @staticmethod
-    def _write_thumb(src: Path, sc: CoverScan, thumb: Path) -> None:
-        thumb.write_bytes(images.thumbnail(images.render(src.read_bytes(), sc.crop, sc.rotate)))
+    def _write_thumb(src: Path, sc: CoverScan, out: Path, large: bool) -> None:
+        img = images.render(src.read_bytes(), sc.crop, sc.rotate)
+        out.write_bytes(images.thumbnail(img, images.VIEW_PX if large else images.THUMB_PX))
+
+    def _forget_thumbs(self, job: JobRecord, sc: CoverScan) -> None:
+        for size in ("thumb", "view"):
+            (self._scans_dir(job) / f"{sc.id}.{size}.jpg").unlink(missing_ok=True)
 
     # --- adding, changing and removing ----------------------------------------------
 
@@ -171,7 +178,7 @@ class ScansMixin:
                     sc.crop = await asyncio.to_thread(lambda: images.trim_box(images.open_image(data)))
             else:
                 sc.crop = None
-        (self._scans_dir(job) / f"{sc.id}.thumb.jpg").unlink(missing_ok=True)
+        self._forget_thumbs(job, sc)
         self._save(job)
         return sc
 
@@ -181,7 +188,7 @@ class ScansMixin:
         sc = self._find(job, scan_id)
         d = self._scans_dir(job)
         (d / f"{sc.id}.{EXTS[sc.content_type]}").unlink(missing_ok=True)
-        (d / f"{sc.id}.thumb.jpg").unlink(missing_ok=True)
+        self._forget_thumbs(job, sc)
         job.scans = [x for x in job.scans if x.id != scan_id]
         self._save(job)
 
@@ -210,6 +217,35 @@ class ScansMixin:
         self._find(job, scan_id).split = split
         self._save(job)
         return view
+
+    def _covers_from_scans(self, job: JobRecord) -> bool:
+        """Covers the disc has no picture for yet, from the box's scans: scans taken
+        before the disc could be sent (while it waited for review) count once it can.
+        True if any was added."""
+        c = job.contribution
+        if not c or not job.scans or c.status == "sending":
+            return False
+        latest = {sc.kind: sc for sc in job.scans}
+        todo = [side for side in COVER_KINDS if side not in c.covers]
+        sheet = latest.get("outside_full")
+        added = False
+        for side in todo:
+            sc = latest.get(side) or sheet
+            found = self.scan_file(job.id, sc.id) if sc else None
+            if not found:
+                continue
+            try:
+                img = images.render(found[0].read_bytes(), sc.crop, sc.rotate)
+                if sc.kind == "outside_full":
+                    front, back = images.halves(img, sc.split or ScanSplit())
+                    img = front if side == "front" else back
+                self._write_cover(job, side, images.jpeg(img), "image/jpeg")
+                added = True
+            except (OSError, images.ImageError) as e:
+                log.info("no %s cover from scan %s: %s", side, sc.id, e)
+        if added and c.status == "sent":
+            c.status = "not_sent"
+        return added
 
     async def _scan_cover_quietly(self, job_id: int, scan_id: str) -> None:
         """A new front or back scan replaces that cover, when the disc can be sent."""

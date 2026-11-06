@@ -76,6 +76,7 @@
 		job.tv?.mapping?.length;
 		job.contribution?.status;
 		job.contribution?.release_id;
+		job.contribution?.covers?.join();
 		load();
 	});
 

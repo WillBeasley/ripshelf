@@ -453,9 +453,9 @@ async def scan_image(job_id: int, scan_id: str, request: Request):
 
 
 @api.get("/jobs/{job_id}/scans/{scan_id}/thumb")
-async def scan_thumb(job_id: int, scan_id: str, request: Request):
-    """A small JPEG, trimmed and turned as the scan says."""
-    p = await manager(request).scan_thumb(job_id, scan_id)
+async def scan_thumb(job_id: int, scan_id: str, request: Request, large: bool = False):
+    """A JPEG trimmed and turned as the scan says: small, or up to 1600 pixels with ``large``."""
+    p = await manager(request).scan_thumb(job_id, scan_id, large)
     if not p:
         raise HTTPException(404)
     return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})

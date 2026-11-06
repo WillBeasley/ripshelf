@@ -5,6 +5,7 @@ import type {
 	CollectionDetail,
 	ContributionExtra,
 	ContributionView,
+	CoverScan,
 	DeleteJobsResult,
 	Drive,
 	DriveStats,
@@ -22,6 +23,11 @@ import type {
 	Preset,
 	ReleaseDetails,
 	ReleaseLookup,
+	ScannerInfo,
+	ScannerRun,
+	ScannerScanRequest,
+	ScanSplit,
+	ScanUpdate,
 	RemoteWorkers,
 	ServerLibrary,
 	SettingsTestRequest,
@@ -40,6 +46,7 @@ import type {
 
 export type MediaServer = 'emby' | 'jellyfin' | 'plex';
 export type CoverSide = 'front' | 'back';
+export type ScanKind = CoverScan['kind'];
 
 type ClashAction = ClashRequest['action'];
 
@@ -116,6 +123,25 @@ export const api = {
 		call<ContributionView>('POST', `/jobs/${id}/thediscdb/cover/${side}/from-url`, { url }),
 	deleteCover: (id: number, side: CoverSide) =>
 		call<ContributionView>('DELETE', `/jobs/${id}/thediscdb/cover/${side}`),
+	scanner: () => call<ScannerInfo>('GET', '/scanner'),
+	scanUrl: (id: number, scan: string) => `/api/jobs/${id}/scans/${scan}`,
+	scanThumbUrl: (id: number, sc: CoverScan, large = false) =>
+		`/api/jobs/${id}/scans/${sc.id}/thumb?v=${sc.rotate}-${(sc.crop ?? []).join('.')}${large ? '&large=true' : ''}`,
+	uploadScan: (id: number, file: File, kind: ScanKind, source: 'upload' | 'camera') => {
+		const form = new FormData();
+		form.append('file', file);
+		form.append('kind', kind);
+		form.append('source', source);
+		return call<CoverScan>('POST', `/jobs/${id}/scans`, form);
+	},
+	scanFromScanner: (id: number, body: ScannerScanRequest) =>
+		call<ScannerRun>('POST', `/jobs/${id}/scans/scanner`, body),
+	cancelScanner: (id: number) => call<void>('DELETE', `/jobs/${id}/scans/scanner`),
+	updateScan: (id: number, scan: string, body: ScanUpdate) =>
+		call<CoverScan>('PATCH', `/jobs/${id}/scans/${scan}`, body),
+	deleteScan: (id: number, scan: string) => call<void>('DELETE', `/jobs/${id}/scans/${scan}`),
+	scanCovers: (id: number, scan: string, split?: ScanSplit) =>
+		call<ContributionView>('POST', `/jobs/${id}/scans/${scan}/covers`, split ?? null),
 	movieSearch: (q: string, year: number | null) =>
 		call<Candidate[]>('GET', `/movies/search?q=${encodeURIComponent(q)}${year ? `&year=${year}` : ''}`),
 	setPreset: (id: number, preset: Preset) => call<Job>('PUT', `/jobs/${id}/preset`, preset),

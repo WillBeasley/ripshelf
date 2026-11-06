@@ -86,6 +86,12 @@
 		transcode_keep_original: false,
 		transcode_parallel: 1,
 		vaapi_device: '/dev/dri/renderD128',
+		scanner_enabled: false,
+		scanner_url: '',
+		scanner_dpi: 300 as 100 | 150 | 200 | 300 | 400 | 600,
+		scanner_source: 'platen' as 'platen' | 'feeder',
+		scanner_trim: true,
+		scans_to_library: true,
 		library_dir: '',
 		movies_dir: '',
 		tv_dir: '',
@@ -187,6 +193,12 @@
 			transcode_keep_original: v.transcode_keep_original,
 			transcode_parallel: v.transcode_parallel,
 			vaapi_device: v.vaapi_device,
+			scanner_enabled: v.scanner_enabled ?? false,
+			scanner_url: v.scanner_url ?? '',
+			scanner_dpi: (v.scanner_dpi ?? 300) as 100 | 150 | 200 | 300 | 400 | 600,
+			scanner_source: v.scanner_source ?? 'platen',
+			scanner_trim: v.scanner_trim ?? true,
+			scans_to_library: v.scans_to_library ?? true,
 			library_dir: v.library_dir,
 			movies_dir: v.custom_movies_dir ?? '',
 			tv_dir: v.custom_tv_dir ?? '',
@@ -347,6 +359,12 @@
 			transcode_keep_original: f.transcode_keep_original,
 			transcode_parallel: Number(f.transcode_parallel),
 			vaapi_device: f.vaapi_device.trim() || '/dev/dri/renderD128',
+			scanner_enabled: f.scanner_enabled,
+			scanner_url: f.scanner_url.trim(),
+			scanner_dpi: Number(f.scanner_dpi) as 100 | 150 | 200 | 300 | 400 | 600,
+			scanner_source: f.scanner_source,
+			scanner_trim: f.scanner_trim,
+			scans_to_library: f.scans_to_library,
 			...changedFolders()
 		};
 	}
@@ -693,6 +711,54 @@
 				<p class="small muted">
 					A copy of the database (jobs, collections and statistics) is made once a day in
 					<span class="mono">{view?.backups_dir}</span>. The oldest are deleted once there are more than this.
+				</p>
+			</section>
+
+			<section class="card stack" id="scanner">
+				<h2>Scanner</h2>
+				<p class="small muted">
+					A network scanner or printer that speaks eSCL (AirScan), for scanning a disc's box from its job. Most
+					network printers with a scanner do; ripshelf needs no driver for it.
+				</p>
+				<label class="check">
+					<input type="checkbox" bind:checked={f.scanner_enabled} /> Scan from a network scanner
+				</label>
+				<label class="field">
+					Address
+					<input class="mono" bind:value={f.scanner_url} placeholder="http://192.168.1.20/eSCL" />
+				</label>
+				<p class="small muted">
+					The printer's address is enough; <span class="mono">/eSCL</span> is added. Use <span class="mono">http://</span>:
+					some printers (Brother's among them) accept a secure connection and then never answer on it.
+				</p>
+				<div class="grid">
+					<label class="field">
+						Resolution
+						<select bind:value={f.scanner_dpi}>
+							{#each [100, 150, 200, 300, 400, 600] as dpi (dpi)}<option value={dpi}>{dpi} dpi{dpi === 300 ? ' (recommended)' : ''}</option>{/each}
+						</select>
+					</label>
+					<label class="field">
+						Scan from
+						<select bind:value={f.scanner_source}>
+							<option value="platen">The glass</option>
+							<option value="feeder">The feeder</option>
+						</select>
+					</label>
+				</div>
+				<p class="small muted">Insert pages are scanned from the feeder when the scanner has one, whatever this says.</p>
+				<label class="check">
+					<input type="checkbox" bind:checked={f.scanner_trim} /> Cut away the empty glass around a scan
+				</label>
+				<TestButton check="scanner" values={body} label="Test the scanner" />
+				<h3>In the library</h3>
+				<label class="check">
+					<input type="checkbox" bind:checked={f.scans_to_library} /> Copy scans to the library
+				</label>
+				<p class="small muted">
+					Into a <span class="mono">scans</span> folder in the film's or show's folder, once the disc is filed, as
+					they were scanned. A file already there is never replaced, and the names (front.jpg, inside-full.jpg…)
+					aren't ones Emby, Jellyfin or Plex take for artwork.
 				</p>
 			</section>
 
