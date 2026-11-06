@@ -69,6 +69,7 @@ export interface Api {
   ContributionTitle?: ContributionTitle;
   ContributionView?: ContributionView;
   CoverFromUrlRequest?: CoverFromUrlRequest;
+  CoverScan?: CoverScan;
   DeleteJobsRequest?: DeleteJobsRequest;
   DeleteJobsResult?: DeleteJobsResult;
   DiscFacts?: DiscFacts;
@@ -120,6 +121,11 @@ export interface Api {
   RipProgress?: RipProgress;
   RipProgressEvent?: RipProgressEvent;
   RipState?: RipState;
+  ScanSplit?: ScanSplit;
+  ScanUpdate?: ScanUpdate;
+  ScannerInfo?: ScannerInfo;
+  ScannerRun?: ScannerRun;
+  ScannerScanRequest?: ScannerScanRequest;
   SearchRequest?: SearchRequest;
   SeasonCell?: SeasonCell;
   SeasonGrid?: SeasonGrid;
@@ -539,6 +545,66 @@ export interface CoverFromUrlRequest {
   url: string;
 }
 /**
+ * A scan or photo of the disc's box, kept with the job (and filed in the library).
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "CoverScan".
+ */
+export interface CoverScan {
+  id: string;
+  kind: "front" | "back" | "outside_full" | "inside_full" | "insert" | "other";
+  source: "scanner" | "upload" | "camera";
+  /**
+   * the page, for inserts scanned from the feeder
+   */
+  page: number | null;
+  created_at: string;
+  /**
+   * image/jpeg, image/png or image/webp
+   */
+  content_type: string;
+  width: number;
+  height: number;
+  sha256: string;
+  size_bytes: number;
+  /**
+   * turned clockwise by this much when shown or used
+   */
+  rotate: 0 | 90 | 180 | 270;
+  /**
+   * the picture within the scan, [left, top, right, bottom] in the original's pixels, when trimmed
+   */
+  crop: number[] | null;
+  /**
+   * the cut last used for the covers, for a whole sheet
+   */
+  split: ScanSplit | null;
+  /**
+   * its copy in the library, once filed
+   */
+  library_path: string | null;
+}
+/**
+ * Where a whole outer sheet is cut into its back (left) and front (right) halves.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScanSplit".
+ */
+export interface ScanSplit {
+  /**
+   * the middle of the spine, as a fraction of the width
+   */
+  position: number;
+  /**
+   * the spine's width, left out of both halves
+   */
+  spine: number;
+  /**
+   * the front is the left half
+   */
+  swap: boolean;
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "DeleteJobsRequest".
  */
@@ -942,6 +1008,14 @@ export interface Job {
    * this disc sent (or being sent) to TheDiscDB
    */
   contribution: Contribution | null;
+  /**
+   * scans and photos of the box
+   */
+  scans: CoverScan[];
+  /**
+   * a scan from the network scanner, under way or failed
+   */
+  scanner: ScannerRun | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1229,6 +1303,24 @@ export interface Preset {
   start_episode: number | null;
 }
 /**
+ * The scanner working for this job, or why it couldn't.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScannerRun".
+ */
+export interface ScannerRun {
+  state: "scanning" | "failed";
+  kind: "front" | "back" | "outside_full" | "inside_full" | "insert" | "other";
+  source: "platen" | "feeder";
+  duplex: boolean;
+  /**
+   * pages received so far
+   */
+  pages: number;
+  started_at: string;
+  message: string | null;
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "JobDetail".
  */
@@ -1291,6 +1383,14 @@ export interface JobDetail {
    * this disc sent (or being sent) to TheDiscDB
    */
   contribution: Contribution | null;
+  /**
+   * scans and photos of the box
+   */
+  scans: CoverScan[];
+  /**
+   * a scan from the network scanner, under way or failed
+   */
+  scanner: ScannerRun | null;
   events: JobEvent[];
   titles: TitleInfo[];
 }
@@ -1468,6 +1568,7 @@ export interface ProviderInfo {
         | "catalogue"
         | "makemkv"
         | "paths"
+        | "scanner"
       )
     | null;
 }
@@ -1609,6 +1710,66 @@ export interface RipProgressEvent {
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScanUpdate".
+ */
+export interface ScanUpdate {
+  kind?: ("front" | "back" | "outside_full" | "inside_full" | "insert" | "other") | null;
+  page?: number | null;
+  rotate?: (0 | 90 | 180 | 270) | null;
+  /**
+   * cut away the scanner's empty glass around the picture
+   */
+  trim?: boolean | null;
+}
+/**
+ * The network scanner, as it describes itself.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScannerInfo".
+ */
+export interface ScannerInfo {
+  enabled: boolean;
+  url: string | null;
+  ok: boolean;
+  message: string | null;
+  model: string | null;
+  /**
+   * Idle, Processing, Testing or Stopped
+   */
+  state: string | null;
+  /**
+   * the feeder's state, such as ScannerAdfLoaded
+   */
+  adf_state: string | null;
+  sources: ("platen" | "feeder")[];
+  duplex: boolean;
+  resolutions: number[];
+  /**
+   * the job the scanner is scanning for
+   */
+  busy_job: number | null;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScannerScanRequest".
+ */
+export interface ScannerScanRequest {
+  kind: "front" | "back" | "outside_full" | "inside_full" | "insert" | "other";
+  /**
+   * the glass or the feeder; the Settings default if left out
+   */
+  source?: ("platen" | "feeder") | null;
+  /**
+   * both sides of each page (feeder only)
+   */
+  duplex?: boolean;
+  /**
+   * the Settings default if left out
+   */
+  dpi?: number | null;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "SearchRequest".
  */
 export interface SearchRequest {
@@ -1664,7 +1825,8 @@ export interface SettingsTestRequest {
     | "plex"
     | "catalogue"
     | "makemkv"
-    | "paths";
+    | "paths"
+    | "scanner";
   values: SettingsUpdate;
 }
 /**
@@ -1757,6 +1919,12 @@ export interface SettingsUpdate {
    */
   disc_backups_dir?: string | null;
   scratch_dir?: string | null;
+  scanner_enabled?: boolean | null;
+  scanner_url?: string | null;
+  scanner_dpi?: (100 | 150 | 200 | 300 | 400 | 600) | null;
+  scanner_source?: ("platen" | "feeder") | null;
+  scanner_trim?: boolean | null;
+  scans_to_library?: boolean | null;
 }
 /**
  * What the transcode step may do to rips from one kind of disc.
@@ -1871,6 +2039,12 @@ export interface SettingsUpdate1 {
    */
   disc_backups_dir?: string | null;
   scratch_dir?: string | null;
+  scanner_enabled?: boolean | null;
+  scanner_url?: string | null;
+  scanner_dpi?: (100 | 150 | 200 | 300 | 400 | 600) | null;
+  scanner_source?: ("platen" | "feeder") | null;
+  scanner_trim?: boolean | null;
+  scans_to_library?: boolean | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -2016,6 +2190,12 @@ export interface SettingsView {
   transcode_keep_original: boolean;
   transcode_parallel: number;
   vaapi_device: string;
+  scanner_enabled: boolean;
+  scanner_url: string | null;
+  scanner_dpi: number;
+  scanner_source: "platen" | "feeder";
+  scanner_trim: boolean;
+  scans_to_library: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

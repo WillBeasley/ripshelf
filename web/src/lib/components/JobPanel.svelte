@@ -6,6 +6,7 @@
 	import { live } from '../live.svelte';
 	import { closeJob } from '../nav';
 	import ContributionPanel from './ContributionPanel.svelte';
+	import CoverScans from './CoverScans.svelte';
 	import Progress from './Progress.svelte';
 	import Snapshots from './Snapshots.svelte';
 	import SplitTimeline from './SplitTimeline.svelte';
@@ -218,6 +219,10 @@
 
 		{#if job.mode !== 'backup' && job.state !== 'detected' && job.state !== 'scanning'}
 			<Snapshots {job} />
+		{/if}
+
+		{#if job.state !== 'detected'}
+			<CoverScans {job} />
 		{/if}
 
 		{#if job.identity || job.disc_match}

@@ -155,7 +155,8 @@ class FakeScanner:
                 pages = [await asyncio.to_thread(glass_scan, dpi, self.inside)]
             job = uuid.uuid4().hex
             self.jobs[job] = FakeJob(pages)
-            return Response(status_code=201, headers={"Location": f"/eSCL/ScanJobs/{job}"})
+            # The job's whole path, as a scanner gives it, including where this is mounted.
+            return Response(status_code=201, headers={"Location": f"{request.url.path.rstrip('/')}/{job}"})
 
         @r.get("/eSCL/ScanJobs/{job}/NextDocument")
         async def next_page(job: str):

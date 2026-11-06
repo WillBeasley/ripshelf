@@ -6,6 +6,7 @@
 	import { live } from '../live.svelte';
 	import { openJob } from '../nav';
 	import Evidence from './Evidence.svelte';
+	import CoverScans from './CoverScans.svelte';
 	import Poster from './Poster.svelte';
 	import ScoreMeter from './ScoreMeter.svelte';
 	import Snapshots from './Snapshots.svelte';
@@ -192,6 +193,7 @@
 	{/if}
 
 	<Snapshots {job} open={!best} />
+	<CoverScans {job} />
 </article>
 
 <style>

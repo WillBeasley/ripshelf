@@ -122,6 +122,8 @@ class ContributeMixin:
             if not (job.contribution and job.contribution.release_id):
                 self._assign_release(job)
                 self._save(job)
+            if self._covers_from_scans(job):
+                self._save(job)
             c = job.contribution
             view.contribution = c
             view.payload = contribute.payload(job, c.release_id, c.disc_number)
@@ -277,6 +279,11 @@ class ContributeMixin:
         if not kind:
             raise ValueError("the picture must be a JPEG, PNG or WebP")
         job = self._editable(job_id)
+        self._write_cover(job, side, data, kind)
+        self._changed(job)
+        return self.contribution_view(job_id)
+
+    def _write_cover(self, job: JobRecord, side: CoverSide, data: bytes, kind: str) -> None:
         d = self._covers_dir(job)
         d.mkdir(parents=True, exist_ok=True)
         if old := contribute.cover_path(d, side):
@@ -284,8 +291,6 @@ class ContributeMixin:
         (d / f"{side}.{release_info.COVER_TYPES[kind]}").write_bytes(data)
         c = job.contribution
         c.covers = sorted({*c.covers, side})
-        self._changed(job)
-        return self.contribution_view(job_id)
 
     async def cover_from_url(self, job_id: int, side: CoverSide, url: str) -> ContributionView:
         self._editable(job_id)  # check before downloading anything

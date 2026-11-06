@@ -15,6 +15,7 @@ from PIL import Image, ImageChops, ImageFilter, ImageOps
 from ..models import ScanSplit
 
 THUMB_PX = 480
+VIEW_PX = 1600
 COVER_QUALITY = 92
 TRIM_SAMPLE_PX = 600  # trimming looks at a copy this wide
 TRIM_DIFF = 40  # how far from the glass's colour a pixel must be to count as the picture
@@ -82,9 +83,9 @@ def jpeg(img: Image.Image, quality: int = COVER_QUALITY) -> bytes:
     return out.getvalue()
 
 
-def thumbnail(img: Image.Image) -> bytes:
+def thumbnail(img: Image.Image, px: int = THUMB_PX) -> bytes:
     small = img.copy()
-    small.thumbnail((THUMB_PX, THUMB_PX))
+    small.thumbnail((px, px))
     return jpeg(small, 85)
 
 
