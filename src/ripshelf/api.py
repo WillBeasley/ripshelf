@@ -13,7 +13,7 @@ from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Reques
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import SecretStr
 
-from . import applog, art, checks, integrations, proc, providers, system
+from . import applog, art, checks, integrations, proc, providers, scanjobs, system
 from .bus import next_item
 from .config import FOLDERS, REQUIRED_FOLDERS, Settings
 from .identify import catalogue
@@ -29,6 +29,7 @@ from .models import (
     ContributionReleaseRequest,
     ContributionView,
     CoverFromUrlRequest,
+    CoverScan,
     CoverSide,
     DeleteJobsRequest,
     DeleteJobsResult,
@@ -52,6 +53,13 @@ from .models import (
     ReleaseDetails,
     ReleaseLookup,
     ReleaseLookupRequest,
+    ScanKind,
+    ScannerInfo,
+    ScannerRun,
+    ScannerScanRequest,
+    ScanSource,
+    ScanSplit,
+    ScanUpdate,
     SearchRequest,
     ServerLibrariesRequest,
     ServerLibrary,
@@ -73,6 +81,7 @@ from .models import (
 )
 from .providers import contribute as contribute_provider
 from .providers import release_info
+from .scanner import escl
 from .tv import split as tvsplit
 
 SSE_HEARTBEAT_S = 15
@@ -399,6 +408,84 @@ async def contribution_cover_delete(job_id: int, side: CoverSide, request: Reque
     return await _contribution_call(lambda: manager(request).delete_cover(job_id, side))
 
 
+# --- scans of the box ------------------------------------------------------------------
+
+
+@api.get("/jobs/{job_id}/scans", response_model=list[CoverScan])
+async def scans(job_id: int, request: Request):
+    job = manager(request).db.get_job(job_id)
+    if not job:
+        raise HTTPException(404)
+    return job.scans
+
+
+@api.post("/jobs/{job_id}/scans", response_model=CoverScan)
+async def scan_upload(job_id: int, request: Request, file: Annotated[UploadFile, File()],
+                      kind: Annotated[ScanKind, Form()], source: Annotated[ScanSource, Form()] = "upload",
+                      page: Annotated[int | None, Form(ge=1, le=999)] = None):
+    """A picture of the box (JPEG, PNG or WebP, at most 20 MB): uploaded, or a phone's photo."""
+    if source == "scanner":
+        raise HTTPException(400, "Use POST /jobs/{id}/scans/scanner to scan")
+    data = await file.read(scanjobs.MAX_SCAN_BYTES + 1)
+    return await _contribution_call(lambda: manager(request).add_scan(job_id, data, kind, source, page))
+
+
+@api.post("/jobs/{job_id}/scans/scanner", response_model=ScannerRun)
+async def scan_from_scanner(job_id: int, body: ScannerScanRequest, request: Request):
+    """Scan from the network scanner, in the background: the job's ``scanner`` says how
+    it's going, and the pages join ``scans`` as they arrive."""
+    return await _contribution_call(lambda: manager(request).scanner_scan(job_id, body))
+
+
+@api.delete("/jobs/{job_id}/scans/scanner", status_code=204)
+async def scan_cancel(job_id: int, request: Request):
+    """Stop the scan under way for the job, or clear the message of one that failed."""
+    await _contribution_call(lambda: manager(request).cancel_scanner(job_id))
+
+
+@api.get("/jobs/{job_id}/scans/{scan_id}")
+async def scan_image(job_id: int, scan_id: str, request: Request):
+    """The original file, as scanned or uploaded."""
+    found = manager(request).scan_file(job_id, scan_id)
+    if not found:
+        raise HTTPException(404)
+    return FileResponse(found[0], media_type=found[1], headers={"Cache-Control": "private, max-age=86400"})
+
+
+@api.get("/jobs/{job_id}/scans/{scan_id}/thumb")
+async def scan_thumb(job_id: int, scan_id: str, request: Request):
+    """A small JPEG, trimmed and turned as the scan says."""
+    p = await manager(request).scan_thumb(job_id, scan_id)
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+
+@api.patch("/jobs/{job_id}/scans/{scan_id}", response_model=CoverScan)
+async def scan_update(job_id: int, scan_id: str, body: ScanUpdate, request: Request):
+    """Change what the picture is of, its page, its turn or its trim."""
+    return await _contribution_call(lambda: manager(request).update_scan(job_id, scan_id, body))
+
+
+@api.delete("/jobs/{job_id}/scans/{scan_id}", status_code=204)
+async def scan_delete(job_id: int, scan_id: str, request: Request):
+    """Forget the picture (its copy in the library, if filed, stays)."""
+    await _contribution_call(lambda: manager(request).delete_scan(job_id, scan_id))
+
+
+@api.post("/jobs/{job_id}/scans/{scan_id}/covers", response_model=ContributionView)
+async def scan_covers(job_id: int, scan_id: str, request: Request, body: ScanSplit | None = None):
+    """Use the scan as TheDiscDB's covers. A whole outer sheet is cut where ``body`` says
+    (the back on the left, the front on the right, unless swapped)."""
+    return await _contribution_call(lambda: manager(request).scan_covers(job_id, scan_id, body))
+
+
+@api.get("/scanner", response_model=ScannerInfo)
+async def scanner_info(request: Request):
+    """The network scanner's model and state, and whether it's scanning for a job."""
+    return await manager(request).scanner_info()
+
+
 @api.get("/movies/search", response_model=list[Candidate])
 async def movie_search(request: Request, q: Annotated[str, Query(min_length=1, max_length=200)],
                        year: int | None = None):
@@ -553,6 +640,8 @@ def settings_view(s: Settings) -> SettingsView:
         transcode_encoder=s.transcode_encoder, transcode_quality=s.transcode_quality,
         transcode_keep_original=s.transcode_keep_original, transcode_parallel=s.transcode_parallel,
         vaapi_device=s.vaapi_device,
+        scanner_enabled=s.scanner_enabled, scanner_url=s.scanner_url, scanner_dpi=s.scanner_dpi,
+        scanner_source=s.scanner_source, scanner_trim=s.scanner_trim, scans_to_library=s.scans_to_library,
         pushover_user_key_set=bool(s.pushover_user_key), pushover_app_token_set=bool(s.pushover_app_token),
         pushover_device=s.pushover_device,
         notify_events={e: integrations.Notifier(s).priority(e) for e in integrations.EVENTS},
@@ -585,6 +674,13 @@ async def put_settings(body: SettingsUpdate, request: Request):
         if not url.startswith(("https://", "http://")):
             raise HTTPException(400, "TheDiscDB's address must start with https://")
         plain["thediscdb_contribute_url"] = url
+    if plain.get("scanner_url"):
+        try:
+            plain["scanner_url"] = escl.base_url(plain["scanner_url"])
+        except ValueError as e:
+            raise bad_request(e) from None
+    elif "scanner_url" in plain:
+        plain["scanner_url"] = None
     folders = _folders(s, plain, manager(request))
     s.save_overrides(plain)
     if folders:
@@ -593,6 +689,8 @@ async def put_settings(body: SettingsUpdate, request: Request):
         manager(request).write_default_key()
     if "disabled_drives" in plain or "setup_complete" in plain:
         manager(request).drives_toggled()
+    if any(k.startswith("scanner_") for k in plain):
+        manager(request)._scanner_caps.clear()
     if "transcode_parallel" in plain:
         await manager(request).transcode_limit_changed()
     manager(request).publish_status()

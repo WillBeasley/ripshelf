@@ -19,3 +19,5 @@ The failure logs are short excerpts, rebuilt by hand. They have the real start-u
 | `scan-bad-key.log` | 5020 invalid registration key |
 
 `tmdb/` has its own README. `tmdb_tv/` holds TMDB TV responses (search, show and season details) in the same way, with made-up show and episode names.
+
+`escl-capabilities-mfc-l8690cdw.xml` and `escl-status-mfc-l8690cdw.xml` are what a Brother MFC-L8690CDW answered to `GET /eSCL/ScannerCapabilities` and `/eSCL/ScannerStatus` (firmware eSCL 2.62), with its serial number, UUID and address replaced.

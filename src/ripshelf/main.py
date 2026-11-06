@@ -82,6 +82,10 @@ def create_app(settings: Settings | None = None, backend=None) -> FastAPI:
     app.include_router(api)
     app.include_router(workers_router)
     app.include_router(remote_workers_router)
+    if s.fake_hardware:
+        from .dev.fake_escl import FakeScanner
+
+        app.include_router(FakeScanner().router(), prefix="/fake-escl")
     mount_ui(app, s.static_dir or default_static_dir())
     return app
 
