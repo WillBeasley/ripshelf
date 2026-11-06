@@ -62,7 +62,7 @@ A disc that joins a release takes the details and covers of the release's other 
 
 Only the barcode, or the title and format, goes to UPCitemdb and the search. Nothing is looked up unless you press **Look up**.
 
-**Covers** are a photo or scan of this release's box, as JPEG, PNG or WebP of up to 20 MB, not the film's poster. Add them from a file, or use a listing's picture with **Use its picture as the front cover** (downloaded by ripshelf from public https addresses only). They're sent after the disc and scan.
+**Covers** are a photo or scan of this release's box, as JPEG, PNG or WebP of up to 20 MB, not the film's poster. Add them from a file, scan them or photograph them in the job's [Cover scans](cover-scans.md) (a front or back scan becomes that cover, and a whole unfolded sheet can be cut into both), or use a listing's picture with **Use its picture as the front cover** (downloaded by ripshelf from public https addresses only). They're sent after the disc and scan.
 
 Changing the details or covers of a disc that was sent marks it *not sent*, so sending it again replaces what TheDiscDB has.
 
