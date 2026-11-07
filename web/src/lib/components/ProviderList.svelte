@@ -187,8 +187,23 @@
 		gap: 4px;
 	}
 	.arrows button {
-		min-height: 34px;
+		min-height: 44px;
+		min-width: 44px;
+		justify-content: center;
 		padding: 4px 9px;
+	}
+	/* On a phone the arrows move a row (dragging needs a mouse), and the text gets the room. */
+	@media (max-width: 480px) {
+		.handle,
+		.pos {
+			display: none;
+		}
+		li {
+			align-items: flex-start;
+		}
+		.arrows {
+			flex-direction: column;
+		}
 	}
 	.chip.warn {
 		background: var(--warn-bg);
