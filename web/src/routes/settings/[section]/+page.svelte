@@ -8,6 +8,7 @@
 	import { getForm } from '#lib/settings/context.ts';
 	import { reveal } from '#lib/settings/reveal.ts';
 	import { sectionById } from '#lib/settings/sections.ts';
+	import SaveBar from '#lib/settings/SaveBar.svelte';
 
 	const form = getForm();
 	const section = $derived(sectionById(page.params.section ?? ''));
@@ -30,13 +31,7 @@
 		</div>
 		{#if section.problems}<SetupProblems codes={section.problems} />{/if}
 		<section.component {form} />
-		<div class="row save">
-			<button class="primary" type="button" onclick={() => form.save(form.names(section.id))} disabled={form.act.busy}>
-				Save {section.title.toLowerCase()}
-			</button>
-			{#if form.saved}<span class="small muted">Saved</span>{/if}
-			{#if form.act.error}<span class="small error-text">{form.act.error}</span>{/if}
-		</div>
+		<SaveBar {form} {section} />
 	</div>
 {:else}
 	<p>There's no section of Settings called “{page.params.section}”. <a href="/settings">All settings</a></p>
@@ -52,18 +47,9 @@
 		font-size: 1.4rem;
 		margin: 0;
 	}
-	.save {
-		position: sticky;
-		bottom: calc(64px + env(safe-area-inset-bottom));
-		background: var(--bg);
-		padding: 8px 0;
-	}
 	@media (min-width: 760px) {
 		.back {
 			display: none;
-		}
-		.save {
-			bottom: 0;
 		}
 	}
 </style>
