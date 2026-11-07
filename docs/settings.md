@@ -65,6 +65,8 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_SCAN_READ_TEXT` | on | read the text on scans and list what's on the disc ([cover-scans.md](cover-scans.md)) |
 | `RIPSHELF_OCR_LANGUAGES` | `eng` | Tesseract's languages, joined with `+` (such as `eng+fra`); each needs its data installed |
 | `RIPSHELF_TESSERACT` | `tesseract` | the Tesseract program (found in Program Files on Windows) |
+| `RIPSHELF_EXTRAS_EMBY_FOLDERS` | on | file extras the cover scan names in Emby's extras folders (featurettes/, trailers/...) under their names, and rip a film's ([cover-scans.md](cover-scans.md#extras-in-the-library)) |
+| `RIPSHELF_FILM_UNNAMED_EXTRAS` | `skip` | a film's titles the box doesn't name: `skip`, or `extras` to rip them into extras/ as "Title N" |
 | `RIPSHELF_AUTO_EJECT` | on | |
 | `RIPSHELF_RIP_MODE` / `DRIVE_MODES` | `titles` / `{}` | `titles` or `backup` (a whole Blu-ray or UHD, decrypted). `DRIVE_MODES` sets it per drive id, for example `{"pioneer-...": "backup"}` ([backup.md](backup.md)) |
 | `RIPSHELF_DRIVE_NAMES` | `{}` | a name for a drive id, shown instead of the model, for example `{"pioneer-...": "Top bay"}`. Usually set with the pencil on the drive card |
