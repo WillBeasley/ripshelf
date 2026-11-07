@@ -36,6 +36,7 @@ import type {
 	ScanUpdate,
 	RemoteWorkers,
 	ServerLibrary,
+	SettingField,
 	SettingsTestRequest,
 	SettingsTestResult,
 	SettingsUpdate,
@@ -208,6 +209,7 @@ export const api = {
 	folder: (path: string, create = false) => call<FolderState>('POST', '/setup/folder', { path, create }),
 	hardware: (refresh = false) => call<Hardware>('GET', `/system/hardware${refresh ? '?refresh=true' : ''}`),
 	settings: () => call<SettingsView>('GET', '/settings'),
+	settingFields: () => call<SettingField[]>('GET', '/settings/fields'),
 	saveSettings: (s: SettingsUpdate) => call<SettingsView>('PUT', '/settings', s),
 	testSettings: (body: SettingsTestRequest) => call<SettingsTestResult>('POST', '/settings/test', body),
 	serverLibraries: (server: MediaServer, url: string, api_key: string | null) =>
