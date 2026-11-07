@@ -237,6 +237,7 @@ class TvMixin:
         job.tv = plan if job.tv is None else job.tv
         self._save(job)
         self._set_state(job, JobState.review, "Waiting for review of the episode mapping")
+        await self.fix_show_from_scan(job_id)  # the box read before identification may know better
         await self._maybe_auto_confirm(job_id)
 
     def _next_for(self, show: Show, season: int | None, disc_number: int | None = None,
@@ -883,6 +884,8 @@ class TvMixin:
             return False, ["one long title holds the episodes, so where it's cut needs a review"]
         if plan.user_edited:
             return False, ["changed by hand"]
+        if plan.from_scan:
+            return False, ["set from the cover scan, so it needs a look"]
         if plan.compilation:
             return False, ["a compilation, so episodes need picking by hand"]
         if plan.show.excluded or plan.show.score < self.s.tv_auto_threshold:

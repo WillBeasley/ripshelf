@@ -267,6 +267,8 @@ class TvPlan(BaseModel):
     continues_collection: bool = Field(False, description="carries on from a confirmed earlier disc")
     label_placed: bool = Field(False, description="the label gave the season and disc number")
     disc_db: bool = Field(False, description="the mapping comes from a disc database's record of this disc")
+    from_scan: bool = Field(False, description="the show or episodes were set from the cover scan, so it's "
+                                               "reviewed, not confirmed without review")
     auto_confirmed: bool = False
     auto_evidence: list[str] = Field(default=[], description="why it was (or wasn't) confirmed without review")
     split: TitleSplit | None = Field(None, description="a long title holding several episodes, split at chapters")

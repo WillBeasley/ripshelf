@@ -161,14 +161,74 @@ def _norm_part(name: str) -> str:
                   name, flags=re.I)
 
 
-def episode_for(name: str, episodes: list[Episode], season: int | None) -> tuple[Episode | None, float]:
-    """The episode a printed name is, from the show's episode list, and how sure."""
+ARTICLES = re.compile(r"^(?:a|an|the)\s+", re.I)
+
+
+def shared_prefix(names: list[str]) -> str:
+    """The branding most of a list of episode names start with ("Pat's Special Delivery:",
+    "Postman Pat and"): the longest run of two or more words, or everything before a
+    colon, that at least half of them (and two or more) share. "" when there's none."""
+    names = [n.replace("’", "'").strip() for n in names if n and n.strip()]
+    if len(names) < 2:
+        return ""
+    colon = [n.rsplit(":", 1)[0] + ":" for n in names if ":" in n]
+    if len(colon) * 2 >= len(names):
+        # The part before the colon, as most say it ("Special Delivery:" is a misread of it too).
+        tails = {}
+        for p in colon:
+            words = p.lower().split()
+            for k in range(len(words)):
+                tails[" ".join(words[k:])] = tails.get(" ".join(words[k:]), 0) + 1
+        # The one most of them share, the longest of those ("special delivery:" over
+        # "pat's special delivery:" when OCR dropped "Pat's" from one).
+        best = max((t for t, n in tails.items() if n * 2 >= len(names) and n >= 2 and len(t) > 3),
+                   key=lambda t: (tails[t], len(t)), default="")
+        if best:
+            return best
+    words = [n.lower().split() for n in names]
+    out = ""
+    for k in range(2, max(len(w) for w in words)):
+        heads: dict[str, int] = {}
+        for w in words:
+            if len(w) > k:  # a prefix leaves a name behind it
+                heads[" ".join(w[:k])] = heads.get(" ".join(w[:k]), 0) + 1
+        if not heads:
+            break
+        head, n = max(heads.items(), key=lambda x: x[1])
+        if n * 2 >= len(names) and n >= 2:
+            out = head
+        else:
+            break
+    return out
+
+
+def core_name(name: str, prefix: str = "") -> str:
+    """An episode name without the series' branding and a leading article: "Pat's
+    Special Delivery: A Treehouse" with the prefix "pat's special delivery:" is
+    "treehouse"."""
+    n = name.replace("’", "'").strip()
+    if prefix:
+        low = n.lower()
+        at = low.find(prefix)
+        if at >= 0 and at <= 12:  # at the start, or after a word OCR added ("Pat's")
+            n = n[at + len(prefix):]
+    n = re.sub(r"^[\s:\-–—,]+", "", n)
+    return ARTICLES.sub("", n).strip()
+
+
+def episode_for(name: str, episodes: list[Episode], season: int | None,
+                box_prefix: str = "", show_prefix: str = "") -> tuple[Episode | None, float]:
+    """The episode a printed name is, from the show's episode list, and how sure. The
+    box's branding (``box_prefix``) and the show's own (``show_prefix``) are allowed
+    for, and a leading "A" or "The"."""
     best, score = None, 0.0
     target = _norm_part(name)
+    core = _norm_part(core_name(name, box_prefix))
     for e in episodes:
         if not e.name:
             continue
-        s = title_similarity(target, _norm_part(e.name))
+        s = max(title_similarity(target, _norm_part(e.name)),
+                title_similarity(core, _norm_part(core_name(e.name, show_prefix))) if len(core) >= 3 else 0.0)
         if season is not None and e.season == season:
             s += 0.01  # the season on the disc wins a tie
         if s > score:
@@ -277,7 +337,10 @@ def _assign(out: ScanMatch, items: list[tuple[int, ListingItem]], cands: list[Ti
     eps_items = [x for x in items if x[1].kind == "episode"]
     ext_items = [x for x in items if x[1].kind == "extra"]
     ep_titles = [t for t in cands if t.duration_s >= EPISODE_MIN_S] or cands
-    named = {i: episode_for(it.title, list(episodes), season) for i, it in eps_items} if episodes else {}
+    box_prefix = shared_prefix([it.title for _, it in eps_items])
+    show_prefix = shared_prefix([e.name for e in episodes])
+    named = {i: episode_for(it.title, list(episodes), season, box_prefix, show_prefix)
+             for i, it in eps_items} if episodes else {}
     # Episode-length titles: about as long as the episodes printed or known.
     typical = [it.runtime_min for _, it in eps_items if it.runtime_min]
     typical += [e.runtime for e, _ in named.values() if e and e.runtime]
