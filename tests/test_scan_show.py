@@ -125,3 +125,27 @@ async def test_a_mapping_changed_by_hand_is_left_alone(harness, settings, monkey
         job = put(h, job)
         assert not await h.m.fix_show_from_scan(job.id)
         assert proposed == []
+
+
+async def test_a_shorter_bonus_title_is_not_an_episode(harness, settings, monkeypatch):
+    """Four alike titles and a shorter one at the end; the box lists the four episodes
+    and then a bonus. The bonus gets the shorter title, whatever the box's order says,
+    and the title mapped as an episode before is an extra now."""
+    async with harness() as h:
+        fake_tmdb(monkeypatch, h)
+        box = [*BOX, "Kite Post: Muddy Lane"]
+        job = disc_job(box)
+        job.titles = [*job.titles[:3], job.titles[0].model_copy(update={"index": 4}),
+                      job.titles[0].model_copy(update={"index": 5, "duration_s": 600}), job.titles[3]]
+        job.titles[-1].index = 6
+        job.tv.mapping = [TitleMap(title_index=i, duration_s=t.duration_s, role=TitleRole.episode,
+                                   episodes=[EpisodeRef(season=1, episode=n)])
+                          for n, (i, t) in enumerate(((t.index, t) for t in job.titles[:5]), 1)]
+        job.listing.found.items = [ListingItem(kind="episode", title=t) for t in box] + \
+            [ListingItem(kind="extra", title="Bonus: Goose Tales", extra_type="Other")]
+        job = put(h, job)
+        assert await h.m.fix_show_from_scan(job.id)
+        job = h.db.get_job(job.id)
+        eps = {m.title_index: [e.episode for e in m.episodes] for m in job.tv.mapping if m.role == TitleRole.episode}
+        assert eps == {0: [4], 1: [1], 2: [6], 4: [5]}
+        assert next(m for m in job.tv.mapping if m.title_index == 5).role == TitleRole.extra

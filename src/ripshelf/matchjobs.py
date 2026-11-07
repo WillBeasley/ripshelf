@@ -336,16 +336,16 @@ class ShowFromScanMixin:
         if not names or len(picks) < len(names):
             return False
         plan = job.tv
-        rows = {r.title_index: r for r in plan.mapping}
-        if all(rows.get(i) and rows[i].role == TitleRole.episode and rows[i].episodes == x.episodes
-               for i, x in picks.items()):
+        # The box lists every episode, so another title mapped as one is something else.
+        stray = [r for r in plan.mapping if r.role == TitleRole.episode and r.title_index not in picks]
+        if not stray and all(r.episodes == picks[r.title_index].episodes
+                             for r in plan.mapping if r.title_index in picks):
             return False
-        claimed = {(e.season, e.episode) for x in picks.values() for e in x.episodes}
         for r in plan.mapping:
             if (x := picks.get(r.title_index)):
                 r.role, r.episodes = TitleRole.episode, list(x.episodes)
                 r.note = f"from the cover scan: “{x.name}”"
-            elif r.role == TitleRole.episode and (not r.episodes or {(e.season, e.episode) for e in r.episodes} & claimed):
+            elif r in stray:
                 r.role, r.episodes, r.note = TitleRole.extra, [], "not one of the episodes the box lists"
         plan.from_scan = True
         self._save(job)

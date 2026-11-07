@@ -363,7 +363,9 @@ def _assign(out: ScanMatch, items: list[tuple[int, ListingItem]], cands: list[Ti
                 ep = named.get(i, (None, 0))[0]
                 ref = ep.runtime if ep and ep.runtime else (sum(typical) / len(typical) if typical else None)
                 if ref:
-                    parts.append((0.3, runtime_fit(t.duration_s, ref, pal=pal)))
+                    # The episode's own runtime is a whole number of minutes, not a guess.
+                    exact = bool(ep and ep.runtime)
+                    parts.append((0.3, runtime_fit(t.duration_s, ref, approx=not exact, pal=pal)))
                     why.append(f"runs {minutes(t.duration_s)}, an episode is about {ref:g} min")
                 elif t not in ep_titles:
                     parts.append((0.3, 0.2))
