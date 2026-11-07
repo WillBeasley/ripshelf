@@ -82,6 +82,9 @@ def new_release_id() -> str:
 # --- what may be sent --------------------------------------------------------------
 
 
+NO_HASH = "The disc's content hash is missing"
+
+
 def content_hash(job: JobRecord) -> str | None:
     h = (job.disc_ids or {}).get("content_hash")
     return h.upper() if h and HASH.fullmatch(h) else None
@@ -114,8 +117,8 @@ def eligibility(s: Settings, job: JobRecord, log_path: Path) -> tuple[bool, str 
     if job.media == MediaKind.movie and not job.main_title:
         return False, "The scan found no main feature", False
     if not content_hash(job):
-        return False, ("The disc's content hash is missing, because the sizes of its video files weren't read. "
-                       "Insert the disc again to make a new job that has them"), False
+        return False, (f"{NO_HASH}, because its files couldn't be read when it went in. Put it back in its drive "
+                       "and read it again"), False
     if not job.titles or scan_log(log_path) is None:
         return False, "The MakeMKV scan of the disc is missing", False
     return True, None, False

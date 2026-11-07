@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 import httpx
 
+from . import discfs
 from .db import now
 from .identify import catalogue
 from .identify.tmdb import TmdbError
@@ -28,6 +29,7 @@ from .models import (
     ContributionExtra,
     ContributionView,
     CoverSide,
+    DriveStatus,
     MediaKind,
     ReleaseDetails,
     ReleaseLookup,
@@ -61,6 +63,40 @@ class ContributeMixin:
         if ch:
             job.disc_ids = {**(job.disc_ids or {}), "content_hash": ch}
             self._save(job)
+
+    def _disc_in_its_drive(self, job: JobRecord):
+        """The job's drive, when this job's disc is in it and nothing is using it."""
+        d = self.drives.get(job.drive_id)
+        if not d or d.status != DriveStatus.disc or d.scan or d.rip:
+            return None
+        same = d.job_id == job.id or (job.quick_fp and d.handled_fp == job.quick_fp)
+        return d if same else None
+
+    async def reread_disc(self, job_id: int) -> ContributionView:
+        """Read the disc's structure files again, for the content hash TheDiscDB keys it
+        by (they couldn't be read when it went in), and ask TheDiscDB about it again."""
+        job = self.db.get_job(job_id)
+        if not job:
+            raise KeyError(job_id)
+        if contribute.content_hash(job):
+            raise ValueError("the disc's content hash is already known")
+        d = self._disc_in_its_drive(job)
+        if not d:
+            raise ValueError("put this disc back in its drive first (and wait for anything using the drive)")
+        out = self.work_dir(job) / "structure"
+        files = await self._be(d).extract_structure(d.hw.device, out)
+        job = self.db.get_job(job_id)
+        job.disc_ids = {**(job.disc_ids or {}), **thediscdb.fingerprints(out)}
+        if files and not job.content_fp:
+            job.content_fp = discfs.content_fingerprint(out, files)
+        if not contribute.content_hash(job):
+            self._event(job, "warning", "Read the disc again, and its files still couldn't be read")
+            self._save(job)
+            raise ValueError("the disc's files still couldn't be read; see the log")
+        self._event(job, "info", f"Read the disc again: {len(files)} structure files, so its content hash is known")
+        await self._disc_db_lookup(job)
+        self._save(job)
+        return self.contribution_view(job_id)
 
     def _assign_release(self, job: JobRecord, new_release: bool | None = None) -> Contribution:
         """The release the disc goes into, kept once given unless asked again. By default
@@ -117,7 +153,8 @@ class ContributeMixin:
         view = ContributionView(mode=self.s.thediscdb_contribute,
                                 eligible=ok and not todo and job.id not in self._contrib_tasks,
                                 reason=reason, known=known, contribution=job.contribution,
-                                base_url=contribute.base_url(self.s), todo=todo)
+                                base_url=contribute.base_url(self.s), todo=todo,
+                                reread=not contribute.content_hash(job) and self._disc_in_its_drive(job) is not None)
         if ok:
             if not (job.contribution and job.contribution.release_id):
                 self._assign_release(job)

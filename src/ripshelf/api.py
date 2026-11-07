@@ -332,6 +332,13 @@ async def contribution(job_id: int, request: Request):
     return view
 
 
+@api.post("/jobs/{job_id}/thediscdb/reread", response_model=ContributionView)
+async def contribution_reread(job_id: int, request: Request):
+    """Read the disc again (it must be back in its drive) for the content hash TheDiscDB
+    keys it by, when it couldn't be read as the disc went in."""
+    return await _contribution_call(lambda: manager(request).reread_disc(job_id))
+
+
 @api.post("/jobs/{job_id}/thediscdb/send", response_model=ContributionView)
 async def contribution_send(job_id: int, request: Request):
     """Send (or send again) in the background; the job's ``contribution`` says how it went."""

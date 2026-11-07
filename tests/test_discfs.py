@@ -13,11 +13,39 @@ async def test_extract_structure_without_7z(tmp_path):
 @posix_only
 async def test_extract_structure_with_fake_7z(tmp_path):
     sz = tmp_path / "7z"
-    sz.write_text('#!/bin/sh\nout=$(echo "$4" | sed s/^-o//)\nmkdir -p "$out/VIDEO_TS"\necho x > "$out/VIDEO_TS/VIDEO_TS.IFO"\n')
+    sz.write_text('#!/bin/sh\nfor a; do case "$a" in -o*) out=${a#-o};; esac; done\n'
+                  '[ -n "$out" ] || exit 0\nmkdir -p "$out/VIDEO_TS"\necho x > "$out/VIDEO_TS/VIDEO_TS.IFO"\n')
     sz.chmod(0o755)
     files = await discfs.extract_structure(str(sz), "/dev/sr0", tmp_path / "out")
     assert files == ["VIDEO_TS/VIDEO_TS.IFO"]
     assert discfs.content_fingerprint(tmp_path / "out", files).startswith("content:")
+
+
+LISTING = "Path = /dev/sr0\nType = Udf\n\n----------\nPath = VIDEO_TS/VTS_01_1.VOB\nSize = 1073709056\n\n"
+
+
+@posix_only
+async def test_a_disc_7z_only_reads_as_udf(tmp_path):
+    """A DVD 7-Zip can't open when left to guess its type (an I/O error in its other
+    probes) still gives its structure files and sizes read as UDF."""
+    sz = tmp_path / "7z"
+    sz.write_text('#!/bin/sh\nudf=; for a; do case "$a" in -tudf) udf=1;; -o*) out=${a#-o};; esac; done\n'
+                  '[ -n "$udf" ] || { echo "ERROR: /dev/sr0 : opening : errno=5 : Input/output error"; exit 2; }\n'
+                  f'if [ "$1" = l ]; then printf "{LISTING}"; exit 0; fi\n'
+                  'mkdir -p "$out/VIDEO_TS"\necho x > "$out/VIDEO_TS/VTS_01_0.IFO"\n')
+    sz.chmod(0o755)
+    files = await discfs.extract_structure(str(sz), "/dev/sr0", tmp_path / "out")
+    assert files == ["VIDEO_TS/VTS_01_0.IFO"]
+    assert (tmp_path / "out" / discfs.SIZES).read_text() == "VIDEO_TS/VTS_01_1.VOB\t1073709056\n"
+
+
+@posix_only
+async def test_an_iso_only_disc_is_read_without_a_type(tmp_path):
+    sz = tmp_path / "7z"
+    sz.write_text('#!/bin/sh\nfor a; do case "$a" in -tudf) exit 2;; -o*) out=${a#-o};; esac; done\n'
+                  '[ -n "$out" ] || exit 0\nmkdir -p "$out/VIDEO_TS"\necho x > "$out/VIDEO_TS/VIDEO_TS.IFO"\n')
+    sz.chmod(0o755)
+    assert await discfs.extract_structure(str(sz), "/dev/sr0", tmp_path / "out") == ["VIDEO_TS/VIDEO_TS.IFO"]
 
 
 async def test_extract_structure_timeout(tmp_path):

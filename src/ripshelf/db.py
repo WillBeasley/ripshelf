@@ -211,6 +211,12 @@ class Database:
         ).fetchone()
         return JobRecord.model_validate_json(row["data"]) if row else None
 
+    def jobs_without_hash(self, quick_fp: str) -> list[int]:
+        """Jobs of this disc (by its quick fingerprint) with no content hash."""
+        return [r[0] for r in self.conn.execute(
+            "SELECT id FROM jobs WHERE json_extract(data, '$.quick_fp')=? "
+            "AND json_extract(data, '$.disc_ids.content_hash') IS NULL", (quick_fp,))]
+
     def jobs_sending_contribution(self) -> list[int]:
         return [r[0] for r in self.conn.execute(
             "SELECT id FROM jobs WHERE json_extract(data, '$.contribution.status')='sending'")]

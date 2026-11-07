@@ -15,6 +15,7 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
+from ripshelf import discfs
 from ripshelf.db import JobRecord, now
 from ripshelf.dev.fake import FakeDrives
 from ripshelf.jobs import to_title_info
@@ -402,7 +403,7 @@ async def test_content_hash_recovered_from_the_stored_structure(harness, setting
     async with harness() as h:
         job = put(h, heron_job(disc_ids={"disc_id": "AB" * 20}))
         view = h.m.contribution_view(job.id)
-        assert not view.eligible and "Insert the disc again" in view.reason
+        assert not view.eligible and "read it again" in view.reason and not view.reread
         ci = h.m.work_dir(job) / "structure" / "BDMV" / "CLIPINF"
         ci.mkdir(parents=True)
         (ci / "00001.clpi").write_bytes(b"HDMV0300" + bytes(48) + (1000).to_bytes(4, "big") + bytes(20))
@@ -550,3 +551,43 @@ def test_api_preview_send_and_release(client, settings):
         assert client.get(path).status_code == 404
     assert client.post("/api/jobs/999/thediscdb/send").status_code == 404
     assert client.post("/api/jobs/999/thediscdb/release", json={"new_release": True}).status_code == 404
+
+
+async def test_a_disc_put_back_is_read_again_for_its_hash(harness, settings, monkeypatch):
+    """A DVD whose files couldn't be read as it went in has no content hash; with the
+    disc back in its drive, reading it again gives one."""
+    from ripshelf.models import DriveStatus
+
+    settings.thediscdb_contribute = "ask"
+    async with harness() as h:
+        job = put(h, pippa_job().model_copy(update={"disc_ids": {}}))
+        view = h.m.contribution_view(job.id)
+        assert not view.eligible and not view.reread  # the drive is empty
+        with pytest.raises(ValueError, match="back in its drive"):
+            await h.m.reread_disc(job.id)
+        d = h.m.drives[job.drive_id]
+        d.status, d.job_id = DriveStatus.disc, job.id
+        assert h.m.contribution_view(job.id).reread
+
+        async def extract(device, out):
+            (out / "VIDEO_TS").mkdir(parents=True, exist_ok=True)
+            (out / "VIDEO_TS" / "VIDEO_TS.IFO").write_bytes(b"DVDVIDEO-VMG".ljust(256, b"\0"))
+            (out / discfs.SIZES).write_text("VIDEO_TS/VTS_01_1.VOB\t1073709056\n")
+            return ["VIDEO_TS/VIDEO_TS.IFO"]
+
+        monkeypatch.setattr(h.backend, "extract_structure", extract)
+        view = await h.m.reread_disc(job.id)
+        assert h.db.get_job(job.id).disc_ids.get("content_hash") and not view.reread
+        assert view.reason is None or "content hash" not in view.reason
+        with pytest.raises(ValueError, match="already known"):
+            await h.m.reread_disc(job.id)
+
+
+async def test_the_same_disc_in_again_gives_an_earlier_job_its_hash(harness, settings):
+    async with harness() as h:
+        old = put(h, pippa_job().model_copy(update={"disc_ids": {}, "quick_fp": "quick:abc"}))
+        new = put(h, pippa_job(job_id=3).model_copy(update={"disc_ids": {"content_hash": HASH}, "quick_fp": "quick:abc"}))
+        other = put(h, pippa_job(job_id=4).model_copy(update={"disc_ids": {}, "quick_fp": "quick:xyz"}))
+        h.m._share_hash(h.db.get_job(new.id))
+        assert h.db.get_job(old.id).disc_ids["content_hash"] == HASH
+        assert not h.db.get_job(other.id).disc_ids
