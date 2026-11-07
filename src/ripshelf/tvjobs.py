@@ -188,6 +188,10 @@ class TvMixin:
         found = await self._catalogue_lookup(job) if tmdb else None
         if found and found.names:
             name = found.names[0]
+        hints = await self.scan_hints(job)
+        if hints.names and not name:
+            name = hints.names[0]  # the label says nothing; the box's spine does
+            self._event(job, "info", f"Searching for the show the cover scan names: {name}")
         match = job.disc_match if job.disc_match and job.disc_match.media == MediaKind.tv \
             and "thediscdb" in providers.enabled(self.s, "tv") else None
         if not tmdb:

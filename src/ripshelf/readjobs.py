@@ -213,6 +213,7 @@ class ReadingMixin:
         job.listing = sl
         self._save(job)
         self.rematch(job_id)
+        self.identify_from_scan(job_id)
         if texts and engine:  # a Tesseract reading: the vision model's turn, if Settings say
             self.queue_vision(job_id)
 

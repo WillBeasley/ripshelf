@@ -50,6 +50,8 @@ from .models import (
     MakeMKVFile,
     MediaRequest,
     MediaServer,
+    PendingScan,
+    PendingScans,
     Preset,
     ProviderInfo,
     ReleaseDetails,
@@ -85,7 +87,7 @@ from .models import (
 )
 from .providers import contribute as contribute_provider
 from .providers import release_info
-from .scanner import escl
+from .scanner import escl, images
 from .tv import split as tvsplit
 
 SSE_HEARTBEAT_S = 15
@@ -557,6 +559,57 @@ def _sync_call(fn):
         raise HTTPException(404) from None
     except ValueError as e:
         raise bad_request(e) from None
+
+
+# --- scans for a drive's next disc ------------------------------------------------------
+
+
+@api.get("/drives/{drive_id}/pending-scans", response_model=PendingScans)
+async def pending_scans(drive_id: str, request: Request):
+    """Pictures of a box kept for the next disc in this drive (forgotten after a day)."""
+    return _sync_call(lambda: manager(request).pending_scans(drive_id))
+
+
+@api.post("/drives/{drive_id}/pending-scans", response_model=PendingScan)
+async def pending_upload(drive_id: str, request: Request, file: Annotated[UploadFile, File()],
+                         kind: Annotated[ScanKind, Form()], source: Annotated[ScanSource, Form()] = "upload"):
+    if source == "scanner":
+        raise HTTPException(400, "Use POST /drives/{id}/pending-scans/scanner to scan")
+    data = await file.read(scanjobs.MAX_SCAN_BYTES + 1)
+    return await _contribution_call(lambda: manager(request).add_pending(drive_id, data, kind, source))
+
+
+@api.post("/drives/{drive_id}/pending-scans/scanner", response_model=ScannerRun)
+async def pending_scan(drive_id: str, body: ScannerScanRequest, request: Request):
+    """Scan from the network scanner for the drive's next disc."""
+    return await _contribution_call(lambda: manager(request).scan_pending(drive_id, body))
+
+
+@api.delete("/drives/{drive_id}/pending-scans/scanner", status_code=204)
+async def pending_scan_cancel(drive_id: str, request: Request):
+    _sync_call(lambda: manager(request).clear_pending_run(drive_id))
+
+
+@api.delete("/drives/{drive_id}/pending-scans/{scan_id}", status_code=204)
+async def pending_delete(drive_id: str, scan_id: str, request: Request):
+    await _contribution_call(lambda: manager(request).delete_pending(drive_id, scan_id))
+
+
+@api.get("/pending-scans/{scan_id}")
+async def pending_image(scan_id: str, request: Request, thumb: bool = False):
+    """The picture (or a small JPEG of it, trimmed, with ``thumb``)."""
+    m = manager(request)
+    found = m.pending_file(scan_id)
+    if not found:
+        raise HTTPException(404)
+    if not thumb:
+        return FileResponse(found[0], media_type=found[1])
+    p = found[0].with_suffix(".thumb.jpg")
+    if not p.is_file():
+        sc = next(x for x in m._pending_index().scans if x.id == scan_id)
+        data = found[0].read_bytes()
+        p.write_bytes(await asyncio.to_thread(lambda: images.thumbnail(images.render(data, sc.crop, sc.rotate))))
+    return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
 
 @api.get("/scanner", response_model=ScannerInfo)

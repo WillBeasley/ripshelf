@@ -11,13 +11,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import shutil
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import library
 from .db import now
-from .models import DiscKind, MediaKind, ScanMatch, TitleMatch
+from .identify.scoring import title_similarity
+from .models import DiscKind, JobState, MediaKind, ScanMatch, TitleMatch
+from .providers import release_info
 from .scanner import match as matcher
 
 if TYPE_CHECKING:
@@ -171,3 +175,76 @@ class MatchMixin:
             self._save(job)
             self._event(job, "finalise", f"Filed {len(filed)} extra{'s' if len(filed) != 1 else ''}: "
                         + ", ".join(Path(p).relative_to(folder).as_posix() for p in filed.values()))
+
+    # --- identifying the disc from its box ------------------------------------------------
+
+    async def scan_hints(self, job: JobRecord) -> ScanHints:
+        """What the box says the disc is: the title and year read off it, and the product
+        its barcode names (UPCitemdb, looked up once and kept)."""
+        listing = self._listing_for(job)
+        hints = ScanHints()
+        if not listing:
+            return hints
+        d = listing.details
+        if d.title:
+            hints.names.append(d.title)
+            hints.evidence.append(f"The cover scan reads “{d.title}”" + (f" ({d.year})" if d.year else ""))
+        hints.year = d.year
+        if d.barcode and job.listing:
+            if job.listing.upc_title is None:
+                job.listing.upc_title = await self._upc_title(d.barcode)
+                self._save(job)
+            if job.listing.upc_title:
+                name = product_name(job.listing.upc_title)
+                if name and all(title_similarity(name, n) < 0.9 for n in hints.names):
+                    hints.names.append(name)
+                    hints.evidence.append(f"The barcode on the box, {d.barcode}, is “{job.listing.upc_title}”")
+        return hints
+
+    async def _upc_title(self, upc: str) -> str:
+        """The product's title for a barcode, or "" when nothing is known (so it isn't
+        asked again: UPCitemdb's free lookups are limited)."""
+        products = release_info.Products()
+        try:
+            found = await products.lookup(upc)
+        except release_info.ReleaseLookupError as e:
+            log.info("no product for barcode %s: %s", upc, e)
+            return ""
+        finally:
+            await products.aclose()
+        return found[0].title if found else ""
+
+    def identify_from_scan(self, job_id: int) -> None:
+        """Identify again when the box's reading may help: the job waits for review with
+        nothing confirmed, and the scan says something new about what it is."""
+        job = self.db.get_job(job_id)
+        listing = self._listing_for(job) if job else None
+        if not job or not listing or job.state != JobState.review or job.identity:
+            return
+        if job.media == MediaKind.tv and job.tv and job.tv.show:
+            return
+        d = listing.details
+        key = f"{d.title}|{d.year}|{d.barcode}"
+        if not (d.title or d.barcode) or job.listing.identified_from == key:
+            return
+        job.listing.identified_from = key
+        self._save(job)
+        self._event(job, "info", "Identifying again with what the cover scan says")
+        d_rt = self.drives.get(job.drive_id)
+        if d_rt:
+            self._spawn(d_rt, self._identify_then_rip(job_id), job_id)
+
+
+@dataclass
+class ScanHints:
+    names: list[str] = field(default_factory=list)
+    year: int | None = None
+    evidence: list[str] = field(default_factory=list)
+
+
+def product_name(title: str) -> str:
+    """"The Great Escape (DVD, 2006) [Region 2]" -> "The Great Escape"."""
+    t = re.sub(r"[\(\[].*?[\)\]]", " ", title)
+    t = re.sub(r"(?i)\b(dvd|blu-?ray|4k|ultra hd|uhd|region\s*\w+|special edition|collector'?s edition|"
+               r"widescreen|box set|\d+-disc)\b.*$", " ", t)
+    return re.sub(r"\s+", " ", t).strip(" -–:,") or ""
