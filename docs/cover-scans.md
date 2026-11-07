@@ -36,7 +36,7 @@ Pointing at (or tapping into) a row marks where on the scan it was read. Each ro
 
 In the TheDiscDB panel, **From cover scan** fills the release details' empty fields with the barcode, region and locale read here. Nothing is saved until you press **Save details**.
 
-Reading takes a few seconds a picture, one job at a time. Phase 3 will use the listing to name the disc's titles. For now it's for you to check and correct.
+Reading takes a few seconds a picture, one job at a time.
 
 ### How the reading works
 
@@ -65,6 +65,55 @@ The container image includes Tesseract and zbar. Elsewhere:
 - Windows: `winget install -e --id UB-Mannheim.TesseractOCR`. ripshelf finds it in Program Files, and pyzbar brings zbar with it.
 
 Without Tesseract, scans are kept as before, and the panel says text reading isn't available, so you can type the listing in yourself.
+
+## Matching the listing to the disc
+
+ripshelf matches each line of the listing to one of the disc's titles. **Matched from the cover scan** shows each title with the line it was matched to, a confidence (high, medium or low) and, when you tap it, why: "runs 22:06 against 22 min printed", or "“Brolly Bus” is S03E34; listed 1st, title 1 is 1st".
+
+What decides a match:
+- **Episode names.** A name found in the season's episode list (from TMDB, TheTVDB or TVmaze) gives its SxxEyy, wherever it is on the disc. "Part 1" and "Pt. One" are the same.
+- **Runtimes.** Printed runtimes are rounded, so within about 10% or 2 minutes counts as agreeing, and PAL's 4% speed-up is allowed for. An extra with no printed runtime is judged by what its type usually runs to: a trailer a couple of minutes, a featurette twenty.
+- **Order.** Boxes usually list things in disc order. This only tips the balance, as some discs scramble their playlists. When titles are alike and the box lists fewer than the disc has, the match says that only the order on the box placed it, and is never high.
+- **The main feature.** For a film, it is picked from the long titles by the printed running time, the printed audio languages, and a commentary track.
+- **What ripshelf already thinks.** If the TV mapping or the film's main title agrees, the match is more sure. If it disagrees, the match is shown with what ripshelf has instead, for you to settle.
+- **Box sets.** Discs of one TheDiscDB release share the set's listing. A disc only takes the lines that no other disc of the set took, and only lines printed for its own disc number.
+
+The play-all, duplicates and a Blu-ray's loose clips are left out. Lines and titles nothing matched are listed underneath.
+
+How the matches are used:
+- **TV review.** Each title shows the cover scan's pick, and **Use the cover scan's picks** fills in the high and medium ones. Nothing changes until you press Confirm, and nothing is confirmed on its own.
+- **TheDiscDB.** The naming list for extras starts from the names and types the scan gives.
+- **The library.** Matched extras are filed by name (below). Low matches aren't used for names.
+
+## Extras in the library
+
+An extra the cover scan names (matched with high or medium confidence) is filed under its name, in Emby's extras folder for its type:
+
+| TheDiscDB type | Folder |
+|---|---|
+| Featurette | `featurettes`, or `behind the scenes` when its name says making-of, behind the scenes or on set |
+| Deleted scene | `deleted scenes` |
+| Trailer | `trailers` |
+| Interview | `interviews` |
+| Scene | `scenes` |
+| Short | `shorts` |
+| Extra, Music, Other | `extras` |
+
+These are the extras folders Emby's naming guides list ([films](https://emby.media/support/articles/Movie-Naming.html), [TV](https://emby.media/support/articles/TV-Naming.html)): extras, specials, shorts, scenes, featurettes, behind the scenes, deleted scenes, interviews and trailers. Jellyfin and Plex read them too.
+
+```text
+Movies/Moonlit Orchard (1998)/featurettes/Growing the Orchard.mkv
+Movies/Moonlit Orchard (1998)/trailers/Theatrical trailer.mkv
+TV/Pippa & Goose (2013)/behind the scenes/Making the Kite Tram.mkv
+```
+
+- **Films.** Films didn't have their extras filed before. Now a film's extras are ripped with it when the box was scanned before the rip started. Otherwise, **Rip the N extras it names** in the matches rips them while the disc is still in its drive. They go into the library with the film, or straight away if the film is already there. Extras are copied as ripped: transcoding is for the film only.
+- **TV.** A TV disc's extras go in these folders under the show, instead of `extras/<disc label> - title N.mkv`. Extras the box doesn't name are filed as before.
+- **Nothing is replaced.** A file already there gets a new one beside it, with " (2)" added.
+
+In Settings → Scanner:
+- **File named extras into Emby's folders** turns all this off.
+- **A film's other titles** can rip the titles the box doesn't name into `extras/` as "Title N". This is off by default, as before.
 
 ## TheDiscDB covers
 
@@ -146,6 +195,8 @@ TV/Pippa & Goose (2013)/scans/PIPPA_&_GOOSE_KITE_TRAM - front.jpg
 | `PUT /api/jobs/{id}/listing` | save your version |
 | `DELETE /api/jobs/{id}/listing/edits` | drop your version and go back to the reading |
 | `POST /api/jobs/{id}/listing/read` | read every scan again |
+| `GET /api/jobs/{id}/scan-match` | the listing matched to the disc's titles, made again from the job as it is now (also on the job, as `scan_match`) |
+| `POST /api/jobs/{id}/extras/rip` | rip a film's extras the box names, while the disc is in its drive |
 | `GET /api/jobs/{id}/scans/{scan}/text` | the lines read on one scan, with their boxes and confidence, and its barcodes |
 
 In development, `scripts/dev-fake.sh` serves a pretend scanner at `/fake-escl/eSCL` and points Settings at it. Its glass holds a made-up DVD's cover sheet, and its feeder holds three insert pages.
