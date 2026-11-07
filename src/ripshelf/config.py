@@ -124,6 +124,8 @@ EDITABLE = {
     "scanner_source",
     "scanner_trim",
     "scans_to_library",
+    "scan_read_text",
+    "ocr_languages",
 }
 
 
@@ -155,6 +157,8 @@ class Settings(BaseSettings):
     ffprobe: str = "ffprobe"
     # Splits a TV title holding several episodes at its chapters (MKVToolNix).
     mkvmerge: str = "mkvmerge"
+    # Reads the text on scans of the box.
+    tesseract: str = "tesseract"
     # Labels that are a catalogue number ("EO51710") are looked up on the web:
     # a self-hosted SearXNG.
     catalogue_search: Literal["off", "searxng"] = "off"
@@ -312,6 +316,10 @@ class Settings(BaseSettings):
     scanner_trim: bool = True
     # Copy a job's scans into the film's or show's folder, in scans/.
     scans_to_library: bool = True
+    # Read the text on scans (Tesseract) and make a listing of what's on the disc.
+    scan_read_text: bool = True
+    # Tesseract's languages, joined with +, such as "eng+fra" (each needs its traineddata).
+    ocr_languages: str = "eng"
 
     @property
     def settings_file(self) -> Path:

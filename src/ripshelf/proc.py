@@ -48,8 +48,14 @@ async def communicate(proc: asyncio.subprocess.Process, timeout: float) -> tuple
     """``proc.communicate()``, or None if it takes longer than ``timeout``. A timeout or a
     cancel kills the program and waits for it, so it isn't left running (or reaped after
     the event loop has closed)."""
+    return await communicate_input(proc, None, timeout)
+
+
+async def communicate_input(proc: asyncio.subprocess.Process, data: bytes | None,
+                            timeout: float) -> tuple[bytes, bytes] | None:
+    """``communicate`` with ``data`` written to the program's stdin first."""
     try:
-        return await asyncio.wait_for(proc.communicate(), timeout)
+        return await asyncio.wait_for(proc.communicate(data), timeout)
     except TimeoutError:
         return None
     finally:
