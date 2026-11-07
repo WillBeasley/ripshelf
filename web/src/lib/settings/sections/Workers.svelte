@@ -3,7 +3,7 @@
 	import RemoteWorkers from '#lib/components/RemoteWorkers.svelte';
 </script>
 
-<RemoteWorkers />
+<div class="setting" id="setting-remote_workers"><RemoteWorkers /></div>
 
 <section class="card stack" aria-labelledby="what-workers-use">
 	<h2 id="what-workers-use">What workers use</h2>

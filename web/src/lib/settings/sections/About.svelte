@@ -18,7 +18,7 @@
 	});
 </script>
 
-<section class="card stack">
+<section class="card stack setting" id="setting-about">
 <h2>About</h2>
 <p class="small muted">
 	ripshelf {live.status?.version ?? ''}{#if live.status?.makemkv_version}

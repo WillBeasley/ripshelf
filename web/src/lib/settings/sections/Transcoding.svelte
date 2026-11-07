@@ -74,7 +74,7 @@
 	</Advanced>
 </section>
 
-<section class="card stack">
+<section class="card stack setting" id="setting-hardware">
 	<HardwarePanel bind:hw />
 </section>
 

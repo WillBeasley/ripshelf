@@ -235,3 +235,17 @@ label.check input {
 .error-text {
 	color: var(--bad);
 }
+
+/* A setting Settings search jumped to (lib/settings/reveal.ts). */
+.setting {
+	scroll-margin-top: 80px;
+	border-radius: 8px;
+}
+.setting.found {
+	animation: found 1.6s ease-out;
+}
+@keyframes found {
+	from {
+		box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 45%, transparent);
+	}
+}
