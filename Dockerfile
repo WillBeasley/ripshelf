@@ -54,6 +54,8 @@ COPY --from=ffmpeg-lgpl /opt/sources /usr/share/doc/makemkv/source
 # (iHD, non-free) is for VAAPI and Quick Sync. Debian's ffmpeg reaches Quick Sync
 # through libmfx1, whose own runtime predates 12th gen (Alder Lake) and fails with
 # "unsupported (-3)" there; libmfx-gen1.2 is the oneVPL runtime it loads instead.
+# Tesseract (with its English and orientation data) reads the text on scans of the
+# box, and zbar (libzbar0, for pyzbar) their barcodes.
 RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
         /etc/apt/sources.list.d/debian.sources \
  && apt-get update \
@@ -62,6 +64,7 @@ RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firm
         libexpat1-dev zlib1g-dev \
         libssl3 libexpat1 zlib1g p7zip-full util-linux ffmpeg mkvtoolnix \
         vainfo default-jre-headless \
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd libzbar0 \
  && if [ "$(dpkg --print-architecture)" = amd64 ]; then \
         DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             intel-media-va-driver-non-free libmfx-gen1.2; fi \
