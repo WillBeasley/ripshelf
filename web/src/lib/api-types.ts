@@ -142,10 +142,13 @@ export interface Api {
   SeasonGrid?: SeasonGrid;
   ServerLibrariesRequest?: ServerLibrariesRequest;
   ServerLibrary?: ServerLibrary;
+  SettingChoice?: SettingChoice;
+  SettingField?: SettingField;
   SettingsTestRequest?: SettingsTestRequest;
   SettingsTestResult?: SettingsTestResult;
   SettingsUpdate?: SettingsUpdate1;
   SettingsView?: SettingsView;
+  SettingsViewBase?: SettingsViewBase;
   SetupProblem?: SetupProblem;
   SetupTools?: SetupTools;
   Show?: Show;
@@ -2297,6 +2300,60 @@ export interface ServerLibrary {
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "SettingChoice".
+ */
+export interface SettingChoice {
+  value: string | number;
+  label: string;
+}
+/**
+ * One editable setting, as config.Settings describes it, for the Settings screen's
+ * labels, limits and search.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "SettingField".
+ */
+export interface SettingField {
+  name: string;
+  /**
+   * None for one saved elsewhere (not a field on the page)
+   */
+  section:
+    | (
+        | "identify"
+        | "drives"
+        | "scanner"
+        | "library"
+        | "media-servers"
+        | "transcoding"
+        | "notifications"
+        | "workers"
+        | "system"
+      )
+    | null;
+  title: string;
+  help: string;
+  kind: "bool" | "choice" | "number" | "range" | "text" | "path" | "list" | "secret" | "custom";
+  advanced: boolean;
+  /**
+   * used by this machine only, not by remote workers
+   */
+  controller_only: boolean;
+  secret: boolean;
+  /**
+   * empty saves null (unset), else the default
+   */
+  nullable: boolean;
+  default: unknown;
+  minimum: number | null;
+  maximum: number | null;
+  step: number | null;
+  choices: SettingChoice[];
+  placeholder: string;
+  keywords: string;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "SettingsTestRequest".
  */
 export interface SettingsTestRequest {
@@ -2322,59 +2379,59 @@ export interface SettingsTestRequest {
  * the form as typed; blank secrets mean the saved ones
  */
 export interface SettingsUpdate {
+  scratch_dir?: string | null;
+  library_dir?: string | null;
+  movies_dir?: string | null;
+  tv_dir?: string | null;
+  disc_backups_dir?: string | null;
   setup_complete?: boolean | null;
-  catalogue_search?: ("off" | "searxng") | null;
-  searxng_url?: string | null;
-  tv_auto_confirm?: boolean | null;
-  tv_auto_threshold?: number | null;
-  transcode_enabled?: boolean | null;
-  transcode_codecs?: string[] | null;
-  transcode_crop?: ("off" | "when_transcoding" | "always") | null;
-  transcode_hdr?: boolean | null;
-  transcode_sources?: {
-    [k: string]: TranscodeSource;
+  metadata_providers?: {
+    [k: string]: ProviderSlot[];
   } | null;
-  transcode_encoder?: ("auto" | "qsv" | "vaapi" | "nvenc" | "x265") | null;
-  transcode_quality?: number | null;
-  transcode_keep_original?: boolean | null;
-  transcode_parallel?: number | null;
-  vaapi_device?: string | null;
-  tv_unmatched?: ("extras" | "specials" | "skip") | null;
-  tv_rip_extras?: boolean | null;
-  verify_order?: boolean | null;
   tmdb_api_key?: string | null;
   tmdb_language?: string | null;
   tvdb_api_key?: string | null;
   tvdb_pin?: string | null;
-  tv_episode_order?: ("tmdb" | "tvdb_aired" | "tvdb_dvd") | null;
   tvdb_episode_order?: ("aired" | "dvd") | null;
   omdb_api_key?: string | null;
+  auto_confirm_threshold?: number | null;
+  tv_auto_confirm?: boolean | null;
+  tv_auto_threshold?: number | null;
+  verify_order?: boolean | null;
+  searxng_url?: string | null;
+  catalogue_search?: ("off" | "searxng") | null;
   thediscdb_contribute?: ("off" | "ask" | "auto") | null;
   thediscdb_contribute_url?: string | null;
   thediscdb_api_key?: string | null;
-  metadata_providers?: {
-    [k: string]: ProviderSlot[];
+  makemkv_key?: string | null;
+  rip_mode?: ("titles" | "backup") | null;
+  drive_modes?: {
+    [k: string]: "titles" | "backup";
   } | null;
-  auto_confirm_threshold?: number | null;
+  disabled_drives?: string[] | null;
   auto_eject?: boolean | null;
   scan_timeout_s?: number | null;
   scan_max_s?: number | null;
   poll_interval_s?: number | null;
   uhd_models?: string[] | null;
-  disabled_drives?: string[] | null;
-  rip_mode?: ("titles" | "backup") | null;
-  drive_modes?: {
-    [k: string]: "titles" | "backup";
-  } | null;
-  pushover_user_key?: string | null;
-  pushover_app_token?: string | null;
-  pushover_device?: string | null;
-  notify_events?: {
-    [k: string]: number | null;
-  } | null;
-  notify_batch_s?: number | null;
-  backup_keep?: number | null;
-  public_url?: string | null;
+  scanner_enabled?: boolean | null;
+  scanner_url?: string | null;
+  scanner_dpi?: (100 | 150 | 200 | 300 | 400 | 600) | null;
+  scanner_source?: ("platen" | "feeder") | null;
+  scanner_trim?: boolean | null;
+  scan_read_text?: boolean | null;
+  ocr_languages?: string | null;
+  vision_mode?: ("off" | "struggles" | "every" | "manual") | null;
+  vision_provider?: ("local" | "openai" | "anthropic") | null;
+  vision_url?: string | null;
+  vision_model?: string | null;
+  vision_api_key?: string | null;
+  scans_to_library?: boolean | null;
+  tv_rip_extras?: boolean | null;
+  tv_unmatched?: ("extras" | "specials" | "skip") | null;
+  tv_bonus_episodes?: ("extra" | "own_show") | null;
+  extras_emby_folders?: boolean | null;
+  film_unnamed_extras?: ("skip" | "extras") | null;
   emby_url?: string | null;
   emby_api_key?: string | null;
   emby_movies_library?: string | null;
@@ -2393,37 +2450,27 @@ export interface SettingsUpdate {
   plex_movies_path?: string | null;
   plex_tv_library?: string | null;
   plex_tv_path?: string | null;
-  makemkv_key?: string | null;
-  library_dir?: string | null;
-  /**
-   * empty for <library>/Movies
-   */
-  movies_dir?: string | null;
-  /**
-   * empty for <library>/TV
-   */
-  tv_dir?: string | null;
-  /**
-   * empty for <library>/Disc backups
-   */
-  disc_backups_dir?: string | null;
-  scratch_dir?: string | null;
-  scanner_enabled?: boolean | null;
-  scanner_url?: string | null;
-  scanner_dpi?: (100 | 150 | 200 | 300 | 400 | 600) | null;
-  scanner_source?: ("platen" | "feeder") | null;
-  scanner_trim?: boolean | null;
-  scans_to_library?: boolean | null;
-  scan_read_text?: boolean | null;
-  ocr_languages?: string | null;
-  extras_emby_folders?: boolean | null;
-  film_unnamed_extras?: ("skip" | "extras") | null;
-  tv_bonus_episodes?: ("extra" | "own_show") | null;
-  vision_mode?: ("off" | "struggles" | "every" | "manual") | null;
-  vision_provider?: ("local" | "openai" | "anthropic") | null;
-  vision_url?: string | null;
-  vision_model?: string | null;
-  vision_api_key?: string | null;
+  transcode_enabled?: boolean | null;
+  transcode_sources?: {
+    [k: string]: TranscodeSource;
+  } | null;
+  transcode_encoder?: ("auto" | "qsv" | "vaapi" | "nvenc" | "x265") | null;
+  transcode_quality?: number | null;
+  transcode_hdr?: boolean | null;
+  transcode_keep_original?: boolean | null;
+  transcode_codecs?: string[] | null;
+  transcode_crop?: ("off" | "when_transcoding" | "always") | null;
+  transcode_parallel?: number | null;
+  vaapi_device?: string | null;
+  pushover_user_key?: string | null;
+  pushover_app_token?: string | null;
+  pushover_device?: string | null;
+  notify_events?: {
+    [k: string]: number | null;
+  } | null;
+  notify_batch_s?: number | null;
+  public_url?: string | null;
+  backup_keep?: number | null;
 }
 /**
  * What the transcode step may do to rips from one kind of disc.
@@ -2448,63 +2495,66 @@ export interface SettingsTestResult {
   details: string[];
 }
 /**
+ * Every setting the UI may change, each optional: only what's sent is saved.
+ * A secret sent as "" is cleared, and a folder sent as "" goes back to its default.
+ *
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "SettingsUpdate".
  */
 export interface SettingsUpdate1 {
+  scratch_dir?: string | null;
+  library_dir?: string | null;
+  movies_dir?: string | null;
+  tv_dir?: string | null;
+  disc_backups_dir?: string | null;
   setup_complete?: boolean | null;
-  catalogue_search?: ("off" | "searxng") | null;
-  searxng_url?: string | null;
-  tv_auto_confirm?: boolean | null;
-  tv_auto_threshold?: number | null;
-  transcode_enabled?: boolean | null;
-  transcode_codecs?: string[] | null;
-  transcode_crop?: ("off" | "when_transcoding" | "always") | null;
-  transcode_hdr?: boolean | null;
-  transcode_sources?: {
-    [k: string]: TranscodeSource;
+  metadata_providers?: {
+    [k: string]: ProviderSlot[];
   } | null;
-  transcode_encoder?: ("auto" | "qsv" | "vaapi" | "nvenc" | "x265") | null;
-  transcode_quality?: number | null;
-  transcode_keep_original?: boolean | null;
-  transcode_parallel?: number | null;
-  vaapi_device?: string | null;
-  tv_unmatched?: ("extras" | "specials" | "skip") | null;
-  tv_rip_extras?: boolean | null;
-  verify_order?: boolean | null;
   tmdb_api_key?: string | null;
   tmdb_language?: string | null;
   tvdb_api_key?: string | null;
   tvdb_pin?: string | null;
-  tv_episode_order?: ("tmdb" | "tvdb_aired" | "tvdb_dvd") | null;
   tvdb_episode_order?: ("aired" | "dvd") | null;
   omdb_api_key?: string | null;
+  auto_confirm_threshold?: number | null;
+  tv_auto_confirm?: boolean | null;
+  tv_auto_threshold?: number | null;
+  verify_order?: boolean | null;
+  searxng_url?: string | null;
+  catalogue_search?: ("off" | "searxng") | null;
   thediscdb_contribute?: ("off" | "ask" | "auto") | null;
   thediscdb_contribute_url?: string | null;
   thediscdb_api_key?: string | null;
-  metadata_providers?: {
-    [k: string]: ProviderSlot[];
+  makemkv_key?: string | null;
+  rip_mode?: ("titles" | "backup") | null;
+  drive_modes?: {
+    [k: string]: "titles" | "backup";
   } | null;
-  auto_confirm_threshold?: number | null;
+  disabled_drives?: string[] | null;
   auto_eject?: boolean | null;
   scan_timeout_s?: number | null;
   scan_max_s?: number | null;
   poll_interval_s?: number | null;
   uhd_models?: string[] | null;
-  disabled_drives?: string[] | null;
-  rip_mode?: ("titles" | "backup") | null;
-  drive_modes?: {
-    [k: string]: "titles" | "backup";
-  } | null;
-  pushover_user_key?: string | null;
-  pushover_app_token?: string | null;
-  pushover_device?: string | null;
-  notify_events?: {
-    [k: string]: number | null;
-  } | null;
-  notify_batch_s?: number | null;
-  backup_keep?: number | null;
-  public_url?: string | null;
+  scanner_enabled?: boolean | null;
+  scanner_url?: string | null;
+  scanner_dpi?: (100 | 150 | 200 | 300 | 400 | 600) | null;
+  scanner_source?: ("platen" | "feeder") | null;
+  scanner_trim?: boolean | null;
+  scan_read_text?: boolean | null;
+  ocr_languages?: string | null;
+  vision_mode?: ("off" | "struggles" | "every" | "manual") | null;
+  vision_provider?: ("local" | "openai" | "anthropic") | null;
+  vision_url?: string | null;
+  vision_model?: string | null;
+  vision_api_key?: string | null;
+  scans_to_library?: boolean | null;
+  tv_rip_extras?: boolean | null;
+  tv_unmatched?: ("extras" | "specials" | "skip") | null;
+  tv_bonus_episodes?: ("extra" | "own_show") | null;
+  extras_emby_folders?: boolean | null;
+  film_unnamed_extras?: ("skip" | "extras") | null;
   emby_url?: string | null;
   emby_api_key?: string | null;
   emby_movies_library?: string | null;
@@ -2523,123 +2573,39 @@ export interface SettingsUpdate1 {
   plex_movies_path?: string | null;
   plex_tv_library?: string | null;
   plex_tv_path?: string | null;
-  makemkv_key?: string | null;
-  library_dir?: string | null;
-  /**
-   * empty for <library>/Movies
-   */
-  movies_dir?: string | null;
-  /**
-   * empty for <library>/TV
-   */
-  tv_dir?: string | null;
-  /**
-   * empty for <library>/Disc backups
-   */
-  disc_backups_dir?: string | null;
-  scratch_dir?: string | null;
-  scanner_enabled?: boolean | null;
-  scanner_url?: string | null;
-  scanner_dpi?: (100 | 150 | 200 | 300 | 400 | 600) | null;
-  scanner_source?: ("platen" | "feeder") | null;
-  scanner_trim?: boolean | null;
-  scans_to_library?: boolean | null;
-  scan_read_text?: boolean | null;
-  ocr_languages?: string | null;
-  extras_emby_folders?: boolean | null;
-  film_unnamed_extras?: ("skip" | "extras") | null;
-  tv_bonus_episodes?: ("extra" | "own_show") | null;
-  vision_mode?: ("off" | "struggles" | "every" | "manual") | null;
-  vision_provider?: ("local" | "openai" | "anthropic") | null;
-  vision_url?: string | null;
-  vision_model?: string | null;
-  vision_api_key?: string | null;
+  transcode_enabled?: boolean | null;
+  transcode_sources?: {
+    [k: string]: TranscodeSource;
+  } | null;
+  transcode_encoder?: ("auto" | "qsv" | "vaapi" | "nvenc" | "x265") | null;
+  transcode_quality?: number | null;
+  transcode_hdr?: boolean | null;
+  transcode_keep_original?: boolean | null;
+  transcode_codecs?: string[] | null;
+  transcode_crop?: ("off" | "when_transcoding" | "always") | null;
+  transcode_parallel?: number | null;
+  vaapi_device?: string | null;
+  pushover_user_key?: string | null;
+  pushover_app_token?: string | null;
+  pushover_device?: string | null;
+  notify_events?: {
+    [k: string]: number | null;
+  } | null;
+  notify_batch_s?: number | null;
+  public_url?: string | null;
+  backup_keep?: number | null;
 }
 /**
+ * The settings as saved: every editable one, except a secret, which is only whether it's set
+ * (<name>_set). Folders are in SettingsViewBase.
+ *
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "SettingsView".
  */
 export interface SettingsView {
-  /**
-   * the first-start setup page was finished or skipped
-   */
-  setup_complete: boolean;
-  tmdb_api_key_set: boolean;
-  tmdb_language: string;
-  tvdb_api_key_set: boolean;
-  tvdb_pin_set: boolean;
-  tv_episode_order: "tmdb" | "tvdb_aired" | "tvdb_dvd";
-  tvdb_episode_order: "aired" | "dvd";
-  omdb_api_key_set: boolean;
-  thediscdb_contribute: "off" | "ask" | "auto";
-  thediscdb_contribute_url: string;
-  thediscdb_api_key_set: boolean;
-  /**
-   * each list's providers, in the order they are asked
-   */
-  metadata_providers: {
-    [k: string]: ProviderSlot[];
-  };
   providers: ProviderInfo[];
-  auto_confirm_threshold: number;
-  auto_eject: boolean;
-  scan_timeout_s: number;
-  scan_max_s: number;
-  poll_interval_s: number;
-  uhd_models: string[];
-  disabled_drives: string[];
-  rip_mode: "titles" | "backup";
-  /**
-   * drive id -> its own rip mode, overriding rip_mode
-   */
-  drive_modes: {
-    [k: string]: "titles" | "backup";
-  };
-  /**
-   * drive id -> its name (set with PUT /drives/{id}/name)
-   */
-  drive_names: {
-    [k: string]: string;
-  };
-  pushover_user_key_set: boolean;
-  pushover_app_token_set: boolean;
-  pushover_device: string | null;
-  /**
-   * event -> Pushover priority (-2..1), or null for off
-   */
-  notify_events: {
-    [k: string]: number | null;
-  };
-  notify_batch_s: number;
-  /**
-   * daily database backups kept, 0 for none
-   */
-  backup_keep: number;
-  /**
-   * where the database backups go
-   */
-  backups_dir: string;
-  public_url: string | null;
-  emby_url: string | null;
-  emby_api_key_set: boolean;
-  emby_movies_library: string | null;
-  emby_movies_path: string | null;
-  emby_tv_library: string | null;
-  emby_tv_path: string | null;
-  jellyfin_url: string | null;
-  jellyfin_api_key_set: boolean;
-  jellyfin_movies_library: string | null;
-  jellyfin_movies_path: string | null;
-  jellyfin_tv_library: string | null;
-  jellyfin_tv_path: string | null;
-  plex_url: string | null;
-  plex_token_set: boolean;
-  plex_movies_library: string | null;
-  plex_movies_path: string | null;
-  plex_tv_library: string | null;
-  plex_tv_path: string | null;
-  makemkv_key_set: boolean;
   library_dir: string;
+  scratch_dir: string;
   /**
    * where films go (a separate folder, or <library>/Movies)
    */
@@ -2652,7 +2618,6 @@ export interface SettingsView {
    * where full disc backups go
    */
   disc_backups_dir: string;
-  scratch_dir: string;
   /**
    * the films folder as set, or empty for <library>/Movies
    */
@@ -2677,44 +2642,151 @@ export interface SettingsView {
   makemkv_drive_dumps: {
     [k: string]: boolean;
   };
-  tv_unmatched: "extras" | "specials" | "skip";
-  tv_rip_extras: boolean;
-  verify_order: boolean;
+  /**
+   * where the database backups go
+   */
+  backups_dir: string;
+  setup_complete: boolean;
+  metadata_providers: {
+    [k: string]: ProviderSlot[];
+  };
+  tmdb_api_key_set: boolean;
+  tmdb_language: string;
+  tvdb_api_key_set: boolean;
+  tvdb_pin_set: boolean;
+  tvdb_episode_order: "aired" | "dvd";
+  omdb_api_key_set: boolean;
+  auto_confirm_threshold: number;
   tv_auto_confirm: boolean;
   tv_auto_threshold: number;
-  catalogue_search: "off" | "searxng";
+  verify_order: boolean;
   searxng_url: string | null;
-  transcode_enabled: boolean;
-  transcode_codecs: string[];
-  transcode_crop: "off" | "when_transcoding" | "always";
-  transcode_hdr: boolean;
-  /**
-   * per kind of disc, with the defaults filled in
-   */
-  transcode_sources: {
-    [k: string]: TranscodeSource;
+  catalogue_search: "off" | "searxng";
+  thediscdb_contribute: "off" | "ask" | "auto";
+  thediscdb_contribute_url: string;
+  thediscdb_api_key_set: boolean;
+  makemkv_key_set: boolean;
+  rip_mode: "titles" | "backup";
+  drive_modes: {
+    [k: string]: "titles" | "backup";
   };
-  transcode_encoder: "auto" | "qsv" | "vaapi" | "nvenc" | "x265";
-  transcode_quality: number;
-  transcode_keep_original: boolean;
-  transcode_parallel: number;
-  vaapi_device: string;
+  disabled_drives: string[];
+  drive_names: {
+    [k: string]: string;
+  };
+  auto_eject: boolean;
+  scan_timeout_s: number;
+  scan_max_s: number;
+  poll_interval_s: number;
+  uhd_models: string[];
   scanner_enabled: boolean;
   scanner_url: string | null;
-  scanner_dpi: number;
+  scanner_dpi: 100 | 150 | 200 | 300 | 400 | 600;
   scanner_source: "platen" | "feeder";
   scanner_trim: boolean;
-  scans_to_library: boolean;
   scan_read_text: boolean;
   ocr_languages: string;
-  extras_emby_folders: boolean;
-  film_unnamed_extras: "skip" | "extras";
-  tv_bonus_episodes: "extra" | "own_show";
   vision_mode: "off" | "struggles" | "every" | "manual";
   vision_provider: "local" | "openai" | "anthropic";
   vision_url: string | null;
   vision_model: string;
   vision_api_key_set: boolean;
+  scans_to_library: boolean;
+  tv_rip_extras: boolean;
+  tv_unmatched: "extras" | "specials" | "skip";
+  tv_bonus_episodes: "extra" | "own_show";
+  extras_emby_folders: boolean;
+  film_unnamed_extras: "skip" | "extras";
+  emby_url: string | null;
+  emby_api_key_set: boolean;
+  emby_movies_library: string | null;
+  emby_movies_path: string | null;
+  emby_tv_library: string | null;
+  emby_tv_path: string | null;
+  jellyfin_url: string | null;
+  jellyfin_api_key_set: boolean;
+  jellyfin_movies_library: string | null;
+  jellyfin_movies_path: string | null;
+  jellyfin_tv_library: string | null;
+  jellyfin_tv_path: string | null;
+  plex_url: string | null;
+  plex_token_set: boolean;
+  plex_movies_library: string | null;
+  plex_movies_path: string | null;
+  plex_tv_library: string | null;
+  plex_tv_path: string | null;
+  transcode_enabled: boolean;
+  transcode_sources: {
+    [k: string]: TranscodeSource;
+  };
+  transcode_encoder: "auto" | "qsv" | "vaapi" | "nvenc" | "x265";
+  transcode_quality: number;
+  transcode_hdr: boolean;
+  transcode_keep_original: boolean;
+  transcode_codecs: string[];
+  transcode_crop: "off" | "when_transcoding" | "always";
+  transcode_parallel: number;
+  vaapi_device: string;
+  pushover_user_key_set: boolean;
+  pushover_app_token_set: boolean;
+  pushover_device: string | null;
+  notify_events: {
+    [k: string]: number | null;
+  };
+  notify_batch_s: number;
+  public_url: string | null;
+  backup_keep: number;
+}
+/**
+ * What SettingsView adds to the settings themselves.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "SettingsViewBase".
+ */
+export interface SettingsViewBase {
+  providers: ProviderInfo[];
+  library_dir: string;
+  scratch_dir: string;
+  /**
+   * where films go (a separate folder, or <library>/Movies)
+   */
+  movies_dir: string;
+  /**
+   * where TV goes (a separate folder, or <library>/TV)
+   */
+  tv_dir: string;
+  /**
+   * where full disc backups go
+   */
+  disc_backups_dir: string;
+  /**
+   * the films folder as set, or empty for <library>/Movies
+   */
+  custom_movies_dir: string;
+  /**
+   * the TV folder as set, or empty for <library>/TV
+   */
+  custom_tv_dir: string;
+  /**
+   * the disc backups folder as set, or empty for <library>/Disc backups
+   */
+  custom_disc_backups_dir: string;
+  /**
+   * drive id -> has imported private data
+   */
+  makemkv_drive_data: {
+    [k: string]: boolean;
+  };
+  /**
+   * drive id -> has a firmware dump (dump_*.tgz)
+   */
+  makemkv_drive_dumps: {
+    [k: string]: boolean;
+  };
+  /**
+   * where the database backups go
+   */
+  backups_dir: string;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

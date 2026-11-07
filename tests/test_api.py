@@ -118,6 +118,53 @@ def test_settings_update_validation_and_secrets(client, settings):
     assert r.status_code == 200 and settings.data_dir != Path("/etc")
 
 
+def test_blank_text_is_unset_or_the_default(client, settings):
+    r = client.put("/api/settings", json={"emby_url": "  http://emby.lan:8096 ", "tmdb_language": "de-DE",
+                                          "uhd_models": ["A B", "  ", "C D "], "transcode_codecs": ["VC1", "MPEG2Video"]})
+    assert r.status_code == 200, r.text
+    assert settings.emby_url == "http://emby.lan:8096" and settings.uhd_models == ["A B", "C D"]
+    assert settings.transcode_codecs == ["vc1", "mpeg2video"]
+    # Empty text unsets what can be unset, and else goes back to the default.
+    r = client.put("/api/settings", json={"emby_url": "", "tmdb_language": " ", "ocr_languages": ""})
+    assert r.status_code == 200, r.text
+    assert settings.emby_url is None and settings.tmdb_language == "en-GB" and settings.ocr_languages == "eng"
+    # null for anything else that can't be null is ignored, not a reset.
+    client.put("/api/settings", json={"metadata_providers": None, "auto_eject": None})
+    assert settings.auto_eject is True
+
+
+def test_setting_fields_describe_every_editable_setting(client):
+    from ripshelf.config import EDITABLE, SECRETS
+    fields = {f["name"]: f for f in client.get("/api/settings/fields").json()}
+    assert set(fields) == EDITABLE
+    assert {n for n, f in fields.items() if f["secret"]} == SECRETS and "tv_episode_order" not in fields
+    dpi = fields["scanner_dpi"]
+    assert dpi["kind"] == "choice" and dpi["default"] == 300 and [c["value"] for c in dpi["choices"]][0] == 100
+    timeout = fields["scan_timeout_s"]
+    assert (timeout["minimum"], timeout["maximum"], timeout["advanced"]) == (30, 3600, True)
+    assert fields["uhd_models"]["controller_only"] and fields["uhd_models"]["kind"] == "list"
+    assert fields["auto_confirm_threshold"]["kind"] == "range" and fields["library_dir"]["kind"] == "path"
+    assert fields["drive_names"]["section"] is None
+    # Every field the page shows has a title to show and search.
+    assert all(f["title"] for f in fields.values() if f["section"] and not f["name"].endswith("_path"))
+
+
+def test_settings_json_with_values_out_of_range(tmp_path, monkeypatch, caplog):
+    from ripshelf.config import Settings, load_settings
+    data = tmp_path / "data"
+    data.mkdir()
+    # Saved with looser limits (or by hand): those fall back to their defaults, the rest load.
+    (data / "settings.json").write_text(json.dumps({"auto_confirm_threshold": 0.3, "scanner_dpi": 250,
+                                                    "auto_eject": False}))
+    monkeypatch.setenv("RIPSHELF_DATA_DIR", str(data))
+    for k in ("SCRATCH_DIR", "LIBRARY_DIR"):
+        monkeypatch.setenv(f"RIPSHELF_{k}", str(tmp_path / k.lower()))
+    monkeypatch.setattr(Settings, "model_config", {**Settings.model_config, "env_file": None})
+    s = load_settings()
+    assert (s.auto_confirm_threshold, s.scanner_dpi, s.auto_eject) == (0.9, 300, False)
+    assert "ignoring scanner_dpi=250" in caplog.text
+
+
 def test_transcode_sources_setting(client, settings):
     s = client.get("/api/settings").json()["transcode_sources"]
     assert s["bluray"] == {"transcode": True, "crop": True} and s["uhd"] == {"transcode": False, "crop": True}

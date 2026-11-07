@@ -7,15 +7,14 @@ import shutil
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, get_args
 
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import SecretStr
 
 from . import applog, art, checks, integrations, proc, providers, scanjobs, system
 from .bus import next_item
-from .config import FOLDERS, REQUIRED_FOLDERS, Settings
+from .config import EDITABLE, FOLDERS, REQUIRED_FOLDERS, SECRETS, Settings
 from .identify import catalogue
 from .makemkv import files as mkfiles
 from .makemkv import runner
@@ -69,6 +68,7 @@ from .models import (
     SearchRequest,
     ServerLibrariesRequest,
     ServerLibrary,
+    SettingField,
     SettingsTestRequest,
     SettingsTestResult,
     SettingsUpdate,
@@ -84,6 +84,7 @@ from .models import (
     TvSplitRequest,
     WebResult,
     WebSearchRequest,
+    setting_fields,
 )
 from .providers import contribute as contribute_provider
 from .providers import release_info
@@ -91,8 +92,6 @@ from .scanner import escl, images
 from .tv import split as tvsplit
 
 SSE_HEARTBEAT_S = 15
-SECRETS = {"tmdb_api_key", "tvdb_api_key", "tvdb_pin", "omdb_api_key", "thediscdb_api_key", "emby_api_key", "jellyfin_api_key", "plex_token", "makemkv_key", "pushover_user_key", "vision_api_key",
-           "pushover_app_token"}
 
 
 def manager(request: Request):
@@ -756,56 +755,31 @@ def settings_view(s: Settings) -> SettingsView:
     m_dir = s.makemkv_dir
     drive_ids = [p.name for p in m_dir.iterdir() if p.is_dir() and not p.name.startswith("_")] \
         if m_dir.exists() else []
+    values: dict[str, Any] = {}
+    for name in EDITABLE - set(FOLDERS):
+        v = getattr(s, name)
+        if name in SECRETS:
+            values[f"{name}_set"] = bool(v)
+        else:
+            values[name] = v
+    # With the defaults filled in.
+    values |= {
+        "metadata_providers": providers.lists(s),
+        "transcode_sources": {k: s.transcode_source(k) for k in ("dvd", "bluray", "uhd")},
+        "notify_events": {e: integrations.Notifier(s).priority(e) for e in integrations.EVENTS},
+    }
     return SettingsView(
-        tmdb_api_key_set=bool(s.tmdb_api_key), tmdb_language=s.tmdb_language,
-        tvdb_api_key_set=bool(s.tvdb_api_key), tvdb_pin_set=bool(s.tvdb_pin), tv_episode_order=s.tv_episode_order,
-        tvdb_episode_order=s.tvdb_episode_order, omdb_api_key_set=bool(s.omdb_api_key),
-        setup_complete=s.setup_complete,
-        thediscdb_contribute=s.thediscdb_contribute, thediscdb_contribute_url=s.thediscdb_contribute_url,
-        thediscdb_api_key_set=bool(s.thediscdb_api_key),
-        metadata_providers=providers.lists(s),
+        **values,
         providers=[ProviderInfo(name=p.name, label=p.label, description=p.description, lists=list(p.lists),
                                 needs_key=bool(p.keys), keys=list(p.keys), configured=providers.configured(s, p.name),
                                 site=p.site, check=p.check) for p in providers.PROVIDERS.values()],
-        auto_confirm_threshold=s.auto_confirm_threshold, auto_eject=s.auto_eject,
-        scan_timeout_s=s.scan_timeout_s, scan_max_s=s.scan_max_s, poll_interval_s=s.poll_interval_s, uhd_models=s.uhd_models,
-        disabled_drives=s.disabled_drives, rip_mode=s.rip_mode, drive_modes=s.drive_modes, drive_names=s.drive_names, public_url=s.public_url, emby_url=s.emby_url,
-        emby_api_key_set=bool(s.emby_api_key),
-        emby_movies_library=s.emby_movies_library, emby_movies_path=s.emby_movies_path,
-        emby_tv_library=s.emby_tv_library, emby_tv_path=s.emby_tv_path,
-        jellyfin_url=s.jellyfin_url, jellyfin_api_key_set=bool(s.jellyfin_api_key),
-        jellyfin_movies_library=s.jellyfin_movies_library, jellyfin_movies_path=s.jellyfin_movies_path,
-        jellyfin_tv_library=s.jellyfin_tv_library, jellyfin_tv_path=s.jellyfin_tv_path,
-        plex_url=s.plex_url, plex_token_set=bool(s.plex_token),
-        plex_movies_library=s.plex_movies_library, plex_movies_path=s.plex_movies_path,
-        plex_tv_library=s.plex_tv_library, plex_tv_path=s.plex_tv_path,
-        makemkv_key_set=bool(s.makemkv_key), library_dir=str(s.library_dir),
+        library_dir=str(s.library_dir), scratch_dir=str(s.scratch_dir),
         movies_dir=str(s.movies), tv_dir=str(s.tv), disc_backups_dir=str(s.disc_backups),
-        scratch_dir=str(s.scratch_dir),
         custom_movies_dir=str(s.movies_dir or ""), custom_tv_dir=str(s.tv_dir or ""),
         custom_disc_backups_dir=str(s.disc_backups_dir or ""),
         makemkv_drive_data={d: runner.has_private_data(m_dir, d) for d in drive_ids},
         makemkv_drive_dumps={d: runner.has_dump(m_dir, d) for d in drive_ids},
-        tv_unmatched=s.tv_unmatched, tv_rip_extras=s.tv_rip_extras, verify_order=s.verify_order,
-        tv_auto_confirm=s.tv_auto_confirm, tv_auto_threshold=s.tv_auto_threshold,
-        catalogue_search=s.catalogue_search, searxng_url=s.searxng_url,
-        transcode_enabled=s.transcode_enabled, transcode_codecs=s.transcode_codecs,
-        transcode_crop=s.transcode_crop, transcode_hdr=s.transcode_hdr,
-        transcode_sources={k: s.transcode_source(k) for k in ("dvd", "bluray", "uhd")},
-        transcode_encoder=s.transcode_encoder, transcode_quality=s.transcode_quality,
-        transcode_keep_original=s.transcode_keep_original, transcode_parallel=s.transcode_parallel,
-        vaapi_device=s.vaapi_device,
-        scanner_enabled=s.scanner_enabled, scanner_url=s.scanner_url, scanner_dpi=s.scanner_dpi,
-        scanner_source=s.scanner_source, scanner_trim=s.scanner_trim, scans_to_library=s.scans_to_library,
-        scan_read_text=s.scan_read_text, ocr_languages=s.ocr_languages,
-        extras_emby_folders=s.extras_emby_folders, film_unnamed_extras=s.film_unnamed_extras,
-        tv_bonus_episodes=s.tv_bonus_episodes,
-        vision_mode=s.vision_mode, vision_provider=s.vision_provider, vision_url=s.vision_url,
-        vision_model=s.vision_model, vision_api_key_set=bool(s.vision_api_key),
-        pushover_user_key_set=bool(s.pushover_user_key), pushover_app_token_set=bool(s.pushover_app_token),
-        pushover_device=s.pushover_device,
-        notify_events={e: integrations.Notifier(s).priority(e) for e in integrations.EVENTS},
-        notify_batch_s=s.notify_batch_s, backup_keep=s.backup_keep, backups_dir=str(s.backups),
+        backups_dir=str(s.backups),
     )
 
 
@@ -814,23 +788,22 @@ async def get_settings(request: Request):
     return settings_view(settings(request))
 
 
+@api.get("/settings/fields", response_model=list[SettingField])
+async def get_setting_fields():
+    """Every editable setting: its section, label, limits and default (config.Settings)."""
+    return setting_fields()
+
+
 @api.put("/settings", response_model=SettingsView)
 async def put_settings(body: SettingsUpdate, request: Request):
     s = settings(request)
-    values = body.model_dump(exclude_unset=True)
-    for k in list(values):
-        if k in SECRETS:
-            v = values[k]
-            # "" clears a secret; values are stored, never echoed back.
-            values[k] = SecretStr(v) if v else None
-    # settings.json needs plain values
-    plain = {k: (v.get_secret_value() if isinstance(v, SecretStr) else v) for k, v in values.items()}
+    plain = _plain_update(body)
     if "metadata_providers" in plain:
-        given = plain.pop("metadata_providers")
-        if given is not None:
-            plain["metadata_providers"] = providers.normalise(given, s.tv_episode_order)
+        plain["metadata_providers"] = providers.normalise(plain["metadata_providers"], s.tv_episode_order)
+    if "transcode_codecs" in plain:
+        plain["transcode_codecs"] = [c.lower() for c in plain["transcode_codecs"]]
     if "thediscdb_contribute_url" in plain:
-        url = (plain["thediscdb_contribute_url"] or "").strip().rstrip("/") or "https://thediscdb.com"
+        url = plain["thediscdb_contribute_url"].rstrip("/") or "https://thediscdb.com"
         if not url.startswith(("https://", "http://")):
             raise HTTPException(400, "TheDiscDB's address must start with https://")
         plain["thediscdb_contribute_url"] = url
@@ -855,6 +828,25 @@ async def put_settings(body: SettingsUpdate, request: Request):
         await manager(request).transcode_limit_changed()
     manager(request).publish_status()
     return settings_view(s)
+
+
+def _plain_update(body: SettingsUpdate) -> dict[str, Any]:
+    """What was sent, as settings.json keeps it. A secret sent as "" is cleared (secrets are
+    stored, never echoed back). Text sent empty is unset, or back to its default when it
+    can't be unset; anything else sent as null is ignored. Lists lose their blank lines."""
+    out: dict[str, Any] = {}
+    for k, v in body.model_dump(exclude_unset=True).items():
+        f = Settings.model_fields[k]
+        if k in SECRETS:
+            out[k] = v or None
+        elif v is None and k not in FOLDERS and type(None) not in get_args(f.annotation):
+            if f.annotation is str:
+                out[k] = f.default
+        elif isinstance(v, list) and all(isinstance(x, str) for x in v):
+            out[k] = [x.strip() for x in v if x.strip()]
+        else:
+            out[k] = v
+    return out
 
 
 def _folders(s, plain: dict, m) -> bool:
