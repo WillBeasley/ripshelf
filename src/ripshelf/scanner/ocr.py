@@ -108,7 +108,7 @@ def tidy(line: Line) -> Line | None:
     """Drop doubtful words at the ends (stray marks read as letters), and lines that
     are only noise."""
     ws = list(line.words)
-    while ws and (ws[0].conf < WORD_MIN_CONF or not re.search(r"[A-Za-z0-9]", ws[0].text)):
+    while ws and (ws[0].conf < WORD_MIN_CONF or not re.search(r"[A-Za-z0-9©]", ws[0].text)):
         ws.pop(0)
     while ws and (ws[-1].conf < WORD_MIN_CONF or not re.search(r"[A-Za-z0-9]", ws[-1].text)):
         ws.pop()

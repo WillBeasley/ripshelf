@@ -57,7 +57,8 @@ HEADING = re.compile(
 STOP = re.compile(
     r"©|\(c\)\s*\d{4}|all rights reserved|^information\b|^languages?\b|^audio\b|^subtitles?\b|^aspect|"
     r"run(?:ning)?\s*time|^feature\s*length|^certificate|^region\b|www\.|https?://|^technical|"
-    r"^\W*(?:dolby|dts|pal|ntsc)\b|package design|^rated\b", re.I)
+    r"^\W*(?:dolby|dts|pal|ntsc)\b|package design|^rated\b"
+    r"|^\W*(?:19|20)\d{2}\s+\S.*\b(?:pictures|studios|films|productions|entertainment|inc|ltd|llc)\b", re.I)
 JOIN_ENDS = {"of", "the", "a", "an", "and", "on", "with", "to", "from", "in", "for", "by", "at", "&", "-",
              "–", "—", ","}
 SMALL = {"a", "an", "and", "as", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with"}
@@ -68,7 +69,7 @@ RUNTIME = re.compile(
 EPISODE_COUNT = re.compile(
     NUM + r"\s+(?:[a-z][\w'-]*\s+){0,3}?(episodes|adventures|stories|programmes|programs|cartoons|tales|"
     r"instalments|installments|shorts|specials)\b", re.I)
-BULLET = re.compile(r"^(?:[•·*>~«»■□◆◇○●▪▶►\-–—=_|:;,.'\"“”‘’]+|[eoc©®]\s(?=[A-Z0-9\"“‘']))\s*")
+BULLET = re.compile(r"^(?:[•·*>~«»■□◆◇○●▪▶►\-–—=_|:;,.'\"“”‘’]+|[eoc]\s(?=[A-Z0-9\"“‘']))\s*")
 NUMBERED = re.compile(r"^(?:ep(?:isode)?\.?\s*)?(\d{1,3})\s*[.):\-–]\s*(?=\S)", re.I)
 QUOTED = re.compile(r"[\"“”‘’'`]\s*([^\"“”‘’'`]{3,}?)\s*[\"“”‘’'`]")
 CATALOGUE = [re.compile(r"\b(\d{3,7}[A-Z]{2,4}\d{0,2})\b"), re.compile(r"\b([A-Z]{2,5}-?\d{4,7}[A-Z]{0,2})\b")]
@@ -443,21 +444,22 @@ def _audio(texts: list[str]) -> list[AudioTrack]:
             and not re.search(r"subtitle", t, re.I)]
     fmt_all = next((f for t in block + near if (f := _first(AUDIO_FORMATS, t))), None)
     ch_all = next((c for t in block + near if (c := _first(CHANNELS, t))), None)
+    pieces = [(m, piece) for part in block for piece in re.split(r",|/|;|\band\b", part)
+              if (m := LANGUAGE.search(piece))]
+    # "English 5.1 DTS, French 2.0" names each track's own; the list's (a logo and
+    # "Mono" beside it) are for lists that don't.
+    own_fmt = any(_first(AUDIO_FORMATS, p[m.end():]) for m, p in pieces)
+    own_ch = any(_first(CHANNELS, p[m.end():]) for m, p in pieces)
     out: list[AudioTrack] = []
-    for part in block:
-        # "English 5.1 DTS, French 2.0" names each track's own; else the list's.
-        for piece in re.split(r",|/|;|\band\b", part):
-            m = LANGUAGE.search(piece)
-            if not m:
-                continue
-            lang = m.group(1).capitalize()
-            rest = piece[m.end():]
-            note = "commentary" if re.search(r"commentary", piece, re.I) else \
-                "audio description" if re.search(r"audio description|descriptive", piece, re.I) else None
-            track = AudioTrack(language=lang, format=_first(AUDIO_FORMATS, rest) or fmt_all,
-                               channels=_first(CHANNELS, rest) or ch_all, note=note)
-            if track not in out:
-                out.append(track)
+    for m, piece in pieces:
+        lang = m.group(1).capitalize()
+        rest = piece[m.end():]
+        note = "commentary" if re.search(r"commentary", piece, re.I) else \
+            "audio description" if re.search(r"audio description|descriptive", piece, re.I) else None
+        track = AudioTrack(language=lang, format=_first(AUDIO_FORMATS, rest) or (None if own_fmt else fmt_all),
+                           channels=_first(CHANNELS, rest) or (None if own_ch else ch_all), note=note)
+        if track not in out:
+            out.append(track)
     return out
 
 
@@ -478,17 +480,13 @@ def _subtitles(texts: list[str]) -> list[SubtitleTrack]:
 
 
 VIDEO = [(re.compile(r"\b(?:4K|ultra\s*hd|uhd|2160p)\b", re.I), "4K UHD"), (re.compile(r"\b1080[pi]\b", re.I), "1080p"),
-         (re.compile(r"hdr\s*10\s*\+|hdr10\+", re.I), "HDR10+"), (re.compile(r"\bhdr(?:\s*10)?\b(?!\s*10\s*\+)", re.I), "HDR10"),
+         (re.compile(r"hdr\s*10\s*\+|hdr10\+", re.I), "HDR10+"), (re.compile(r"\bhdr(?:\s*10)?(?![\d+])", re.I), "HDR10"),
          (re.compile(r"dolby\s*vision", re.I), "Dolby Vision")]
 
 
 def _video(texts: list[str]) -> list[str]:
-    out = []
-    for t in texts:
-        for pat, name in VIDEO:
-            if pat.search(t) and name not in out:
-                out.append(name)
-    return out
+    """What the box claims, in the order of VIDEO."""
+    return [name for pat, name in VIDEO if any(pat.search(t) for t in texts)]
 
 
 def _squash(text: str) -> str:
