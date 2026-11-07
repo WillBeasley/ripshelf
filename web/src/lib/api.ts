@@ -131,6 +131,7 @@ export const api = {
 	listing: (id: number) => call<ListingView>('GET', `/jobs/${id}/listing`),
 	scanMatch: (id: number) => call<ScanMatch | null>('GET', `/jobs/${id}/scan-match`),
 	ripExtras: (id: number) => call<Job>('POST', `/jobs/${id}/extras/rip`),
+	readWithVision: (id: number, scan: string) => call<{ queued: boolean }>('POST', `/jobs/${id}/scans/${scan}/vision`),
 	saveListing: (id: number, listing: Listing) => call<ListingView>('PUT', `/jobs/${id}/listing`, listing),
 	dropListingEdits: (id: number) => call<ListingView>('DELETE', `/jobs/${id}/listing/edits`),
 	readAgain: (id: number) => call<ListingView>('POST', `/jobs/${id}/listing/read`),

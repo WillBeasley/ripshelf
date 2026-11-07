@@ -348,6 +348,8 @@ class ScansMixin:
     async def scanner_info(self) -> ScannerInfo:
         info = ScannerInfo(enabled=self.s.scanner_enabled, url=self.s.scanner_url,
                            busy_job=self._scanner_job if self._scanner_busy() else None)
+        if p := self.vision_provider():
+            info.vision, info.vision_cloud = p.describe(), p.cloud
         if not (self.s.scanner_enabled and self.s.scanner_url):
             info.message = "The scanner isn't set up (Settings → Scanner)"
             return info

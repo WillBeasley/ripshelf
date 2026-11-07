@@ -22,6 +22,14 @@
 		['Other', 'Other']
 	];
 
+	const SOURCE_LABEL: Record<string, string> = { tesseract: 'Tesseract', vision: 'vision model', both: 'both', you: 'you' };
+	const SOURCE_HINT: Record<string, string> = {
+		tesseract: 'Read by Tesseract',
+		vision: 'Read only by the vision model: unconfirmed',
+		both: 'Read by Tesseract and the vision model',
+		you: 'Your edit'
+	};
+
 	let view = $state<ListingView | null>(null);
 	let draft = $state<Listing | null>(null);
 	let active = $state<number | null>(null);
@@ -64,7 +72,8 @@
 			disc: null,
 			text: null,
 			scan_id: null,
-			box: null
+			box: null,
+			source: 'you'
 		};
 	}
 
@@ -77,7 +86,7 @@
 		return {
 			title: null, year: null, cast: [], feature_runtime_min: null, episode_count: null, barcode: null,
 			barcode_source: null, catalogue_number: null, region: null, region_guessed: false, video_system: null,
-			country: null, locale: null, aspect_ratio: null, audio: [], subtitles: [], video: []
+			country: null, locale: null, aspect_ratio: null, audio: [], subtitles: [], video: [], sources: {}
 		};
 	}
 
@@ -120,24 +129,28 @@
 	const d = $derived(shown?.details);
 	const facts = $derived.by(() => {
 		if (!d) return [];
-		const out: [string, string][] = [];
-		const add = (k: string, v: unknown) => {
-			if (v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length)) out.push([k, String(v)]);
+		const out: [string, string, string | null][] = [];
+		// Each fact with who read it, when that was the vision model (or the barcode's bars).
+		const add = (k: string, v: unknown, ...fields: string[]) => {
+			if (v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length)) return;
+			const by = fields.map((f) => d.sources?.[f]).find((x) => x === 'vision' || x === 'barcode') ?? null;
+			out.push([k, String(v), by]);
 		};
-		add('Title', d.title);
-		add('Year', d.year);
-		add('Starring', d.cast.join(', '));
-		add('Running time', d.feature_runtime_min ? `${d.feature_runtime_min} min` : null);
-		add('Episodes', d.episode_count);
-		add('Barcode', d.barcode ? `${d.barcode}${d.barcode_source === 'text' ? ' (read from its digits)' : ''}` : null);
-		add('Catalogue number', d.catalogue_number);
-		add('Region', d.region ? `${d.region}${d.region_guessed ? ` (guessed from ${d.video_system} and ${d.country})` : ''}` : null);
-		add('Video', [d.video_system, d.aspect_ratio, ...d.video].filter(Boolean).join(' · '));
-		add('Country', d.country);
-		add('Audio', d.audio.map((a: Listing['details']['audio'][number]) => [a.language, a.format, a.channels, a.note].filter(Boolean).join(' ')).join(', '));
+		add('Title', d.title, 'title');
+		add('Year', d.year, 'year');
+		add('Starring', d.cast.join(', '), 'cast');
+		add('Running time', d.feature_runtime_min ? `${d.feature_runtime_min} min` : null, 'feature_runtime_min');
+		add('Episodes', d.episode_count, 'episode_count');
+		add('Barcode', d.barcode ? `${d.barcode}${d.barcode_source === 'text' ? ' (read from its digits)' : ''}` : null, 'barcode');
+		add('Catalogue number', d.catalogue_number, 'catalogue_number');
+		add('Region', d.region ? `${d.region}${d.region_guessed ? ` (guessed from ${d.video_system} and ${d.country})` : ''}` : null, 'region');
+		add('Video', [d.video_system, d.aspect_ratio, ...d.video].filter(Boolean).join(' · '), 'video_system', 'aspect_ratio');
+		add('Country', d.country, 'country');
+		add('Audio', d.audio.map((a: Listing['details']['audio'][number]) => [a.language, a.format, a.channels, a.note].filter(Boolean).join(' ')).join(', '), 'audio');
 		add(
 			'Subtitles',
-			d.subtitles.map((s: Listing['details']['subtitles'][number]) => `${s.language}${s.hard_of_hearing ? ' (hard of hearing)' : ''}${s.note ? ` (${s.note})` : ''}`).join(', ')
+			d.subtitles.map((s: Listing['details']['subtitles'][number]) => `${s.language}${s.hard_of_hearing ? ' (hard of hearing)' : ''}${s.note ? ` (${s.note})` : ''}`).join(', '),
+			'subtitles'
 		);
 		return out;
 	});
@@ -251,6 +264,10 @@
 						oninput={(e) => (edit().items[i].disc = num((e.currentTarget as HTMLInputElement).value))}
 					/>
 					<button class="icon" aria-label="Remove" title="Remove" onclick={() => edit().items.splice(i, 1)}>✕</button>
+					{#if it.source}
+						<span class="src {it.source}" title={SOURCE_HINT[it.source]}>{SOURCE_LABEL[it.source]}</span>
+					{/if}
+					{#if it.source === 'vision'}<div class="read small warn">Only the vision model read this: check it against the box.</div>{/if}
 					{#if it.text && it.text !== it.title}<div class="read small muted">Read as “{it.text}”</div>{/if}
 				</li>
 			{/each}
@@ -273,7 +290,7 @@
 
 	{#if facts.length}
 		<dl class="facts small">
-			{#each facts as [k, v] (k)}<dt>{k}</dt><dd>{v}</dd>{/each}
+			{#each facts as [k, v, by] (k)}<dt>{k}</dt><dd>{v}{#if by}<span class="src {by}">{by === 'vision' ? 'vision model' : 'from the bars'}</span>{/if}</dd>{/each}
 		</dl>
 	{/if}
 	{#each shown?.notes ?? [] as n, i (i)}<p class="small muted">{n}</p>{/each}
@@ -372,6 +389,30 @@
 	}
 	.icon {
 		padding: 2px 8px;
+	}
+	.src {
+		font-size: 0.7rem;
+		padding: 0 6px;
+		margin-left: 4px;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+		color: var(--muted);
+		white-space: nowrap;
+	}
+	.src.both {
+		color: var(--ok);
+		border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+	}
+	.src.vision {
+		color: var(--warn);
+		border-color: color-mix(in srgb, var(--warn) 50%, transparent);
+	}
+	.src.you {
+		color: var(--info);
+		border-color: color-mix(in srgb, var(--info) 50%, transparent);
+	}
+	.warn {
+		color: var(--warn);
 	}
 	.facts {
 		display: grid;

@@ -772,6 +772,8 @@ class ScannerInfo(BaseModel):
     duplex: bool = False
     resolutions: list[int] = []
     busy_job: int | None = Field(None, description="the job the scanner is scanning for")
+    vision: str | None = Field(None, description="the vision model set up to read scans (model at where), if any")
+    vision_cloud: bool = Field(False, description="the vision model is a cloud service")
 
 
 class ContributionExtrasRequest(BaseModel):

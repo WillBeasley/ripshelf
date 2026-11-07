@@ -94,6 +94,10 @@
 		scans_to_library: true,
 		scan_read_text: true,
 		ocr_languages: 'eng',
+		vision_mode: 'off' as 'off' | 'struggles' | 'every' | 'manual',
+		vision_provider: 'local' as 'local' | 'openai' | 'anthropic',
+		vision_url: '',
+		vision_model: 'qwen3-vl:4b-instruct',
 		extras_emby_folders: true,
 		film_unnamed_extras: 'skip' as 'skip' | 'extras',
 		library_dir: '',
@@ -113,7 +117,8 @@
 		plex_token: '',
 		makemkv_key: '',
 		pushover_user_key: '',
-		pushover_app_token: ''
+		pushover_app_token: '',
+		vision_api_key: ''
 	});
 	let secrets = $state(emptySecrets());
 
@@ -205,6 +210,10 @@
 			scans_to_library: v.scans_to_library ?? true,
 			scan_read_text: v.scan_read_text ?? true,
 			ocr_languages: v.ocr_languages ?? 'eng',
+			vision_mode: v.vision_mode ?? 'off',
+			vision_provider: v.vision_provider ?? 'local',
+			vision_url: v.vision_url ?? '',
+			vision_model: v.vision_model ?? '',
 			extras_emby_folders: v.extras_emby_folders ?? true,
 			film_unnamed_extras: v.film_unnamed_extras ?? 'skip',
 			library_dir: v.library_dir,
@@ -375,6 +384,10 @@
 			scans_to_library: f.scans_to_library,
 			scan_read_text: f.scan_read_text,
 			ocr_languages: f.ocr_languages.trim() || 'eng',
+			vision_mode: f.vision_mode,
+			vision_provider: f.vision_provider,
+			vision_url: orNull(f.vision_url),
+			vision_model: f.vision_model.trim(),
 			extras_emby_folders: f.extras_emby_folders,
 			film_unnamed_extras: f.film_unnamed_extras,
 			...changedFolders()
@@ -776,6 +789,56 @@
 					cover scans guide. Each language needs its data installed, such as tesseract-ocr-fra for <span class="mono">fra</span>.
 				</p>
 				<TestButton check="ocr" values={body} label="Test text reading" />
+				<h3>Vision model</h3>
+				<p class="small muted">
+					A vision model reads the box too, beside Tesseract: the region in its globe, PAL logos, small print and
+					stylised titles that Tesseract misses. What only the model reads is marked so you can check it.
+				</p>
+				<label class="field">
+					Read scans with it
+					<select bind:value={f.vision_mode}>
+						<option value="off">Never</option>
+						<option value="struggles">Only when Tesseract struggles (recommended)</option>
+						<option value="every">Every scan</option>
+						<option value="manual">Only when I press the button on a scan</option>
+					</select>
+				</label>
+				{#if f.vision_mode !== 'off'}
+					<label class="field">
+						Where it runs
+						<select bind:value={f.vision_provider}>
+							<option value="local">On my network (Ollama or another OpenAI-compatible server)</option>
+							<option value="openai">A cloud service (OpenAI-compatible)</option>
+							<option value="anthropic">Anthropic's API</option>
+						</select>
+					</label>
+					{#if f.vision_provider !== 'anthropic'}
+						<label class="field">
+							Address
+							<input class="mono" bind:value={f.vision_url}
+								placeholder={f.vision_provider === 'local' ? 'http://ollama:11434' : 'https://api.example.com/v1'} />
+						</label>
+					{/if}
+					<label class="field">
+						Model
+						<input class="mono" bind:value={f.vision_model}
+							placeholder={f.vision_provider === 'local' ? 'qwen3-vl:4b-instruct' : 'the model name from the service'} />
+					</label>
+					{#if f.vision_provider === 'local'}
+						<p class="small muted">
+							On a desktop CPU, qwen3-vl:4b-instruct takes a minute or two a picture (qwen2.5vl:7b reads more
+							carefully, at twice the time). It waits while a transcode runs. Use an instruct model, not a
+							"thinking" one.
+						</p>
+					{/if}
+					{@render secret('vision_api_key', f.vision_provider === 'local' ? 'Key (if the server needs one)' : 'API key', view.vision_api_key_set)}
+					{#if f.vision_provider !== 'local'}
+						<p class="small warn-note">
+							Scans are sent to this service, outside your network. Only pictures of the box are sent.
+						</p>
+					{/if}
+					<TestButton check="vision" values={body} label="Test the vision model" />
+				{/if}
 				<h3>Extras the box names</h3>
 				<label class="check">
 					<input type="checkbox" bind:checked={f.extras_emby_folders} /> File named extras into Emby's folders
@@ -1136,5 +1199,8 @@
 	h3 {
 		margin: 8px 0 0;
 		font-size: 1rem;
+	}
+	.warn-note {
+		color: var(--warn);
 	}
 </style>
