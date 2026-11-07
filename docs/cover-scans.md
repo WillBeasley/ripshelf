@@ -140,6 +140,7 @@ What a scan reads is used to identify the disc as well as to list what's on it:
 - **Barcode:** looked up once with UPCitemdb (about 100 free lookups a day), and the product's name is searched for too.
 - **Evidence:** a candidate found this way says so ("From the cover scan: the cover scan reads “…”").
 - **TV:** a disc whose label says nothing searches for the show the spine names.
+- **TV episodes:** when a TV disc waits for review, the shows it could be (the candidates, the box's title and the barcode's product) are checked against the episode names the box lists. A show that has at least three in five of them is proposed instead, at the season most of them are in. Names match past a prefix the box or the show puts on every one ("Pat's Special Delivery: …", "Postman Pat and …") and a leading "A" or "The".
 
 A disc TheDiscDB recognises still goes by TheDiscDB. A box never overrides a confident match.
 
@@ -162,7 +163,7 @@ What decides a match:
 The play-all, duplicates and a Blu-ray's loose clips are left out. Lines and titles nothing matched are listed underneath.
 
 How the matches are used:
-- **TV review.** Each title shows the cover scan's pick, and **Use the cover scan's picks** fills in the high and medium ones. Nothing changes until you press Confirm, and nothing is confirmed on its own.
+- **TV review.** When every episode the box lists is matched (high or medium), the mapping is set from the box, and a title still mapped as an episode becomes an extra. The card starts with "The box says: … S01E18 Treehouse, S01E24 Giant Cake …", with **Use this** when the mapping says otherwise (a mapping you changed by hand is only changed by Use this). A mapping set from the scan is never confirmed on its own: you press Confirm.
 - **TheDiscDB.** The naming list for extras starts from the names and types the scan gives.
 - **The library.** Matched extras are filed by name (below). Low matches aren't used for names.
 
@@ -192,8 +193,25 @@ TV/Pippa & Goose (2013)/behind the scenes/Making the Kite Tram.mkv
 - **TV.** A TV disc's extras go in these folders under the show, instead of `extras/<disc label> - title N.mkv`. Extras the box doesn't name are filed as before.
 - **Nothing is replaced.** A file already there gets a new one beside it, with " (2)" added.
 
+### Bonus episodes of other shows
+
+Some boxes carry an episode of a different show ("Includes Bonus Episode", "Plus meet Jess in an all new series", with the episode's title in quotes). The reading notes it as an extra with that show's name, the vision model is asked for it too, and on a TV disc waiting for review the episode is looked up in that show's episode list. Its runtime then picks its title, which is ripped whatever "Rip TV extras by default" says, and filed:
+
+```text
+TV/Postman Pat - Special Delivery Service (2008)/extras/Guess with Jess - Where's My Feather Gone.mkv
+```
+
+or, with **Bonus episodes of other shows** set to the other show's own folder:
+
+```text
+TV/Guess with Jess (2009)/Season 01/Guess with Jess - S01E24 - Where's My Feather Gone.mkv
+```
+
+TheDiscDB gets it as an extra named "Guess with Jess - Where's My Feather Gone?".
+
 In Settings → Scanner:
 - **File named extras into Emby's folders** turns all this off.
+- **Bonus episodes of other shows**: an extra of this show (the default), or an episode in the other show's own folder.
 - **A film's other titles** can rip the titles the box doesn't name into `extras/` as "Title N". This is off by default, as before.
 
 ## TheDiscDB covers

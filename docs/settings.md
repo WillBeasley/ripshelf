@@ -69,6 +69,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_VISION_PROVIDER` / `VISION_URL` / `VISION_MODEL` / `VISION_API_KEY` | `local` / none / `qwen3-vl:4b-instruct` / none | where the vision model is: `local` (an OpenAI-compatible server such as Ollama), `openai` (a hosted OpenAI-compatible service) or `anthropic`; its address (not for `anthropic`), model and key |
 | `RIPSHELF_EXTRAS_EMBY_FOLDERS` | on | file extras the cover scan names in Emby's extras folders (featurettes/, trailers/...) under their names, and rip a film's ([cover-scans.md](cover-scans.md#extras-in-the-library)) |
 | `RIPSHELF_FILM_UNNAMED_EXTRAS` | `skip` | a film's titles the box doesn't name: `skip`, or `extras` to rip them into extras/ as "Title N" |
+| `RIPSHELF_TV_BONUS_EPISODES` | `extra` | a TV box's bonus episode of another show: `extra` files it in this show's `extras/` as "Other show - Episode", `own_show` in the other show's season folder ([cover-scans.md](cover-scans.md#bonus-episodes-of-other-shows)) |
 | `RIPSHELF_AUTO_EJECT` | on | |
 | `RIPSHELF_RIP_MODE` / `DRIVE_MODES` | `titles` / `{}` | `titles` or `backup` (a whole Blu-ray or UHD, decrypted). `DRIVE_MODES` sets it per drive id, for example `{"pioneer-...": "backup"}` ([backup.md](backup.md)) |
 | `RIPSHELF_DRIVE_NAMES` | `{}` | a name for a drive id, shown instead of the model, for example `{"pioneer-...": "Top bay"}`. Usually set with the pencil on the drive card |
