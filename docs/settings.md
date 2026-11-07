@@ -7,7 +7,7 @@ Most settings are changed on the Settings page. A fresh install opens a short se
 - **Secrets.** Keys and tokens are stored, but never sent back to the browser.
 - **Outside a container,** folders that aren't set are next to ripshelf (the source checkout). These are `data/`, `scratch/`, `library/` and the env file `ripshelf.env`. You can change them in Settings. A checkout that already has state in `var/` keeps using it.
 - **Environment.** Any setting can also be set as an environment variable. The name is `RIPSHELF_` followed by the setting's name in capitals. Put it in the `environment:` section of compose.yaml, or in `/data/ripshelf.env`.
-- **Test buttons.** Each connection (TMDB, TheTVDB, OMDb, TheDiscDB, TVmaze, MakeMKV key, Pushover, Emby, Jellyfin, Plex, the scanner) and the folders have a Test button. It tries the values as typed, without saving them.
+- **Test buttons.** Each connection (TMDB, TheTVDB, OMDb, TheDiscDB, TVmaze, MakeMKV key, Pushover, Emby, Jellyfin, Plex, the scanner, text reading) and the folders have a Test button. It tries the values as typed, without saving them.
 
 ## Settings that aren't on the Settings page
 
@@ -62,6 +62,9 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_SCANNER_DPI` / `SCANNER_SOURCE` | 300 / `platen` | the scan's resolution, and `platen` (the glass) or `feeder` |
 | `RIPSHELF_SCANNER_TRIM` | on | cut away the empty glass around a scan (the original is kept) |
 | `RIPSHELF_SCANS_TO_LIBRARY` | on | copy a job's scans into `scans/` in the film's or show's folder once it's filed |
+| `RIPSHELF_SCAN_READ_TEXT` | on | read the text on scans and list what's on the disc ([cover-scans.md](cover-scans.md)) |
+| `RIPSHELF_OCR_LANGUAGES` | `eng` | Tesseract's languages, joined with `+` (such as `eng+fra`); each needs its data installed |
+| `RIPSHELF_TESSERACT` | `tesseract` | the Tesseract program (found in Program Files on Windows) |
 | `RIPSHELF_AUTO_EJECT` | on | |
 | `RIPSHELF_RIP_MODE` / `DRIVE_MODES` | `titles` / `{}` | `titles` or `backup` (a whole Blu-ray or UHD, decrypted). `DRIVE_MODES` sets it per drive id, for example `{"pioneer-...": "backup"}` ([backup.md](backup.md)) |
 | `RIPSHELF_DRIVE_NAMES` | `{}` | a name for a drive id, shown instead of the model, for example `{"pioneer-...": "Top bay"}`. Usually set with the pencil on the drive card |

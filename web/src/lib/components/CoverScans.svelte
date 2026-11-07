@@ -196,7 +196,7 @@
 								{#each KINDS as [k, label] (k)}<option value={k}>{label}</option>{/each}
 							</select>
 							<button class="icon" title="Turn a quarter clockwise" aria-label="Turn" disabled={act.busy} onclick={() => turn(sc)}>⟳</button>
-							{#if sc.source === 'scanner'}
+							{#if sc.source !== 'camera'}
 								<button class="link small" disabled={act.busy}
 									onclick={() => act.run(() => api.updateScan(job.id, sc.id, { trim: !sc.crop }))}>{sc.crop ? 'Untrim' : 'Trim'}</button>
 							{/if}
