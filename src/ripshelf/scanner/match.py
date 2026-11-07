@@ -335,12 +335,20 @@ def _assign(out: ScanMatch, items: list[tuple[int, ListingItem]], cands: list[Ti
         others = sorted((x for j, x in enumerate(scores[r]) if j != c), reverse=True)
         if not others or score - others[0] >= 0.2:
             score = min(1.0, score + 0.12)  # no other title comes close
+        same = eps_items if it.kind == "episode" else ext_items
+        pool = ep_titles if it.kind == "episode" else cands
+        guess = bool(others) and score - others[0] < 0.05 and len(same) != len(pool)
         eps: list[EpisodeRef] = []
         ep, name_score = named.get(i, (None, 0.0))
         if ep:
             eps = [EpisodeRef(season=ep.season, episode=ep.episode)]
             score = min(1.0, 0.55 + 0.45 * name_score) if score >= 0.35 else score
             reason = f"“{it.title}” is {_code(ep)} “{ep.name}”" + (f"; {reason}" if reason else "")
+        if guess:
+            # Titles alike, and the box lists fewer (or more) than the disc has: only the
+            # line's place on the box put it here.
+            score = min(score, 0.7)
+            reason += "; titles this long are alike, so its place on the box decided"
         agrees, cur = _compare(current.get(t.index), it, eps)
         if agrees:
             score = min(1.0, score + 0.1)
