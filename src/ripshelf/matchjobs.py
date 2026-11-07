@@ -24,7 +24,16 @@ from . import library
 from .db import now
 from .identify.scoring import title_similarity
 from .identify.tmdb import TmdbError
-from .models import DiscKind, Evidence, JobState, MediaKind, ScanMatch, TitleMatch, TitleRole
+from .models import (
+    BonusEpisode,
+    DiscKind,
+    Evidence,
+    JobState,
+    MediaKind,
+    ScanMatch,
+    TitleMatch,
+    TitleRole,
+)
 from .providers import release_info
 from .scanner import match as matcher
 from .tv import tmdb_tv
@@ -59,12 +68,32 @@ class MatchMixin:
         tv = job.tv if job.media == MediaKind.tv else None
         pal = job.disc.kind == DiscKind.dvd and any((t.resolution or "").endswith("576") for t in job.titles)
         disc = (tv.disc_number if tv else None) or (job.contribution.disc_number if job.contribution else None)
+        listing, bonus = self._with_bonus(listing, tv.bonus if tv else [])
         m = matcher.match(job.titles, listing, media=job.media.value, episodes=tv.episodes if tv else [],
                           season=tv.season if tv else None, mapping=tv.mapping if tv else [],
                           main_title=job.main_title.index if job.main_title and job.media == MediaKind.movie
                           else None, disc=disc, claimed=self._claimed(job, listing), pal=pal)
+        for x in m.matches:
+            x.bonus = bonus.get(x.item) if x.item is not None else None
         m.made_at = now()
         return m
+
+    @staticmethod
+    def _with_bonus(listing, found: list[BonusEpisode]):
+        """The listing as matched: a bonus episode of another show that was found in that
+        show's episode list is called "<show> - <episode>" and runs as long as it does
+        (unless the box prints a time). Also (item -> the bonus episode)."""
+        known = {(b.box_show, b.box_title): b for b in found}
+        hits = {i: known[(it.show, it.title)] for i, it in enumerate(listing.items)
+                if it.show and (it.show, it.title) in known}
+        if not hits:
+            return listing, {}
+        listing = listing.model_copy(deep=True)
+        for i, b in hits.items():
+            it = listing.items[i]
+            it.title, it.kind, it.extra_type = b.name, "extra", "Extra"
+            it.runtime_min = it.runtime_min or b.episode.runtime or b.show.episode_runtime
+        return listing, hits
 
     def rematch(self, job_id: int) -> ScanMatch | None:
         """Match again and keep it on the job, if it changed."""
@@ -278,9 +307,11 @@ class ShowFromScanMixin:
             return False
         names = self._scan_episode_names(job)
         changed = False
-        if len(names) >= 2 and (tmdb := self._tmdb()):
+        if (tmdb := self._tmdb()):
             try:
-                changed = await self._switch_show(job_id, names, tmdb)
+                if len(names) >= 2:
+                    changed = await self._switch_show(job_id, names, tmdb)
+                changed = await self._find_bonus(job_id, tmdb) or changed
             except (TmdbError, httpx.HTTPError) as e:
                 log.info("no show from the cover scan for job %s: %s", job_id, e)
             finally:
@@ -298,6 +329,33 @@ class ShowFromScanMixin:
             raise ValueError("the cover scan doesn't name enough of the episodes to set them, or the mapping "
                              "already says the same")
         return self.db.get_job(job_id)
+
+    async def _find_bonus(self, job_id: int, tmdb) -> bool:
+        """Look up the bonus episodes of other shows the box lists, in those shows'
+        episode lists; kept on the plan (and matched again) when that changes."""
+        job = self.db.get_job(job_id)
+        listing = self._listing_for(job)
+        wanted = {(it.show, it.title) for it in (listing.items if listing else []) if it.kind == "extra" and it.show}
+        have = {(b.box_show, b.box_title): b for b in job.tv.bonus if (b.box_show, b.box_title) in wanted}
+        for box_show, box_title in sorted(wanted - set(have)):
+            for show in (await tmdb_tv.find_shows(tmdb, box_show, None))[:3]:
+                ep = matcher.episode_for(box_title, await tmdb_tv.all_episodes(tmdb, show), None)[0]
+                if ep:
+                    have[(box_show, box_title)] = BonusEpisode(box_show=box_show, box_title=box_title,
+                                                               show=show, episode=ep)
+                    self._event(job, "info", f"The box's bonus episode “{box_title}” is {show.name} "
+                                             f"S{ep.season:02}E{ep.episode:02} “{ep.name}”")
+                    break
+            else:
+                log.info("job %s: no episode “%s” of %s found", job_id, box_title, box_show)
+        found = list(have.values())
+        if found == job.tv.bonus:
+            return False
+        job = self.db.get_job(job_id)
+        job.tv.bonus = found
+        self._save(job)
+        self.rematch(job_id)
+        return True
 
     async def _switch_show(self, job_id: int, names: list[str], tmdb) -> bool:
         job = self.db.get_job(job_id)
@@ -344,25 +402,36 @@ class ShowFromScanMixin:
             return False
         names = self._scan_episode_names(job)
         m = job.scan_match
-        picks = {x.title_index: x for x in (m.matches if m else [])
-                 if x.kind == "episode" and x.episodes and x.confidence != "low"}
+        matches = m.matches if m else []
+        picks = {x.title_index: x for x in matches if x.kind == "episode" and x.episodes and x.confidence != "low"}
         if not names or len(picks) < len(names):
-            return False
+            picks = {}  # not every episode found: the mapping's own guess stands
+        # A bonus episode of another show is ripped and filed, as an extra or in its show.
+        bonus = {x.title_index: x for x in matches if x.bonus and x.confidence != "low" and x.title_index not in picks}
         plan = job.tv
         # The box lists every episode, so another title mapped as one is something else.
-        stray = [r for r in plan.mapping if r.role == TitleRole.episode and r.title_index not in picks]
-        if not stray and all(r.episodes == picks[r.title_index].episodes
-                             for r in plan.mapping if r.title_index in picks):
+        stray = [r for r in plan.mapping if picks and r.role == TitleRole.episode
+                 and r.title_index not in picks and r.title_index not in bonus]
+        todo = [r for r in plan.mapping if (r.title_index in picks and (r.role != TitleRole.episode
+                or r.episodes != picks[r.title_index].episodes))
+                or (r.title_index in bonus and (r.role != TitleRole.extra or r.episodes))]
+        if not stray and not todo:
             return False
         for r in plan.mapping:
             if (x := picks.get(r.title_index)):
                 r.role, r.episodes = TitleRole.episode, list(x.episodes)
                 r.note = f"from the cover scan: “{x.name}”"
+            elif (x := bonus.get(r.title_index)):
+                b = x.bonus
+                r.role, r.episodes = TitleRole.extra, []
+                r.note = f"bonus episode: {b.show.name} S{b.episode.season:02}E{b.episode.episode:02} “{b.episode.name}”"
             elif r in stray:
                 r.role, r.episodes, r.note = TitleRole.extra, [], "not one of the episodes the box lists"
         plan.from_scan = True
         self._save(job)
-        self._event(job, "info", f"Set {len(picks)} episodes from the cover scan; check them and confirm")
+        what = [f"{len(picks)} episodes"] if picks else []
+        what += [f"the bonus episode {x.bonus.name}" for x in bonus.values()]
+        self._event(job, "info", f"Set {' and '.join(what) or 'the mapping'} from the cover scan; check and confirm")
         self.rematch(job_id)
         return True
 

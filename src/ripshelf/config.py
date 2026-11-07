@@ -128,6 +128,7 @@ EDITABLE = {
     "ocr_languages",
     "extras_emby_folders",
     "film_unnamed_extras",
+    "tv_bonus_episodes",
     "vision_mode",
     "vision_provider",
     "vision_url",
@@ -333,6 +334,9 @@ class Settings(BaseSettings):
     # A film's other titles the box doesn't name: left out, or ripped and filed in
     # extras/ as "Title N".
     film_unnamed_extras: Literal["skip", "extras"] = "skip"
+    # A bonus episode of another show on a TV disc: an extra of this show, named after
+    # the other show and the episode, or an episode in the other show's own folder.
+    tv_bonus_episodes: Literal["extra", "own_show"] = "extra"
     # A vision model reading the scans beside Tesseract: never, only scans Tesseract
     # struggled with, every scan, or only when asked. "local" is an OpenAI-compatible
     # server on the LAN (Ollama), "openai" a hosted OpenAI-compatible service, and

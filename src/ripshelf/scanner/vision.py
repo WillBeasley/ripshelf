@@ -56,6 +56,7 @@ SCHEMA = _obj({
         "runtime_min": _nullable("number"),
         "extra_type": {"anyOf": [{"type": "string", "enum": EXTRAS_TYPES}, {"type": "null"}]},
         "disc": _nullable("integer"),
+        "show": _nullable("string"),
     })},
     "details": _obj({
         "title": _nullable("string"),
@@ -81,7 +82,10 @@ PROMPT = (
     "- items: every episode and every special feature or extra, in the order printed. kind is episode or "
     "extra. Never list the film itself. For an extra whose description quotes a title, use the quoted "
     "title. extra_type is one of Featurette (making-of, documentary), DeletedScene, Trailer, Interview, "
-    "Scene, Music, Short, Other, Extra. runtime_min only when a running time is printed beside it.\n"
+    "Scene, Music, Short, Other, Extra. runtime_min only when a running time is printed beside it. show is "
+    "null, except for a bonus episode of a different show (\"Includes bonus episode\", \"Plus meet ... in an "
+    "all new series\"): then kind is extra, extra_type Other, title is that episode's own title (often in "
+    "quotes) and show is the other show's name.\n"
     "- details: the title, the copyright year, the feature's running time in minutes (2hrs 45mins is 165), "
     "the number of episodes if stated, the barcode digits, the catalogue number, the region (the number "
     "in the globe logo, or as printed, such as 2 or 2 & 4 or B), PAL or NTSC, the aspect ratio such as "
@@ -103,6 +107,7 @@ class _Reply(BaseModel):
         runtime_min: float | None = None
         extra_type: str | None = None
         disc: int | None = None
+        show: str | None = None
 
     class Audio(BaseModel):
         language: str
@@ -171,6 +176,10 @@ def _region(v: str | None) -> str | None:
     return " & ".join(dict.fromkeys(codes)) if codes else None
 
 
+def _same_name(a: str, b: str) -> bool:
+    return bool(a and b) and re.sub(r"[^a-z0-9]", "", a.lower()) == re.sub(r"[^a-z0-9]", "", b.lower())
+
+
 def tidy(raw: dict) -> Listing:
     """The reply as a listing, in ripshelf's own terms; VisionError if it isn't one."""
     try:
@@ -192,7 +201,10 @@ def tidy(raw: dict) -> Listing:
         if not title or (film and re.sub(r"[^a-z0-9]", "", title.lower()) == film):
             continue  # the film listed as one of its own extras
         kind = "extra" if it.kind == "extra" else "episode"
-        items.append(ListingItem(kind=kind, title=title[:300], number=it.number,
+        show = (it.show or "").strip("\"'“”‘’ ") or None
+        if show and (kind != "extra" or _same_name(show, title) or _same_name(show, d.title or "")):
+            show = None  # not another show's episode, whatever the model says
+        items.append(ListingItem(kind=kind, title=title[:300], number=it.number, show=show[:200] if show else None,
                                  runtime_min=it.runtime_min if it.runtime_min and it.runtime_min > 0 else None,
                                  extra_type=(it.extra_type if it.extra_type in EXTRAS_TYPES else "Extra")
                                  if kind == "extra" else None,

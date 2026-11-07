@@ -783,6 +783,7 @@ def settings_view(s: Settings) -> SettingsView:
         scanner_source=s.scanner_source, scanner_trim=s.scanner_trim, scans_to_library=s.scans_to_library,
         scan_read_text=s.scan_read_text, ocr_languages=s.ocr_languages,
         extras_emby_folders=s.extras_emby_folders, film_unnamed_extras=s.film_unnamed_extras,
+        tv_bonus_episodes=s.tv_bonus_episodes,
         vision_mode=s.vision_mode, vision_provider=s.vision_provider, vision_url=s.vision_url,
         vision_model=s.vision_model, vision_api_key_set=bool(s.vision_api_key),
         pushover_user_key_set=bool(s.pushover_user_key), pushover_app_token_set=bool(s.pushover_app_token),
