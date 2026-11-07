@@ -516,6 +516,13 @@ async def rip_extras(job_id: int, request: Request):
     return await _contribution_call(lambda: _public(manager(request).rip_film_extras(job_id)))
 
 
+@api.post("/jobs/{job_id}/scan-match/use", response_model=Job)
+async def use_scan(job_id: int, request: Request):
+    """A TV disc in review: take the show, season and episodes the cover scan gives. It
+    still needs confirming."""
+    return await _contribution_call(lambda: _public(manager(request).use_scan(job_id)))
+
+
 async def _public(coro):
     return (await coro).public()
 

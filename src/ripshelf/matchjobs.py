@@ -268,12 +268,13 @@ class ShowFromScanMixin:
         listing = self._listing_for(job)
         return [it.title for it in listing.items if it.kind == "episode"] if listing else []
 
-    async def fix_show_from_scan(self, job_id: int) -> bool:
+    async def fix_show_from_scan(self, job_id: int, asked: bool = False) -> bool:
         """When the box's episode names are another show's (or another season's) than the
-        one proposed, switch to it; then take the box's picks. True if anything changed."""
+        one proposed, switch to it; then take the box's picks. True if anything changed.
+        A mapping changed by hand is left alone unless the user ``asked``."""
         job = self.db.get_job(job_id)
         if not job or job.media != MediaKind.tv or not job.tv or job.state != JobState.review \
-                or job.identity or job.tv.user_edited:
+                or job.identity or (job.tv.user_edited and not asked):
             return False
         names = self._scan_episode_names(job)
         changed = False
@@ -284,7 +285,19 @@ class ShowFromScanMixin:
                 log.info("no show from the cover scan for job %s: %s", job_id, e)
             finally:
                 await tmdb.aclose()
-        return self.apply_scan_picks(job_id) or changed
+        return self.apply_scan_picks(job_id, asked) or changed
+
+    async def use_scan(self, job_id: int) -> JobRecord:
+        """The user's "Use this": the show, season and episodes the cover scan gives."""
+        job = self.db.get_job(job_id)
+        if not job:
+            raise KeyError(job_id)
+        if job.media != MediaKind.tv or not job.tv or job.state != JobState.review or job.identity:
+            raise ValueError("only a TV disc waiting for review takes its episodes from the cover scan")
+        if not await self.fix_show_from_scan(job_id, asked=True):
+            raise ValueError("the cover scan doesn't name enough of the episodes to set them, or the mapping "
+                             "already says the same")
+        return self.db.get_job(job_id)
 
     async def _switch_show(self, job_id: int, names: list[str], tmdb) -> bool:
         job = self.db.get_job(job_id)
@@ -322,12 +335,12 @@ class ShowFromScanMixin:
         self.rematch(job_id)
         return True
 
-    def apply_scan_picks(self, job_id: int) -> bool:
+    def apply_scan_picks(self, job_id: int, asked: bool = False) -> bool:
         """Put the cover scan's episodes into the mapping, when every episode line it lists
         matched a title (high or medium) with an episode of the show. Titles the mapping had
         as episodes that the box doesn't list become extras. Review still confirms."""
         job = self.db.get_job(job_id)
-        if not job or not job.tv or job.state != JobState.review or job.identity or job.tv.user_edited:
+        if not job or not job.tv or job.state != JobState.review or job.identity or (job.tv.user_edited and not asked):
             return False
         names = self._scan_episode_names(job)
         m = job.scan_match

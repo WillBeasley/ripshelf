@@ -364,7 +364,7 @@ class TvMixin:
         self._check_plan(job)
         self._save(job)
         if job.rip.state == RipState.done and job.rip.all_titles:
-            self._spawn(self.drives[job.drive_id], self._after_tv_rip(job.id), job.id)
+            self._spawn(self.drives.get(job.drive_id), self._after_tv_rip(job.id), job.id)
 
     def _disc_match_mapping(self, job: JobRecord, plan: TvPlan, show: Show) -> str | None:
         """Map titles to episodes as the disc database's record of this disc says, when
@@ -619,7 +619,7 @@ class TvMixin:
             if not plan.split and not self._plan_split(job, plan, plan.show, None):
                 raise ValueError("no title on this disc is long enough to hold several episodes")
             if plan.split.state == "waiting" and job.rip.state == RipState.done:
-                self._spawn(self.drives[job.drive_id], self._after_tv_rip(job.id), job.id)
+                self._spawn(self.drives.get(job.drive_id), self._after_tv_rip(job.id), job.id)
         if cuts is not None or cut_at is not None:
             sp = plan.split
             if not sp or sp.state != "ready":
