@@ -33,6 +33,7 @@
 	let view = $state<ListingView | null>(null);
 	let draft = $state<Listing | null>(null);
 	let active = $state<number | null>(null);
+	let big = $state(false);
 
 	const sl = $derived(job.listing);
 	const phase = $derived(sl?.state ?? 'idle');
@@ -115,6 +116,20 @@
 		}
 	}
 
+	// A title box as tall as its title, where the browser can't size it by itself.
+	function grow(el: HTMLTextAreaElement) {
+		if (CSS.supports('field-sizing', 'content')) return;
+		const fit = () => {
+			el.style.height = 'auto';
+			el.style.height = `${el.scrollHeight + 2}px`;
+		};
+		fit();
+		el.addEventListener('input', fit);
+		const seen = new ResizeObserver(fit);
+		seen.observe(el);
+		return { destroy: () => seen.disconnect() };
+	}
+
 	const num = (v: string) => (v.trim() === '' || isNaN(Number(v)) ? null : Number(v));
 
 	// The scan the rows were read on, shown all the time (so the list doesn't move under
@@ -125,6 +140,24 @@
 		const sc = it?.scan_id ? (job.scans ?? []).find((s) => s.id === it.scan_id) : null;
 		return sc ? { sc, box: active !== null && it?.box ? it.box : null } : null;
 	});
+
+	// What each line was matched to (a disc title, and the episode when its name is known).
+	const code = (e: { season: number; episode: number }) =>
+		`S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}`;
+	const matched = $derived.by(() => {
+		const names = new Map((job.tv?.episodes ?? []).map((e) => [`${e.season}:${e.episode}`, e.name]));
+		const out = new Map<number, string>();
+		if (draft) return out; // the match is of the saved listing
+		for (const x of job.scan_match?.matches ?? []) {
+			if (x.item === null) continue;
+			const ep = x.episodes.map(code).join(' & ');
+			const name = x.episodes.length === 1 ? names.get(`${x.episodes[0].season}:${x.episodes[0].episode}`) : null;
+			out.set(x.item, [ep && `${ep}${name ? ` ${name}` : ''}`, `title ${x.title_index}`].filter(Boolean).join(' · '));
+		}
+		return out;
+	});
+	// Disc numbers only matter on a box of several discs.
+	const discs = $derived((shown?.items ?? []).some((x) => x.disc !== null));
 
 	const d = $derived(shown?.details);
 	const facts = $derived.by(() => {
@@ -185,7 +218,8 @@
 	{/if}
 
 	{#if focus}
-		<div class="where" aria-hidden="true">
+		<button class="where" class:big aria-label={big ? 'Show the scan smaller' : 'Show the scan larger'}
+			onclick={() => (big = !big)}>
 			<img src={api.scanThumbUrl(job.id, focus.sc, true)} alt="" />
 			{#if focus.box}
 				<div
@@ -196,7 +230,7 @@
 					style:height="{(focus.box[3] - focus.box[1]) * 100}%"
 				></div>
 			{/if}
-		</div>
+		</button>
 	{/if}
 
 	{#if shown && (shown.items.length || draft)}
@@ -222,13 +256,15 @@
 						<option value="episode">Episode</option>
 						<option value="extra">Extra</option>
 					</select>
-					<input
+					<textarea
 						class="title"
 						aria-label="Title"
 						placeholder="Title"
+						rows="1"
+						use:grow
 						value={it.title}
-						oninput={(e) => (edit().items[i].title = (e.currentTarget as HTMLInputElement).value)}
-					/>
+						oninput={(e) => (edit().items[i].title = (e.currentTarget as HTMLTextAreaElement).value.replace(/\n/g, ' '))}
+					></textarea>
 					{#if it.kind === 'extra'}
 						<select
 							aria-label="Type"
@@ -237,7 +273,7 @@
 						>
 							{#each TYPES as [k, label] (k)}<option value={k}>{label}</option>{/each}
 						</select>
-					{:else}
+					{:else if it.number !== null || !matched.has(i)}
 						<input
 							class="n"
 							aria-label="Episode number"
@@ -255,18 +291,21 @@
 						value={it.runtime_min ?? ''}
 						oninput={(e) => (edit().items[i].runtime_min = num((e.currentTarget as HTMLInputElement).value))}
 					/>
-					<input
-						class="n"
-						aria-label="Disc"
-						placeholder="Disc"
-						inputmode="numeric"
-						value={it.disc ?? ''}
-						oninput={(e) => (edit().items[i].disc = num((e.currentTarget as HTMLInputElement).value))}
-					/>
+					{#if discs}
+						<input
+							class="n"
+							aria-label="Disc"
+							placeholder="Disc"
+							inputmode="numeric"
+							value={it.disc ?? ''}
+							oninput={(e) => (edit().items[i].disc = num((e.currentTarget as HTMLInputElement).value))}
+						/>
+					{/if}
 					<button class="icon" aria-label="Remove" title="Remove" onclick={() => edit().items.splice(i, 1)}>✕</button>
 					{#if it.source}
 						<span class="src {it.source}" title={SOURCE_HINT[it.source]}>{SOURCE_LABEL[it.source]}</span>
 					{/if}
+					{#if matched.has(i)}<div class="read small matched">→ {matched.get(i)}</div>{/if}
 					{#if it.source === 'vision'}<div class="read small warn">Only the vision model read this: check it against the box.</div>{/if}
 					{#if it.text && it.text !== it.title}<div class="read small muted">Read as “{it.text}”</div>{/if}
 				</li>
@@ -335,15 +374,31 @@
 		background: var(--warn-bg);
 		color: var(--warn);
 	}
+	/* Small until tapped, so the rows stay in view on a phone. */
 	.where {
 		position: relative;
+		align-self: flex-start;
+		display: inline-block;
+		padding: 0;
 		line-height: 0;
 		border-radius: 6px;
 		border: 1px solid var(--border);
+		background: none;
+		cursor: zoom-in;
 	}
 	.where img {
-		width: 100%;
+		display: block;
+		max-width: 100%;
+		max-height: 180px;
+		width: auto;
 		height: auto;
+	}
+	.where.big {
+		cursor: zoom-out;
+	}
+	.where.big img {
+		max-height: none;
+		width: 100%;
 	}
 	.mark {
 		position: absolute;
@@ -376,9 +431,26 @@
 	.items .title {
 		flex: 1 1 160px;
 		min-width: 0;
+		resize: none;
+		field-sizing: content;
+		font: inherit;
+		overflow-wrap: anywhere;
 	}
 	.items .n {
-		width: 4.2em;
+		width: 3.6em;
+	}
+	.matched {
+		color: var(--ok);
+	}
+	@media (max-width: 560px) {
+		/* The title on a line of its own, the small fields under it. */
+		.items .title {
+			flex-basis: 100%;
+			order: -1;
+		}
+		.items .n {
+			width: 3.2em;
+		}
 	}
 	.items select {
 		max-width: 9em;

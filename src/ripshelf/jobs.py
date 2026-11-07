@@ -177,6 +177,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         self._init_vision()
         self._init_pending()
         self._show_tasks: dict[int, asyncio.Task] = {}
+        self._driveless_tasks: set[asyncio.Task] = set()
         self.support = SupportFiles(settings.makemkv_files_dir)
         self.hub = WorkerHub(on_drives_changed=self._remote_drives,
                              local_ids=lambda: {i for i, d in self.drives.items() if not d.remote})
@@ -216,7 +217,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         if self._scanner_task:
             self._scanner_task.cancel()
             tasks.append(self._scanner_task)
-        for t in [*self._read_tasks.values(), *self._vision_tasks.values()]:
+        for t in [*self._read_tasks.values(), *self._vision_tasks.values(), *self._show_tasks.values(),
+                  *self._driveless_tasks]:
             t.cancel()
             tasks.append(t)
         for d in self.drives.values():
@@ -567,7 +569,9 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         if notify:
             self._spawn_notify(job, "failed")
 
-    def _spawn(self, d: DriveRuntime, coro, job_id: int) -> asyncio.Task:
+    def _spawn(self, d: DriveRuntime | None, coro, job_id: int) -> asyncio.Task:
+        """Run a job's task, kept with its drive's (or, for a drive no longer known,
+        with the manager's)."""
         async def guarded() -> None:
             # Whatever goes wrong in a job task, the job must not be left stuck mid-state.
             try:
@@ -582,10 +586,11 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                     code="internal", message=f"Internal error: {type(e).__name__}: {e}", actions=["retry"]))
 
         task = asyncio.create_task(guarded())
-        d.tasks.add(task)
+        tasks = d.tasks if d else self._driveless_tasks
+        tasks.add(task)
 
         def done(t: asyncio.Task) -> None:
-            d.tasks.discard(t)
+            tasks.discard(t)
             if t.cancelled():
                 coro.close()  # in case it was cancelled before it started
             elif t.exception():

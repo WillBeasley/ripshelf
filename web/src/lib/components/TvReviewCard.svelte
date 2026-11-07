@@ -144,6 +144,29 @@
 		found = (await act.run(() => api.tvSearch(name))) ?? null;
 	}
 
+	// What the cover scan says the disc holds, set beside the mapping: one tap takes it
+	// (the show too, when its episode names are another show's).
+	const box = $derived.by(() => {
+		const l = job.listing?.edited ?? job.listing?.found;
+		const names = (l?.items ?? []).filter((i) => i.kind === 'episode').map((i) => i.title);
+		if (!l || !names.length) return null;
+		const picks = (job.scan_match?.matches ?? []).filter((x) => x.kind === 'episode' && x.episodes.length);
+		const byTitle = new Map((plan?.mapping ?? []).map((r) => [r.title_index, r]));
+		const agrees =
+			picks.length >= names.length &&
+			picks.every((x) => {
+				const r = byTitle.get(x.title_index);
+				return r?.role === 'episode' && JSON.stringify(r.episodes.map(epKey)) === JSON.stringify(x.episodes.map(epKey));
+			});
+		return {
+			title: l.details.title,
+			names,
+			picks: picks.length >= names.length ? picks : [],
+			extras: l.items.filter((i) => i.kind === 'extra').map((i) => i.title),
+			agrees
+		};
+	});
+
 	async function choose(show: Show) {
 		found = null;
 		await act.run(() =>
@@ -237,6 +260,23 @@
 
 	{#if job.media_evidence.length}
 		<p class="small muted">{job.media_evidence.slice(0, 3).join(' · ')}</p>
+	{/if}
+
+	{#if box}
+		<section class="box-says small" class:agrees={box.agrees}>
+			<div class="grow">
+				<strong>The box says:</strong>
+				{box.title ?? ''}{box.title ? ' — ' : ''}{#if box.picks.length}{box.picks
+						.map((x) => x.episodes.map(code).join(' & ') + (x.episodes[0] && byKey.get(epKey(x.episodes[0]))?.name ? ` ${byKey.get(epKey(x.episodes[0]))?.name}` : ''))
+						.join(', ')}{:else}{box.names.length} episode{box.names.length === 1 ? '' : 's'}: {box.names
+						.map((n) => `“${n}”`)
+						.join(', ')}{/if}{#if box.extras.length}, plus {box.extras.join(', ')}{/if}
+				{#if box.agrees}<div class="muted">The mapping below says the same. Check it and confirm.</div>{/if}
+			</div>
+			{#if !box.agrees}
+				<button class="primary small" disabled={act.busy} onclick={() => act.run(() => api.useScan(job.id))}>Use this</button>
+			{/if}
+		</section>
 	{/if}
 
 	{#if plan?.show}
@@ -472,6 +512,19 @@
 	}
 	.label {
 		font-size: 1rem;
+	}
+	.box-says {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 10px;
+		align-items: center;
+		padding: 8px 10px;
+		border-radius: 8px;
+		background: var(--info-bg);
+		overflow-wrap: anywhere;
+	}
+	.box-says.agrees {
+		background: var(--ok-bg);
 	}
 	.show {
 		display: flex;

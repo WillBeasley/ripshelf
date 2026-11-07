@@ -148,6 +148,7 @@ export const api = {
 	pendingScanUrl: (scan: string, thumb = false) => `/api/pending-scans/${scan}${thumb ? '?thumb=true' : ''}`,
 	scanMatch: (id: number) => call<ScanMatch | null>('GET', `/jobs/${id}/scan-match`),
 	ripExtras: (id: number) => call<Job>('POST', `/jobs/${id}/extras/rip`),
+	useScan: (id: number) => call<Job>('POST', `/jobs/${id}/scan-match/use`),
 	readWithVision: (id: number, scan: string) => call<{ queued: boolean }>('POST', `/jobs/${id}/scans/${scan}/vision`),
 	saveListing: (id: number, listing: Listing) => call<ListingView>('PUT', `/jobs/${id}/listing`, listing),
 	dropListingEdits: (id: number) => call<ListingView>('DELETE', `/jobs/${id}/listing/edits`),

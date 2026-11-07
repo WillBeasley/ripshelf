@@ -3,6 +3,8 @@ guess from the label, and the episodes it matched go into the mapping for review
 
 from __future__ import annotations
 
+import pytest
+
 from ripshelf import matchjobs
 from ripshelf.db import JobRecord, now
 from ripshelf.models import (
@@ -149,3 +151,28 @@ async def test_a_shorter_bonus_title_is_not_an_episode(harness, settings, monkey
         eps = {m.title_index: [e.episode for e in m.episodes] for m in job.tv.mapping if m.role == TitleRole.episode}
         assert eps == {0: [4], 1: [1], 2: [6], 4: [5]}
         assert next(m for m in job.tv.mapping if m.title_index == 5).role == TitleRole.extra
+
+
+async def test_use_this_takes_the_box_over_a_hand_edit(harness, settings, monkeypatch):
+    async with harness() as h:
+        proposed = fake_tmdb(monkeypatch, h)
+        job = disc_job()
+        job.tv.user_edited = True
+        job = put(h, job)
+        got = await h.m.use_scan(job.id)
+        assert proposed == [(KITE.tmdb_id, 1)] and got.tv.show.tmdb_id == KITE.tmdb_id
+        with pytest.raises(ValueError, match="already says the same"):
+            await h.m.use_scan(job.id)
+
+
+async def test_a_job_whose_drive_is_gone(harness, settings):
+    """A task for a job whose drive isn't known any more (picking its show after the rip,
+    say) still runs."""
+    async with harness() as h:
+        ran = []
+
+        async def after(job_id):
+            ran.append(job_id)
+
+        await h.m._spawn(h.m.drives.get("unplugged"), after(3), 3)
+        assert ran == [3] and not h.m._driveless_tasks
