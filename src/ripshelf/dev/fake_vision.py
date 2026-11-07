@@ -17,13 +17,13 @@ from fastapi import APIRouter, Request, Response
 READING = {
     "items": [
         {"kind": "extra", "title": "Growing the Orchard", "number": None, "runtime_min": 22,
-         "extra_type": "Featurette", "disc": None},
+         "extra_type": "Featurette", "disc": None, "show": None},
         {"kind": "extra", "title": "Deleted scenes", "number": None, "runtime_min": None,
-         "extra_type": "DeletedScene", "disc": None},
+         "extra_type": "DeletedScene", "disc": None, "show": None},
         {"kind": "extra", "title": "Theatrical trailer", "number": None, "runtime_min": None,
-         "extra_type": "Trailer", "disc": None},
+         "extra_type": "Trailer", "disc": None, "show": None},
         {"kind": "extra", "title": "Orchard photo gallery", "number": None, "runtime_min": None,
-         "extra_type": "Other", "disc": None},
+         "extra_type": "Other", "disc": None, "show": None},
     ],
     "details": {"title": "Moonlit Orchard", "year": 1998, "feature_runtime_min": 112, "episode_count": None,
                 "barcode": "5012345678900", "catalogue_number": "40112DVD", "region": "Region 2",

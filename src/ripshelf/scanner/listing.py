@@ -23,6 +23,7 @@ The extras' types are TheDiscDB's, guessed from their words.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -71,7 +72,10 @@ EPISODE_COUNT = re.compile(
     r"instalments|installments|shorts|specials)\b", re.I)
 BULLET = re.compile(r"^(?:[•·*>~«»■□◆◇○●▪▶►\-–—=_|:;,.'\"“”‘’]+|[eoc]\s(?=[A-Z0-9\"“‘']))\s*")
 NUMBERED = re.compile(r"^(?:ep(?:isode)?\.?\s*)?(\d{1,3})\s*[.):\-–]\s*(?=\S)", re.I)
-QUOTED = re.compile(r"[\"“”‘’'`]\s*([^\"“”‘’'`]{3,}?)\s*[\"“”‘’'`]")
+# A quoted phrase. An apostrophe inside a word ("Where's") is not a quote mark.
+_IN_WORD = r"(?<=[A-Za-z])[‘’'](?=[A-Za-z])"
+QUOTED = re.compile(r"(?:[\"“”`]|(?<![A-Za-z])[‘’'])\s*((?:[^\"“”‘’'`]|" + _IN_WORD + r"){3,}?)\s*"
+                    r"(?:[\"“”`]|[‘’'](?![A-Za-z]))")
 CATALOGUE = [re.compile(r"\b(\d{3,7}[A-Z]{2,4}\d{0,2})\b"), re.compile(r"\b([A-Z]{2,5}-?\d{4,7}[A-Z]{0,2})\b")]
 CATALOGUE_NOT = re.compile(r"FSC|ISBN|BBFC|ISAN", re.I)
 YEAR_COPYRIGHT = re.compile(r"(?:©|\(c\)|copyright)\s*((?:19|20)\d{2})", re.I)
@@ -586,9 +590,16 @@ def merge(own: Listing, readings: list[tuple[str, Listing]], texts: list[ScanTex
     lines = {t.scan_id: t.lines for t in texts}
     for scan_id, theirs in readings:
         for vi in theirs.items:
+            # The other show's name, listed by the model as an extra of its own, is the
+            # bonus episode Tesseract found.
+            if not vi.show and (bonus := next((x for x in out.items if x.show and _sim(x.show, vi.title) >= 0.8), None)):
+                bonus.source = "both" if bonus.source in ("tesseract", "both") else bonus.source
+                continue
             same = max((x for x in out.items if x.kind == vi.kind), key=lambda x: _sim(x.title, vi.title), default=None)
             if same and _sim(same.title, vi.title) >= 0.8:
                 same.source = "both" if same.source in ("tesseract", "both") else same.source
+                if vi.show and not same.show:
+                    same.show, same.extra_type = vi.show, "Other"
                 if vi.extra_type and same.extra_type in (None, "Extra"):
                     same.extra_type = vi.extra_type
                 if same.runtime_min is None and vi.runtime_min:
@@ -619,6 +630,48 @@ def merge(own: Listing, readings: list[tuple[str, Listing]], texts: list[ScanTex
     return out
 
 
+# A bonus episode of another show: "Includes Bonus Episode", "Plus meet Jess in an all
+# new series" (but not "bonus features"), its title in quotes on a line of its own.
+BONUS_CUE = re.compile(r"\bbonus\b(?!\s+(?:features?|material|content|disc|footage|scenes?))|"
+                       r"\bp[li1]us,?\s+meet\b|\ball[- ]new series\b", re.I)
+WHOLE_QUOTE = re.compile(r"^\W*" + QUOTED.pattern + r"\W*$")
+MEET = re.compile(r"\bmeet\s+(?:[\w']+\s+){0,3}?((?:[A-Z][\w']*)(?:\s+(?:with|and|the|of|&|[A-Z][\w']*)){0,4})"
+                  r"\s+in\s+an?\s+all[- ]new series", re.I)
+
+
+def _bonus(srcs: list[Src], listable: list[Src], items: list[ListingItem], title: str | None) -> None:
+    """Add the bonus episode of another show the box names, when it gives both the
+    episode (quoted) and the show (quoted elsewhere on the box, as in its small print,
+    or "meet ... in an all new series")."""
+    if not any(BONUS_CUE.search(s.text) for s in srcs):
+        return
+    quotes = [(s, m.group(1)) for s in listable if (m := WHOLE_QUOTE.match(clean(s.text)))
+              and len(m.group(1).split()) >= 2 and re.search(r"[A-Za-z]{3}", m.group(1))]
+    if not quotes:
+        return
+    src, episode = quotes[0]
+    film = _squash(title or "")
+    shows: list[str] = []
+    for s in srcs:
+        text = clean(s.text)
+        shows += [m.group(1) for m in MEET.finditer(text)]
+        shows += [q for q in QUOTED.findall(text) if s is not src and 2 <= len(q.split()) <= 5
+                  and _title_like(q) and not q.rstrip().endswith("?")]
+    shows = [x.strip() for x in shows if _squash(x) not in (_squash(episode), film) and not (film and film in _squash(x))]
+    if not shows:
+        return
+    show = Counter(shows).most_common(1)[0][0]
+    name = title_case(_tidy_title(episode))
+    for it in list(items):
+        if _squash(it.title) == _squash(show):
+            items.remove(it)  # the show's name read as an extra of its own
+    if same := next((it for it in items if _squash(it.title) == _squash(name)), None):
+        same.kind, same.show, same.extra_type = "extra", show, "Other"
+        return
+    items.append(ListingItem(kind="extra", title=name, extra_type="Other", show=show, text=clean(src.text),
+                             scan_id=src.scan_id, box=src.line.box, source="tesseract"))
+
+
 def build(texts: list[ScanText]) -> Listing:
     """The listing from the scans' readings, the back's first."""
     srcs: list[Src] = []
@@ -635,6 +688,7 @@ def build(texts: list[ScanText]) -> Listing:
     if not any(it.kind == "episode" for it in items):
         items += _columns(listable, taken)
     out = Listing(items=items, details=_details(srcs, more, barcodes))
+    _bonus(srcs, listable, out.items, out.details.title)
     eps = [i for i in items if i.kind == "episode"]
     n = out.details.episode_count
     if n and eps and n != len(eps):

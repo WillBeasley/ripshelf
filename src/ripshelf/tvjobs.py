@@ -1190,13 +1190,23 @@ class TvMixin:
             specials_taken |= {e.episode for d in c.discs if d.job_id != job.id for e in d.episodes if e.season == 0}
         next_special = max(specials_taken, default=0) + 1
         named = self.named_extras(job) if self.s.extras_emby_folders else {}
+        bonus = {i: x.bonus for i, x in self.named_extras(job).items() if x.bonus}
         placed: set[Path] = set()
         for m in plan.mapping:
             if m.role == TitleRole.episode:
                 eps = [known.get(episode_key(e)) or Episode(season=e.season, episode=e.episode) for e in m.episodes]
                 out.append((m.title_index, naming.episode_path(self.s.tv, show, eps), eps))
             elif m.role == TitleRole.extra:
-                if (x := named.get(m.title_index)) and self.s.tv_unmatched != "skip":
+                if (b := bonus.get(m.title_index)):
+                    # A bonus episode of another show: in that show's season, or as an extra
+                    # of this one named after it ("Guess with Jess - Where's My Feather Gone").
+                    if self.s.tv_bonus_episodes == "own_show":
+                        dest = naming.episode_path(self.s.tv, b.show, [b.episode])
+                    else:
+                        dest = library.free_path(naming.named_extra_path(self.s.tv, show, "Extra", b.name), placed)
+                    placed.add(dest)
+                    out.append((m.title_index, dest, None))
+                elif (x := named.get(m.title_index)) and self.s.tv_unmatched != "skip":
                     dest = library.free_path(naming.named_extra_path(self.s.tv, show, x.extra_type, x.name), placed)
                     placed.add(dest)
                     out.append((m.title_index, dest, None))

@@ -267,6 +267,8 @@ class TvPlan(BaseModel):
     continues_collection: bool = Field(False, description="carries on from a confirmed earlier disc")
     label_placed: bool = Field(False, description="the label gave the season and disc number")
     disc_db: bool = Field(False, description="the mapping comes from a disc database's record of this disc")
+    bonus: list[BonusEpisode] = Field(default=[], description="bonus episodes of other shows the box lists, "
+                                                         "as found in those shows' episode lists")
     from_scan: bool = Field(False, description="the show or episodes were set from the cover scan, so it's "
                                                "reviewed, not confirmed without review")
     auto_confirmed: bool = False
@@ -457,6 +459,8 @@ class ListingItem(BaseModel):
     box: list[float] | None = Field(None, description="where on that scan, as fractions (see TextLine)")
     source: ItemSource | None = Field(None, description="who read it: Tesseract, the vision model, both, or "
                                                         "the user")
+    show: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = Field(
+        None, description="for a bonus episode of another show (an extra): that show, the title being the episode's")
 
 
 AudioFormat = Literal["Dolby Digital", "Dolby Digital Plus", "Dolby TrueHD", "Dolby Atmos", "DTS", "DTS-HD MA",
@@ -548,6 +552,20 @@ class ListingView(BaseModel):
 Confidence = Literal["high", "medium", "low"]
 
 
+class BonusEpisode(BaseModel):
+    """A bonus episode of another show the box lists, found in that show's episode list."""
+
+    box_show: str = Field(description="the show as the box names it")
+    box_title: str = Field(description="the episode as the box names it")
+    show: Show
+    episode: Episode
+
+    @property
+    def name(self) -> str:
+        """What it's called as an extra: "<show> - <episode>"."""
+        return f"{self.show.name} - {self.episode.name or self.box_title}"
+
+
 class TitleMatch(BaseModel):
     """A disc title, and the line of the box's listing it was matched to."""
 
@@ -565,6 +583,8 @@ class TitleMatch(BaseModel):
     agrees: bool | None = Field(None, description="the existing mapping or main title says the same (none when "
                                                   "there is nothing to compare)")
     current: str | None = Field(None, description="what the existing mapping says instead, when it disagrees")
+    bonus: BonusEpisode | None = Field(None, description="a bonus episode of another show, found in its "
+                                                         "episode list")
 
 
 class ScanMatch(BaseModel):
@@ -996,6 +1016,7 @@ class SettingsView(BaseModel):
     ocr_languages: str = "eng"
     extras_emby_folders: bool = True
     film_unnamed_extras: Literal["skip", "extras"] = "skip"
+    tv_bonus_episodes: Literal["extra", "own_show"] = "extra"
     vision_mode: VisionMode = "off"
     vision_provider: VisionProvider = "local"
     vision_url: str | None = None
@@ -1083,6 +1104,7 @@ class SettingsUpdate(BaseModel):
     ocr_languages: str | None = Field(None, pattern=r"^[a-z_]{3,10}(\+[a-z_]{3,10})*$")
     extras_emby_folders: bool | None = None
     film_unnamed_extras: Literal["skip", "extras"] | None = None
+    tv_bonus_episodes: Literal["extra", "own_show"] | None = None
     vision_mode: VisionMode | None = None
     vision_provider: VisionProvider | None = None
     vision_url: str | None = Field(None, max_length=300)
