@@ -150,3 +150,13 @@ def test_tracks_from_makemkv():
     t = title(0, 100, audio=("TrueHD Surround 7.1 English", "DD Surround 5.1 Spanish", "DD Stereo English"))
     tr = match.tracks(t)
     assert tr.languages == {"English", "Spanish"} and tr.count == 3 and not tr.commentary
+
+
+def test_alike_titles_placed_by_the_box_alone_are_not_sure():
+    """Three names listed for ten titles of the same length: the names say which
+    episodes, but only their places on the box which titles."""
+    titles = [title(i, 7) for i in range(1, 11)]
+    m = match.match(titles, Listing(items=[ep("Low Tide"), ep("The Gull Who Stayed"), ep("A Storm in a Teacup")]),
+                    media="tv", episodes=SEASON, season=2)
+    assert len(m.matches) == 3 and {x.confidence for x in m.matches} == {"medium"}
+    assert "its place on the box decided" in m.matches[0].reason
