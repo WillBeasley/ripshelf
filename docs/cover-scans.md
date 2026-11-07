@@ -218,7 +218,7 @@ In Settings → Scanner:
 
 When the disc is being sent to [TheDiscDB](thediscdb-contributing.md), a front or back scan also becomes that cover. You don't need to upload it again in the TheDiscDB panel.
 
-A whole outside scan can be cut into both covers. Choose **Cut into front and back covers…**, then set:
+A whole outside scan is cut into both covers at its spine, which ripshelf finds by itself once the sheet is the right way up: two edges running down the sheet near its middle, about as far apart as a DVD's spine (14 mm of a 273 mm sheet) or a Blu-ray's (11.5 mm of 275 mm), whichever the sheet's shape says it is. The scan then says **Auto-cut at its spine**, and **Adjust the cut…** opens the cut editor on it. When the spine isn't clear, the sheet isn't cut on a guess: choose **Cut into front and back covers…**, then set:
 - where the spine is
 - how wide the spine is
 - **The front is on the left**, for the occasional sheet printed the other way round
