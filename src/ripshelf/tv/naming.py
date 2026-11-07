@@ -4,6 +4,7 @@
     TV/Show (Year)/Season 01/Show - S01E01-E02 - Part One & Part Two.mkv
     TV/Show (Year)/Season 00/Show - S00E05 - Special.mkv
     TV/Show (Year)/extras/LABEL - title 7.mkv
+    TV/Show (Year)/featurettes/Name From The Box.mkv     (an extra the box names)
     TV/Show (Year)/.disc/LABEL (job 12)/disc.json
 """
 
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..library import MAX_NAME_BYTES, safe_name
+from ..library import MAX_NAME_BYTES, extras_folder, safe_name
 from ..models import Episode, Show
 
 
@@ -37,6 +38,11 @@ def episode_path(tv: Path, show: Show, eps: list[Episode]) -> Path:
 
 def extra_path(tv: Path, show: Show, label: str | None, title_index: int) -> Path:
     return show_folder(tv, show) / "extras" / f"{safe_name(label or 'Disc')} - title {title_index}.mkv"
+
+
+def named_extra_path(tv: Path, show: Show, extra_type: str | None, name: str) -> Path:
+    """An extra the box names, in Emby's folder for its type (the name made safe)."""
+    return show_folder(tv, show) / extras_folder(extra_type, name) / f"{safe_name(name)}.mkv"
 
 
 def disc_meta_folder(tv: Path, show: Show, label: str | None, job_id: int) -> Path:

@@ -126,6 +126,8 @@ EDITABLE = {
     "scans_to_library",
     "scan_read_text",
     "ocr_languages",
+    "extras_emby_folders",
+    "film_unnamed_extras",
 }
 
 
@@ -320,6 +322,12 @@ class Settings(BaseSettings):
     scan_read_text: bool = True
     # Tesseract's languages, joined with +, such as "eng+fra" (each needs its traineddata).
     ocr_languages: str = "eng"
+    # Extras the box names (matched with confidence) are filed in Emby's extras folder
+    # for their type, under their names: featurettes/, trailers/...
+    extras_emby_folders: bool = True
+    # A film's other titles the box doesn't name: left out, or ripped and filed in
+    # extras/ as "Title N".
+    film_unnamed_extras: Literal["skip", "extras"] = "skip"
 
     @property
     def settings_file(self) -> Path:
