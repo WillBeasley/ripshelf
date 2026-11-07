@@ -66,7 +66,7 @@ A few settings aren't on the Settings page, such as the port. To change one of t
 
 - **Registration key.** makemkvcon on Windows reads its key from the registry (`HKEY_CURRENT_USER\Software\MakeMKV`), once per Windows user, shared with the MakeMKV app.
 - **Per-drive data.** Each drive still gets its own MakeMKV folder under `data\makemkv\<drive id>\.MakeMKV` (LibreDrive data, firmware dumps), as on Linux. ripshelf points makemkvcon at it with `USERPROFILE`, which only affects that one makemkvcon. Your own MakeMKV app keeps using `%USERPROFILE%\.MakeMKV`.
-- **UHD.** A new drive folder needs LibreDrive/HK data, or MakeMKV says the volume key is unknown (or stalls). On its first start ripshelf uses the `_private_data.tar` your MakeMKV app already has (`%USERPROFILE%\.MakeMKV`), so run a UHD disc through the MakeMKV app once first. Or import one in Settings → Import MakeMKV private data.
+- **UHD.** A new drive folder needs LibreDrive/HK data, or MakeMKV says the volume key is unknown (or stalls). On its first start ripshelf uses the `_private_data.tar` your MakeMKV app already has (`%USERPROFILE%\.MakeMKV`), so run a UHD disc through the MakeMKV app once first. Or import one in Settings → Drives and ripping → MakeMKV private data.
 - **One disc opens at a time.** Each makemkvcon checks every drive when it starts, and two started together break each other's disc handshake (AACS). ripshelf's start-up queue lets the next one start once the previous has opened its disc, then they run side by side.
 
 ## Same drives, same ids

@@ -32,5 +32,5 @@ To go back, use compose.yaml again. Nothing else changes.
 
 - **Shared folders.** Each worker mounts the controller's `data/makemkv` (so private data, firmware dumps and the key are where its MakeMKV looks for them) and `scratch` (so rips need no upload).
 - **No published ports.** Workers talk to the controller over the compose network.
-- **Everything works the same through workers.** That includes Settings → Import (it writes into `data/makemkv/<drive>`), disabling a drive, Eject and Close tray, Scan again, the Test buttons and the job logs.
+- **Everything works the same through workers.** That includes Settings → Drives and ripping → MakeMKV private data (it writes into `data/makemkv/<drive>`), disabling a drive, Eject and Close tray, Scan again, the Test buttons and the job logs.
 

@@ -6,7 +6,7 @@ This is **off by default**. Nothing is sent until you turn it on.
 
 ## Turning it on
 
-It's under Settings → Metadata providers → **Contribute to TheDiscDB**.
+It's under Settings → Identify → **Contribute to TheDiscDB**.
 
 | Setting | |
 |---|---|
@@ -55,7 +55,7 @@ A disc that joins a release takes the details and covers of the release's other 
 | Value | Where it comes from |
 |---|---|
 | UPC and ASIN | [UPCitemdb](https://www.upcitemdb.com)'s free API (no key, about 100 lookups a day). With a barcode typed in, or a disc whose volume label is a barcode, it looks the barcode up. Without one, it searches listings by title and format, and lists the likely ones, each with **Use this**. Check the barcode on the box: one film has many releases. |
-| ASIN, if UPCitemdb has none | A web search of Amazon's site for the locale (amazon.co.uk for en-GB), through your SearXNG, if catalogue lookups use SearXNG (Settings → Identification). |
+| ASIN, if UPCitemdb has none | A web search of Amazon's site for the locale (amazon.co.uk for en-GB), through your SearXNG, if catalogue lookups use SearXNG (Settings → Identify). |
 | Release date | TMDB's physical release dates for the locale's country, preferring one whose note names the disc's format. Films only, because TMDB has no disc dates for TV. |
 | Locale | The barcode's GS1 country prefix (50 is the UK, 00 to 13 the US and Canada), otherwise your TMDB language. |
 | Region code | DVDs: read from the disc (VIDEO_TS.IFO), such as `2` or `2,4`. Blu-rays: the usual region for the locale's country (A, B or C), so check the box. UHD Blu-rays: `Region free`. |
