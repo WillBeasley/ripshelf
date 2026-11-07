@@ -58,11 +58,13 @@ def test_a_reply_in_ripshelfs_terms():
                             "extra_type": None, "disc": None})  # the film, listed as its own episode
     raw["items"].append({"kind": "extra", "title": "“Blossom reel”", "number": None, "runtime_min": 0,
                          "extra_type": "Blooper", "disc": None})
+    raw["items"].append({"kind": "extra", "title": "In-depth documentary on the making of 'Return to the Orchard",
+                         "number": None, "runtime_min": None, "extra_type": "Featurette", "disc": None})
     raw["details"]["audio"].append({"language": "French Stereo", "format": "AC3", "channels": None})
     out = vision.tidy(raw)
     assert [i.title for i in out.items] == ["Growing the Orchard", "Deleted scenes", "Theatrical trailer",
-                                            "Orchard photo gallery", "Blossom reel"]
-    assert out.items[-1].extra_type == "Extra" and out.items[-1].runtime_min is None
+                                            "Orchard photo gallery", "Blossom reel", "Return to the Orchard"]
+    assert out.items[-2].extra_type == "Extra" and out.items[-2].runtime_min is None
     assert {i.source for i in out.items} == {"vision"}
     d = out.details
     assert (d.region, d.video_system, d.aspect_ratio, d.barcode) == ("2", "PAL", "16:9", "5012345678900")

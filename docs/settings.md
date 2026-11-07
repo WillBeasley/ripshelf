@@ -7,7 +7,7 @@ Most settings are changed on the Settings page. A fresh install opens a short se
 - **Secrets.** Keys and tokens are stored, but never sent back to the browser.
 - **Outside a container,** folders that aren't set are next to ripshelf (the source checkout). These are `data/`, `scratch/`, `library/` and the env file `ripshelf.env`. You can change them in Settings. A checkout that already has state in `var/` keeps using it.
 - **Environment.** Any setting can also be set as an environment variable. The name is `RIPSHELF_` followed by the setting's name in capitals. Put it in the `environment:` section of compose.yaml, or in `/data/ripshelf.env`.
-- **Test buttons.** Each connection (TMDB, TheTVDB, OMDb, TheDiscDB, TVmaze, MakeMKV key, Pushover, Emby, Jellyfin, Plex, the scanner, text reading) and the folders have a Test button. It tries the values as typed, without saving them.
+- **Test buttons.** Each connection (TMDB, TheTVDB, OMDb, TheDiscDB, TVmaze, MakeMKV key, Pushover, Emby, Jellyfin, Plex, the scanner, text reading, the vision model) and the folders have a Test button. It tries the values as typed, without saving them.
 
 ## Settings that aren't on the Settings page
 
@@ -65,6 +65,8 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_SCAN_READ_TEXT` | on | read the text on scans and list what's on the disc ([cover-scans.md](cover-scans.md)) |
 | `RIPSHELF_OCR_LANGUAGES` | `eng` | Tesseract's languages, joined with `+` (such as `eng+fra`); each needs its data installed |
 | `RIPSHELF_TESSERACT` | `tesseract` | the Tesseract program (found in Program Files on Windows) |
+| `RIPSHELF_VISION_MODE` | `off` | when a vision model reads scans: `off`, `struggles` (when Tesseract struggles), `every` or `manual` ([cover-scans.md](cover-scans.md#a-vision-model-as-a-second-reader)) |
+| `RIPSHELF_VISION_PROVIDER` / `VISION_URL` / `VISION_MODEL` / `VISION_API_KEY` | `local` / none / `qwen3-vl:4b-instruct` / none | where the vision model is: `local` (an OpenAI-compatible server such as Ollama), `openai` (a hosted OpenAI-compatible service) or `anthropic`; its address (not for `anthropic`), model and key |
 | `RIPSHELF_EXTRAS_EMBY_FOLDERS` | on | file extras the cover scan names in Emby's extras folders (featurettes/, trailers/...) under their names, and rip a film's ([cover-scans.md](cover-scans.md#extras-in-the-library)) |
 | `RIPSHELF_FILM_UNNAMED_EXTRAS` | `skip` | a film's titles the box doesn't name: `skip`, or `extras` to rip them into extras/ as "Title N" |
 | `RIPSHELF_AUTO_EJECT` | on | |

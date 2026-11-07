@@ -46,3 +46,16 @@ services:
       # and delete the two RIPSHELF_*_DIR lines and the /movies and /tv mounts.
     ports:
       - "8380:8380"                     # no login, so keep it on your LAN or VPN
+
+  # Optional: a vision model reading scans of the box (docs/cover-scans.md). Uncomment,
+  # then in Settings → Scanner set the vision model's address to http://ollama:11434 and
+  # pull the model once:  docker compose exec ollama ollama pull qwen3-vl:4b-instruct
+  # The two containers share this file's network, so Ollama needs no published port.
+  # It runs on the CPU (a minute or two a picture), and ripshelf pauses it during
+  # transcodes.
+  # ollama:
+  #   image: docker.io/ollama/ollama:latest
+  #   container_name: ollama
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./ollama:/root/.ollama        # the models, 3 to 6 GB each

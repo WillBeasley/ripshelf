@@ -28,7 +28,7 @@ from PIL import Image, ImageDraw
 from pydantic import BaseModel, ValidationError
 
 from ..models import AudioTrack, Listing, ListingDetails, ListingItem, SubtitleTrack
-from .listing import EXTRAS_TYPES, LANGUAGE
+from .listing import EXTRAS_TYPES, LANGUAGE, QUOTED
 
 log = logging.getLogger(__name__)
 
@@ -181,7 +181,14 @@ def tidy(raw: dict) -> Listing:
     film = re.sub(r"[^a-z0-9]", "", (d.title or "").lower())
     items = []
     for it in r.items:
-        title = it.title.strip().strip("\"'“”‘’")
+        title = it.title.strip()
+        if it.kind == "extra":
+            # "In-depth documentary on the making of the film 'Return to the Orchard'" is
+            # called what it quotes, as in Tesseract's reading (a model may drop the last quote).
+            quoted = QUOTED.findall(title) or re.findall(r"[\"“‘']([^\"“”‘’']{3,})$", title)
+            if quoted and re.search(r"[A-Za-z]{3}", quoted[-1]):
+                title = quoted[-1]
+        title = title.strip("\"'“”‘’ ")
         if not title or (film and re.sub(r"[^a-z0-9]", "", title.lower()) == film):
             continue  # the film listed as one of its own extras
         kind = "extra" if it.kind == "extra" else "episode"

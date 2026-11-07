@@ -66,6 +66,69 @@ The container image includes Tesseract and zbar. Elsewhere:
 
 Without Tesseract, scans are kept as before, and the panel says text reading isn't available, so you can type the listing in yourself.
 
+### A vision model as a second reader
+
+Tesseract reads printed text well but misses some things:
+- what's printed as an icon (the region in its globe, a PAL logo)
+- small print
+- stylised titles
+- text in photos taken at an angle
+
+A vision model, a language model that reads pictures, gets most of these. ripshelf can ask one to read each scan as well, and merges what it reads with Tesseract's reading.
+
+**When it runs** is set in Settings → Scanner → Vision model:
+- **Never** (the default).
+- **Only when Tesseract struggles.** This is the recommended choice. It applies to scans of the back, the whole sheet, its inside or an insert, when Tesseract:
+  - read only a few lines with confidence, or wasn't confident;
+  - found no episodes or extras;
+  - read neither the region nor the video system;
+  
+  and also to every phone photo.
+- **Every scan.**
+- **Only when you press Read with the vision model** on a scan. The button is there in every mode except Never.
+
+**Where it runs:**
+- **On your network:** Ollama, or any other server with an OpenAI-compatible API (LM Studio, vLLM…). Set its address and the model.
+- **A cloud service with an OpenAI-compatible API:** its address, the model and a key.
+- **Anthropic's API:** a key and the model name from Anthropic's model list.
+
+With a cloud service, the pictures of the box leave your network. Settings says so, and only the scans are sent.
+
+**Test the vision model** sends a small made-up back cover and checks that the trailer on it is read.
+
+**How the two readings are combined:**
+- **Barcode:** always comes from the bars when zbar decoded them.
+- **Running times:** come from Tesseract when it read them. Every model tried got "2Hrs 45mins" wrong.
+- **Other details:** each one comes from Tesseract when it read it, and from the model otherwise. A region Tesseract only guessed from "PAL" and "U.K." gives way to one the model read off the globe.
+- **Items both found** are one item, marked **both**. Tesseract's place on the scan is kept, and the model's type is used where Tesseract could only say "Extra".
+- **An item only the model found** is added. If every word of its title is in a line Tesseract read, it's marked **both** and highlighted there. Otherwise it's marked **vision model** and flagged "Only the vision model read this", because models sometimes invent lines.
+- **Your edits** are marked **you**. A new reading never replaces them: the panel asks, as with Tesseract.
+
+Details the model supplied are labelled "vision model" in the listing, and the decoded barcode "from the bars".
+
+**Running it with Ollama** (no cloud):
+1. Add Ollama next to ripshelf. The example [compose.yaml](../compose.yaml) has an `ollama` service to uncomment: the two containers share the compose file's network, so Ollama needs no published port. Keep it that way, or publish it on `127.0.0.1` only. Ollama has no login, so don't put it on the internet.
+2. Pull the model once:
+   ```sh
+   docker compose exec ollama ollama pull qwen3-vl:4b-instruct
+   ```
+3. In Settings → Scanner → Vision model, choose **On my network**. Address `http://ollama:11434`, model `qwen3-vl:4b-instruct`.
+
+If Ollama already runs elsewhere (another compose stack, another machine), use its address instead. For another compose stack, either join both to one docker network, or publish Ollama's port on the LAN address and use `http://<host>:11434`.
+
+**Which model:**
+- **`qwen3-vl:4b-instruct`** is the default: 3.3 GB, about 5 GB of memory while it reads, and a minute or two a picture on a desktop CPU. In a trial on real boxes:
+  - It read every episode on a phone photo of a children's DVD, with its running time, regions and PAL.
+  - On a flatbed scan of a film's sheet, it read the extras, the barcode, the catalogue number and the region in its globe.
+  - It invented nothing.
+- **`qwen2.5vl:7b`** reads extras' types and audio tracks more carefully, at about twice the time and memory.
+- **Avoid "thinking" models** (such as plain `qwen3-vl:4b`). They think until they run out of room and answer nothing; ripshelf says so when it happens.
+
+**Speed and load.**
+- A local model keeps most of the CPU busy while it reads. ripshelf reads one scan at a time across all jobs, and a local model waits while a transcode runs.
+- On Intel integrated graphics (a UHD 770), Ollama's Vulkan backend found the GPU, but requests failed or ran far slower than on the CPU. Plan on the CPU.
+- A cloud model takes seconds and leaves the CPU alone.
+
 ## Matching the listing to the disc
 
 ripshelf matches each line of the listing to one of the disc's titles. **Matched from the cover scan** shows each title with the line it was matched to, a confidence (high, medium or low) and, when you tap it, why: "runs 22:06 against 22 min printed", or "“Brolly Bus” is S03E34; listed 1st, title 1 is 1st".
@@ -197,6 +260,10 @@ TV/Pippa & Goose (2013)/scans/PIPPA_&_GOOSE_KITE_TRAM - front.jpg
 | `POST /api/jobs/{id}/listing/read` | read every scan again |
 | `GET /api/jobs/{id}/scan-match` | the listing matched to the disc's titles, made again from the job as it is now (also on the job, as `scan_match`) |
 | `POST /api/jobs/{id}/extras/rip` | rip a film's extras the box names, while the disc is in its drive |
+| `POST /api/jobs/{id}/scans/{scan}/vision` | read the scan with the vision model now (its `vision` and `vision_message` say how it goes) |
 | `GET /api/jobs/{id}/scans/{scan}/text` | the lines read on one scan, with their boxes and confidence, and its barcodes |
 
 In development, `scripts/dev-fake.sh` serves a pretend scanner at `/fake-escl/eSCL` and points Settings at it. Its glass holds a made-up DVD's cover sheet, and its feeder holds three insert pages.
+
+
+It also serves a pretend vision model at `/fake-vision` (OpenAI-compatible) and `/fake-anthropic`, and points Settings at the first. It "reads" every picture as the pretend sheet, plus one line that isn't there, as real models sometimes add.
