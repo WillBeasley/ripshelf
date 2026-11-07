@@ -531,6 +531,39 @@ class ListingView(BaseModel):
     available: bool = Field(description="text reading can run here (Tesseract is installed and switched on)")
 
 
+Confidence = Literal["high", "medium", "low"]
+
+
+class TitleMatch(BaseModel):
+    """A disc title, and the line of the box's listing it was matched to."""
+
+    title_index: int
+    kind: Literal["feature", "episode", "extra"]
+    item: int | None = Field(None, description="the listing item (its index), none for the main feature")
+    name: str = Field(description="the title as the box gives it")
+    episodes: list[EpisodeRef] = Field(default=[], description="the episode it is, when its name was found in "
+                                                               "the season's episode list")
+    extra_type: ExtraKind | None = None
+    score: float
+    confidence: Confidence
+    reason: str = Field(description="why, for the user: runtimes, order, names")
+    agrees: bool | None = Field(None, description="the existing mapping or main title says the same (none when "
+                                                  "there is nothing to compare)")
+    current: str | None = Field(None, description="what the existing mapping says instead, when it disagrees")
+
+
+class ScanMatch(BaseModel):
+    """The listing read from the box, matched to the disc's titles."""
+
+    matches: list[TitleMatch] = []
+    unmatched_items: list[int] = Field(default=[], description="listing items no title fits")
+    unmatched_titles: list[int] = Field(default=[], description="titles (not play-alls or duplicates) no line fits")
+    claimed: list[int] = Field(default=[], description="listing items other discs of the release took")
+    confidence: Confidence | None = Field(None, description="for the disc as a whole")
+    notes: list[str] = []
+    made_at: datetime | None = None
+
+
 ScannerSource = Literal["platen", "feeder"]
 ScannerState = Literal["scanning", "failed"]
 
@@ -638,6 +671,7 @@ class Job(BaseModel):
     scans: list[CoverScan] = Field(default=[], description="scans and photos of the box")
     scanner: ScannerRun | None = Field(None, description="a scan from the network scanner, under way or failed")
     listing: ScanListing | None = Field(None, description="what's on the disc, read from the scans")
+    scan_match: ScanMatch | None = Field(None, description="the listing matched to the disc's titles")
 
 
 class ContributionTitle(BaseModel):
