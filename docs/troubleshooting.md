@@ -8,15 +8,15 @@ Anything that stops ripshelf working shows as a yellow **Setup** box on the Over
 
 - **The container can't see it.** Each drive needs both its `/dev/srN` and its own `/dev/sgN` in `devices:`. The numbers differ, and `ls /sys/class/block/sr*/device/scsi_generic` shows the pairs. They can change between boots after adding or moving a drive.
 - **Permissions.** The container runs as your user, so it needs the host's cdrom group. Add the id from `getent group cdrom` to `group_add`.
-- **It's disabled.** Settings → Drives and MakeMKV has a switch for each drive.
+- **It's disabled.** Settings → Drives and ripping has a switch for each drive.
 
 ## "MakeMKV rejected the registration key"
 
-The key in Settings → MakeMKV is wrong or has expired. The free beta key changes every month or two. Get the current one from the [MakeMKV forum](https://forum.makemkv.com/forum/viewtopic.php?t=1053), or buy a permanent key. Test checks the key without saving it.
+The key in Settings → Drives and ripping is wrong or has expired. The free beta key changes every month or two. Get the current one from the [MakeMKV forum](https://forum.makemkv.com/forum/viewtopic.php?t=1053), or buy a permanent key. Test checks the key without saving it.
 
 ## "MakeMKV does not know the volume key" / "could not decrypt this disc" (UHD)
 
-UHD discs need the drive's LibreDrive data. Import the drive's `_private_data.tar` (from `~/.MakeMKV` on a machine where MakeMKV has already played a UHD disc in that drive) in **Settings → Import MakeMKV private data**, then Scan again. The drive must be LibreDrive-capable (see the [MakeMKV forum's drive list](https://forum.makemkv.com/forum/viewtopic.php?f=16&t=19634)).
+UHD discs need the drive's LibreDrive data. Import the drive's `_private_data.tar` (from `~/.MakeMKV` on a machine where MakeMKV has already played a UHD disc in that drive) in **Settings → Drives and ripping → MakeMKV private data**, then Scan again. The drive must be LibreDrive-capable (see the [MakeMKV forum's drive list](https://forum.makemkv.com/forum/viewtopic.php?f=16&t=19634)).
 
 ## The scan times out
 
@@ -26,7 +26,7 @@ The job says "MakeMKV stopped responding while scanning" or "was still scanning 
 - **An older drive that hangs while MakeMKV makes a firmware dump**, below.
 - **Several drives in one container slowing each other down.** Use [one worker per drive](modes.md).
 
-The limits are in Settings → Drives and MakeMKV.
+The limits are in Settings → Drives and ripping, under Advanced.
 
 A DVD with a complex multiplex is the one slow scan that goes silent: MakeMKV logs "Complex multiplex encountered - N cells and M VOBUs have to be scanned" and then writes nothing until it's done, which took over 5 minutes for 4759 VOBUs on an LG GGC-H20N. The job notes it, and the scan is allowed up to an hour of silence after that message (or the timeout in Settings, if longer), within the overall limit.
 
@@ -34,7 +34,7 @@ A DVD with a complex multiplex is the one slow scan that goes silent: MakeMKV lo
 
 MakeMKV after 1.17.7 tries to make a firmware dump for a drive without LibreDrive support, and on some drives (the LG GGC-H20N is one) it never finishes. MakeMKV 1.17.6 makes the dump fine, and once a `dump_*.tgz` is in the drive's MakeMKV folder, current MakeMKV uses it and scans normally.
 
-**The fix** is to import a `dump_*.tgz` for the drive in **Settings → Import MakeMKV private data**. It's copied to the drive (and to drives seen later), remote workers fetch it, and it's never deleted. If you've used the drive with another MakeMKV install, its `~/.MakeMKV` may already have one.
+**The fix** is to import a `dump_*.tgz` for the drive in **Settings → Drives and ripping → MakeMKV private data**. It's copied to the drive (and to drives seen later), remote workers fetch it, and it's never deleted. If you've used the drive with another MakeMKV install, its `~/.MakeMKV` may already have one.
 
 **To make a dump,** run MakeMKV 1.17.6 once against the drive with any disc in it. The Dockerfile builds that version:
 
@@ -61,11 +61,11 @@ Use the drive's own `srN`/`sgM` pair. The dump belongs to the drive and its firm
 
 - **No TMDB key.** Every disc TheDiscDB doesn't know needs one ([providers.md](providers.md)).
 - **A cryptic label** (`BTTF2`, `DISC_1`). Search on the review card. Labels that are a catalogue number (`EO51710`) can be [looked up on the web](catalogue.md).
-- **A close call.** The score is under the auto-confirm line (0.90 by default, Settings → Identification). The card shows the evidence for each candidate.
+- **A close call.** The score is under the auto-confirm line (0.90 by default, Settings → Identify). The card shows the evidence for each candidate.
 
 ## Wrong episode order on a TV disc
 
-Pick the episode order that matches your library, either TheTVDB's aired or DVD order (Settings → Metadata providers). Emby uses aired order unless the TV library is set to DVD order. The Review page shows the mapping before anything is copied.
+Pick the episode order that matches your library, either TheTVDB's aired or DVD order (Settings → Identify). Emby uses aired order unless the TV library is set to DVD order. The Review page shows the mapping before anything is copied.
 
 ## "Library folder missing" / a folder is read-only
 

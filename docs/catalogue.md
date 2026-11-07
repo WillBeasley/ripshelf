@@ -33,7 +33,7 @@ use the top title as the show name.
 The job log records each step, for example `Catalogue number EO51710: 4 web
 page(s) mention it; titles named: “The Mortal Instruments: City of Bones” (4)`.
 
-## Search backend (Settings → Catalogue numbers)
+## Search backend (Settings → Identify → Web search)
 
 **SearXNG (self-hosted, free).** SearXNG is a metasearch engine that queries
 Google, Bing, DuckDuckGo and others for you. Add it to the stack:

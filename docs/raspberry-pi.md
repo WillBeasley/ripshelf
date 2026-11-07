@@ -97,7 +97,7 @@ sudo ldconfig
 - makemkv-bin's Makefile picks `bin/arm64/makemkvcon` from `uname -m` (`aarch64`).
 - Once a newer release comes out, 2.0.0 moves to `/download/old/` (setup-pi.sh tries both).
 - **Java** is for BD-J, because some Blu-rays only show the right playlist through their Java menus.
-- **UHD.** MakeMKV doesn't need libaacs, because it reads UHDs through LibreDrive. Import the drive's `_private_data.tar` from an existing MakeMKV install in Settings → Import MakeMKV private data. A fresh MakeMKV home with no data can stall a UHD scan.
+- **UHD.** MakeMKV doesn't need libaacs, because it reads UHDs through LibreDrive. Import the drive's `_private_data.tar` from an existing MakeMKV install in Settings → Drives and ripping → MakeMKV private data. A fresh MakeMKV home with no data can stall a UHD scan.
 - **Key.** Set it in ripshelf's Settings (or `RIPSHELF_MAKEMKV_KEY`), and ripshelf writes it into each drive's MakeMKV home.
 
 ## Drive access
@@ -125,7 +125,7 @@ Then follow [installation.md](installation.md) with [compose.yaml](../compose.ya
 - the drives, each `/dev/srN` with its own `/dev/sgN`
 - scratch on the NVMe
 
-As a **remote worker** for a controller elsewhere, use the compose file the controller's Settings → Remote workers makes ([workers.md](workers.md)), with the same drive lines.
+As a **remote worker** for a controller elsewhere, use the compose file the controller's Settings → Workers makes ([workers.md](workers.md)), with the same drive lines.
 
 ## Native route
 
@@ -215,8 +215,8 @@ This is how a worker behaves, from [workers.md](workers.md) and the code (`src/r
 
 ### Getting ready
 
-1. On the controller, go to Settings → Remote workers, name it (for example "Pi 5") and click **Add remote worker**. The controller URL in the compose file must be the address the Pi uses to reach it. Copy the compose file, because the token is shown only once.
-2. On the controller, go to Settings → Import MakeMKV private data. For an LG GGC-H20N, the `dump_*.tgz` MakeMKV needs ([troubleshooting.md](troubleshooting.md#an-older-drive-hangs-in-makemkv-lg-ggc-h20n-and-others)). For a UHD drive, its `_private_data.tar`.
+1. On the controller, go to Settings → Workers, name it (for example "Pi 5") and click **Add remote worker**. The controller URL in the compose file must be the address the Pi uses to reach it. Copy the compose file, because the token is shown only once.
+2. On the controller, go to Settings → Drives and ripping → MakeMKV private data. For an LG GGC-H20N, the `dump_*.tgz` MakeMKV needs ([troubleshooting.md](troubleshooting.md#an-older-drive-hangs-in-makemkv-lg-ggc-h20n-and-others)). For a UHD drive, its `_private_data.tar`.
 3. On the Pi, run it one of two ways.
    - With Docker, use the compose file with this drive's `sr`/`sg` lines (and `RIPSHELF_IMAGE=localhost/ripshelf:latest` if you built the image on the Pi).
    - Natively, put `RIPSHELF_CONTROLLER_URL`, `RIPSHELF_WORKER_TOKEN`, `RIPSHELF_WORKER_ID` and `RIPSHELF_WORKER_NAME` in `ripshelf.env` in the checkout, then run `.venv/bin/ripshelf worker`.
@@ -226,7 +226,7 @@ This is how a worker behaves, from [workers.md](workers.md) and the code (`src/r
 
 | # | Do | Expect |
 |---|---|---|
-| 1 | Start the worker | Its log says `registered with <url>: 1 drives`. The drive appears on the controller's Overview, marked "on Pi 5". Settings → Remote workers shows it online, and "last seen" moves (it's updated at most every 30 s) |
+| 1 | Start the worker | Its log says `registered with <url>: 1 drives`. The drive appears on the controller's Overview, marked "on Pi 5". Settings → Workers shows it online, and "last seen" moves (it's updated at most every 30 s) |
 | 2 | Look in the worker's data folder | `makemkv/<drive id>/.MakeMKV/` has `settings.conf` with the key, plus the dump or private data from step 2 (the log lists what was installed). Restart the worker, and nothing is installed again |
 | 3 | Import a new copy of the file on the controller, then restart the worker | It's installed again. Changes MakeMKV made to its own `_private_data.tar` are otherwise kept |
 | 4 | Compare the drive id with the one it had as a local drive elsewhere | The same (from the serial number). Only an id another drive already uses becomes `<worker>:<id>` |
@@ -239,7 +239,7 @@ This is how a worker behaves, from [workers.md](workers.md) and the code (`src/r
 | 11 | Unplug the Pi's network for over 45 s during a rip, then plug it back in | After 45 s the job fails ("the worker stopped answering"). When the network is back, the worker's next heartbeat is told the controller gave up on that run. It stops makemkvcon and deletes its files without registering again (the worker log says `run <n>: the controller has given up on it; stopping it`) |
 | 12 | Unplug the network for only about 10 s during a rip | **Nothing fails.** The worker logs `controller unreachable while …; retrying`, then `controller answering again`, and the rip carries on. Its output lines reach the job page once the network is back |
 | 13 | Drop the network briefly during the upload | The controller deletes the partial file (`.<name>.upload`), and the worker starts that file's upload again from the beginning once the network is back. A drop longer than 45 s ends as in 11 |
-| 14 | Revoke the worker (Settings → Remote workers) while it's idle | The drive goes to error at once. The worker logs one error ("controller refused the worker token (401) … needs a new token") and checks again only every 5 minutes. `check-pi.sh --worker` says the token is refused |
+| 14 | Revoke the worker (Settings → Workers) while it's idle | The drive goes to error at once. The worker logs one error ("controller refused the worker token (401) … needs a new token") and checks again only every 5 minutes. `check-pi.sh --worker` says the token is refused |
 | 15 | Revoke during a rip | The job fails at once ("its token was revoked"), and the worker stops that makemkvcon and deletes its files |
 | 16 | Add the worker again under the same name (new token) and restart it | It gets its old worker id back, and the drive keeps its id and history |
 
@@ -289,7 +289,7 @@ Still not covered:
 | USB resets or `uas_eh_abort_handler` in `dmesg` | the `usb-storage.quirks=<vid>:<pid>:u` line above |
 | A binary fails with "ELF load command address/offset not page-aligned" or "Unsupported system page size" | something was built for 4 KiB pages. `makemkvcon` 2.0.0 is fine. For anything else, add `kernel=kernel8.img` to `config.txt` (4 KiB pages) and reboot |
 | `requires-python >=3.12` from pip on Bookworm | the venv was made with the system's 3.11. Delete `.venv` and run setup-pi.sh, which uses uv |
-| A UHD scan stalls with a fresh MakeMKV home | import the drive's `_private_data.tar` (Settings → Import MakeMKV private data) |
+| A UHD scan stalls with a fresh MakeMKV home | import the drive's `_private_data.tar` (Settings → Drives and ripping → MakeMKV private data) |
 | An older drive hangs in MakeMKV | [troubleshooting.md](troubleshooting.md#an-older-drive-hangs-in-makemkv-lg-ggc-h20n-and-others) (the same firmware-dump fix as on x86) |
 | Transcoding takes many hours | that's expected with x265 on a Pi. Turn it off, or transcode on another machine |
 

@@ -62,7 +62,7 @@ What it reads badly, or not at all:
 
 Check the listing against the box, as you would a TheDiscDB submission.
 
-**Settings → Scanner** has a switch for reading, Tesseract's languages (`eng`, or `eng+fra` and so on; each needs its data installed) and **Test text reading**.
+**Settings → Scanner and covers** has a switch for reading, Tesseract's languages (`eng`, or `eng+fra` and so on; each needs its data installed) and **Test text reading**.
 
 The container image includes Tesseract and zbar. Elsewhere:
 - Debian or Ubuntu: `apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd libzbar0`
@@ -80,7 +80,7 @@ Tesseract reads printed text well but misses some things:
 
 A vision model, a language model that reads pictures, gets most of these. ripshelf can ask one to read each scan as well, and merges what it reads with Tesseract's reading.
 
-**When it runs** is set in Settings → Scanner → Vision model:
+**When it runs** is set in Settings → Scanner and covers → Vision model:
 - **Never** (the default).
 - **Only when Tesseract struggles.** This is the recommended choice. It applies to scans of the back, the whole sheet, its inside or an insert, when Tesseract:
   - read only a few lines with confidence, or wasn't confident;
@@ -116,7 +116,7 @@ Details the model supplied are labelled "vision model" in the listing, and the d
    ```sh
    docker compose exec ollama ollama pull qwen3-vl:4b-instruct
    ```
-3. In Settings → Scanner → Vision model, choose **On my network**. Address `http://ollama:11434`, model `qwen3-vl:4b-instruct`.
+3. In Settings → Scanner and covers → Vision model, choose **On my network**. Address `http://ollama:11434`, model `qwen3-vl:4b-instruct`.
 
 If Ollama already runs elsewhere (another compose stack, another machine), use its address instead. For another compose stack, either join both to one docker network, or publish Ollama's port on the LAN address and use `http://<host>:11434`.
 
@@ -209,7 +209,7 @@ TV/Guess with Jess (2009)/Season 01/Guess with Jess - S01E24 - Where's My Feathe
 
 TheDiscDB gets it as an extra named "Guess with Jess - Where's My Feather Gone?".
 
-In Settings → Scanner:
+In Settings → Library and filing:
 - **File named extras into Emby's folders** turns all this off.
 - **Bonus episodes of other shows**: an extra of this show (the default), or an episode in the other show's own folder.
 - **A film's other titles** can rip the titles the box doesn't name into `extras/` as "Title N". This is off by default, as before.
@@ -229,7 +229,7 @@ The inside of the cover and insert pages are never used as covers. They're kept 
 
 ## A network scanner
 
-Most network printers with a scanner speak eSCL, which Apple calls AirScan. ripshelf talks to it directly, so it needs no driver and nothing installed on the printer. In **Settings → Scanner**:
+Most network printers with a scanner speak eSCL, which Apple calls AirScan. ripshelf talks to it directly, so it needs no driver and nothing installed on the printer. In **Settings → Scanner and covers**:
 
 1. Turn on **Scan from a network scanner**.
 2. Type the printer's address, such as `http://192.168.1.20`. ripshelf adds `/eSCL`.
@@ -272,7 +272,7 @@ TV/Pippa & Goose (2013)/scans/PIPPA_&_GOOSE_KITE_TRAM - front.jpg
 - **Several discs in one folder.** The names start with the disc's label for TV discs, which share the show's folder, and for a film released on several discs.
 - **Nothing is replaced.** A different file with the same name stays. The new one gets " (2)", " (3)" and so on. The same file already there is left as it is.
 - **Removing.** Removing a picture from the job doesn't delete its copy in the library.
-- **Turning off.** **Copy scans to the library** in Settings → Scanner turns the copies off.
+- **Turning off.** **Copy scans to the library** in Settings → Scanner and covers turns the copies off.
 
 **Emby, Jellyfin and Plex.** None of these names is an artwork name (`poster`, `folder`, `cover`, `fanart`, `backdrop`, `disc`, `logo`…), and nothing is written in the film's folder itself. So the media server's own posters and backgrounds aren't replaced. `scans` isn't one of the extras folders Emby looks in (`extras`, `specials`, `shorts`, `scenes`, `featurettes`, `behind the scenes`, `deleted scenes`, `interviews`, `trailers`). Emby ignores a folder with no video in it, so the pictures don't show up as a film or an extra.
 

@@ -8,7 +8,7 @@ A worker is the same image run as `ripshelf worker`. It owns a machine's optical
 
 ## Add a remote worker
 
-1. **On the controller**, go to Settings → Remote workers, give it a name and click **Add remote worker**. The token is shown once, inside a ready-to-paste compose file.
+1. **On the controller**, go to Settings → Workers, give it a name and click **Add remote worker**. The token is shown once, inside a ready-to-paste compose file.
 2. **On the worker machine**, get the same image as the controller, either pulled ([installation.md](installation.md)) or built there ([building.md](building.md)). Save the compose file as `compose.yaml`, and change the lines marked `<--`. These are the user and cdrom group ids, and the drives, each `/dev/srN` with its own `/dev/sgN` (`ls /sys/class/block/sr*/device/scsi_generic` shows which goes with which).
 3. Run `docker compose up -d`. The worker's drives appear on the Overview, marked "on <worker name>".
 
@@ -38,7 +38,7 @@ services:
 
 **MakeMKV's licence is accepted on each machine.** A worker container runs its own copy of MakeMKV, so it needs `RIPSHELF_ACCEPT_MAKEMKV_EULA: "yes"` in its compose file too. Until it has it, its drives get no jobs, and the Overview names the worker under Setup.
 
-**MakeMKV setup comes from the controller.** Each time a worker connects it fetches the MakeMKV key and the files imported in Settings → Import MakeMKV private data (`_private_data.tar` for its drives, every `dump_*.tgz`), and installs what is missing or changed into each drive's MakeMKV home. Nothing is copied by hand, and the worker needs no `RIPSHELF_MAKEMKV_KEY` (one set on the worker still wins). A file is installed again only when a new copy is imported on the controller, so MakeMKV's own changes to its `_private_data.tar` are kept. Deleting a file in Settings stops offering it, but drives that have it keep it.
+**MakeMKV setup comes from the controller.** Each time a worker connects it fetches the MakeMKV key and the files imported in Settings → Drives and ripping → MakeMKV private data (`_private_data.tar` for its drives, every `dump_*.tgz`), and installs what is missing or changed into each drive's MakeMKV home. Nothing is copied by hand, and the worker needs no `RIPSHELF_MAKEMKV_KEY` (one set on the worker still wins). A file is installed again only when a new copy is imported on the controller, so MakeMKV's own changes to its `_private_data.tar` are kept. Deleting a file in Settings stops offering it, but drives that have it keep it.
 
 **Tokens.** Each worker has its own, and it works for that worker id only. Only its sha256 is stored. **Revoke** in Settings refuses it at once, and the worker's jobs fail with that reason. The worker logs that its token was refused, and checks again only every 5 minutes. To bring it back, add it again and give it the new token. A shared `RIPSHELF_WORKER_TOKEN` (or token file, as in compose.per-drive.yaml) works for any worker id.
 

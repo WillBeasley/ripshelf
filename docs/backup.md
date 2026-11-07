@@ -2,7 +2,7 @@
 
 Normally ripshelf rips titles, meaning the main feature as one MKV, or every episode of a TV disc. In **full backup** mode it copies the whole disc instead, as MakeMKV's own *Backup* does (people often call this "ISO mode").
 
-Turn it on in **Settings → Drives and MakeMKV → What to rip**, for every drive or for one. For example, set the UHD drive to *Full backup* and leave the others on titles.
+Turn it on in **Settings → Drives and ripping → What to rip**, for every drive or for one. For example, set the UHD drive to *Full backup* and leave the others on titles.
 
 ## What you get
 

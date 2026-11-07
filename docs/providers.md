@@ -1,6 +1,6 @@
 # Metadata providers
 
-ripshelf identifies discs with metadata providers, which are online databases of discs, films and shows. Settings → Metadata providers has one list per kind of lookup, as Emby has per library type.
+ripshelf identifies discs with metadata providers, which are online databases of discs, films and shows. Settings → Identify has one list per kind of lookup, as Emby has per library type.
 
 | List | What it is for | How the list is used |
 |---|---|---|
