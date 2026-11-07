@@ -74,7 +74,8 @@
 			text: null,
 			scan_id: null,
 			box: null,
-			source: 'you'
+			source: 'you',
+			show: null
 		};
 	}
 
@@ -150,8 +151,10 @@
 		if (draft) return out; // the match is of the saved listing
 		for (const x of job.scan_match?.matches ?? []) {
 			if (x.item === null) continue;
-			const ep = x.episodes.map(code).join(' & ');
-			const name = x.episodes.length === 1 ? names.get(`${x.episodes[0].season}:${x.episodes[0].episode}`) : null;
+			const ep = x.bonus
+				? `${x.bonus.show.name} ${code(x.bonus.episode)} ${x.bonus.episode.name}`
+				: x.episodes.map(code).join(' & ');
+			const name = !x.bonus && x.episodes.length === 1 ? names.get(`${x.episodes[0].season}:${x.episodes[0].episode}`) : null;
 			out.set(x.item, [ep && `${ep}${name ? ` ${name}` : ''}`, `title ${x.title_index}`].filter(Boolean).join(' · '));
 		}
 		return out;
@@ -305,6 +308,7 @@
 					{#if it.source}
 						<span class="src {it.source}" title={SOURCE_HINT[it.source]}>{SOURCE_LABEL[it.source]}</span>
 					{/if}
+					{#if it.show}<div class="read small muted">A bonus episode of another show: {it.show}</div>{/if}
 					{#if matched.has(i)}<div class="read small matched">→ {matched.get(i)}</div>{/if}
 					{#if it.source === 'vision'}<div class="read small warn">Only the vision model read this: check it against the box.</div>{/if}
 					{#if it.text && it.text !== it.title}<div class="read small muted">Read as “{it.text}”</div>{/if}

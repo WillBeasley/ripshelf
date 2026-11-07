@@ -419,8 +419,8 @@ class ShowFromScanMixin:
             return False
         for r in plan.mapping:
             if (x := picks.get(r.title_index)):
-                r.role, r.episodes = TitleRole.episode, list(x.episodes)
-                r.note = f"from the cover scan: “{x.name}”"
+                # The match says where it came from, beside the row.
+                r.role, r.episodes, r.note = TitleRole.episode, list(x.episodes), None
             elif (x := bonus.get(r.title_index)):
                 b = x.bonus
                 r.role, r.episodes = TitleRole.extra, []
