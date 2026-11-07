@@ -962,6 +962,8 @@ class SettingsView(BaseModel):
     scans_to_library: bool = True
     scan_read_text: bool = True
     ocr_languages: str = "eng"
+    extras_emby_folders: bool = True
+    film_unnamed_extras: Literal["skip", "extras"] = "skip"
 
 
 class SettingsUpdate(BaseModel):
@@ -1042,6 +1044,8 @@ class SettingsUpdate(BaseModel):
     scans_to_library: bool | None = None
     scan_read_text: bool | None = None
     ocr_languages: str | None = Field(None, pattern=r"^[a-z_]{3,10}(\+[a-z_]{3,10})*$")
+    extras_emby_folders: bool | None = None
+    film_unnamed_extras: Literal["skip", "extras"] | None = None
 
 
 class SettingsTestRequest(BaseModel):

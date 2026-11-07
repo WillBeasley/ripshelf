@@ -118,6 +118,7 @@ class JobRecord(Job):
     duplicates: list[int] = []
     notified: list[str] = []
     disc_index: int | None = None  # MakeMKV's number for the drive ("backup" takes disc:N only)
+    filed_extras: dict[int, str] = {}  # a film's extras copied to the library: title -> file
 
     def art_url(self) -> tuple[str | None, bool]:
         """(poster URL, proposed?) for the disc, from the confirmed identity first, then the best guess."""

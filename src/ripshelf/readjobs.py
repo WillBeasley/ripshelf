@@ -81,6 +81,7 @@ class ReadingMixin:
         sl.edited_from = sl.read_at or now()
         job.listing = sl
         self._save(job)
+        self.rematch(job_id)
         return self.listing_view(job_id)
 
     def drop_listing_edits(self, job_id: int) -> ListingView:
@@ -89,6 +90,7 @@ class ReadingMixin:
         if job.listing:
             job.listing.edited = job.listing.edited_from = None
             self._save(job)
+            self.rematch(job_id)
         return self.listing_view(job_id)
 
     # --- reading ----------------------------------------------------------------------
@@ -202,6 +204,7 @@ class ReadingMixin:
             sl.read_at = now()
         job.listing = sl
         self._save(job)
+        self.rematch(job_id)
 
     def _inherit_reading(self, job: JobRecord, other: JobRecord) -> None:
         """With the scans of another disc in the release, its readings and listing."""

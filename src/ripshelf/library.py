@@ -72,6 +72,34 @@ def replace(src: Path, dst: Path) -> None:
             delay *= 2
 
 
+# Emby's extras folders, in a film's or show's folder (and its seasons'), as its naming
+# guides list them: https://emby.media/support/articles/Movie-Naming.html and
+# https://emby.media/support/articles/TV-Naming.html. Jellyfin and Plex read these too.
+EXTRAS_FOLDERS = {"Featurette": "featurettes", "Extra": "extras", "DeletedScene": "deleted scenes",
+                  "Trailer": "trailers", "Interview": "interviews", "Scene": "scenes", "Short": "shorts",
+                  "Music": "extras", "Other": "extras"}
+BEHIND_THE_SCENES = re.compile(r"behind the scenes|\bmaking\b|on set", re.I)
+
+
+def extras_folder(extra_type: str | None, name: str) -> str:
+    """The Emby extras folder for a named extra of TheDiscDB's type. A featurette about
+    the making of the film goes in "behind the scenes"."""
+    if extra_type == "Featurette" and BEHIND_THE_SCENES.search(name):
+        return "behind the scenes"
+    return EXTRAS_FOLDERS.get(extra_type or "Extra", "extras")
+
+
+def free_path(path: Path, taken: set[Path] = frozenset()) -> Path:
+    """``path``, or with " (2)", " (3)"... before the extension if a file has it (or
+    another file being placed now)."""
+    n = 1
+    out = path
+    while out.exists() or out in taken:
+        n += 1
+        out = path.with_name(f"{path.stem} ({n}){path.suffix}")
+    return out
+
+
 class LibraryError(Exception):
     pass
 

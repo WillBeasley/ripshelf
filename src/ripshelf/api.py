@@ -56,6 +56,7 @@ from .models import (
     ReleaseLookup,
     ReleaseLookupRequest,
     ScanKind,
+    ScanMatch,
     ScannerInfo,
     ScannerRun,
     ScannerScanRequest,
@@ -492,6 +493,23 @@ async def scan_text(job_id: int, scan_id: str, request: Request):
     return t
 
 
+@api.get("/jobs/{job_id}/scan-match", response_model=ScanMatch | None)
+async def scan_match(job_id: int, request: Request):
+    """The box's listing matched to the disc's titles, made again from the job as it is now."""
+    return _sync_call(lambda: manager(request).rematch(job_id))
+
+
+@api.post("/jobs/{job_id}/extras/rip", response_model=Job)
+async def rip_extras(job_id: int, request: Request):
+    """Rip the film's extras the box names, while the disc is still in its drive. A
+    finished job files them straight away; otherwise they're filed with the film."""
+    return await _contribution_call(lambda: _public(manager(request).rip_film_extras(job_id)))
+
+
+async def _public(coro):
+    return (await coro).public()
+
+
 @api.get("/jobs/{job_id}/listing", response_model=ListingView)
 async def listing(job_id: int, request: Request):
     """What's on the disc, as read from the box: the reading, and the user's version of it."""
@@ -696,6 +714,7 @@ def settings_view(s: Settings) -> SettingsView:
         scanner_enabled=s.scanner_enabled, scanner_url=s.scanner_url, scanner_dpi=s.scanner_dpi,
         scanner_source=s.scanner_source, scanner_trim=s.scanner_trim, scans_to_library=s.scans_to_library,
         scan_read_text=s.scan_read_text, ocr_languages=s.ocr_languages,
+        extras_emby_folders=s.extras_emby_folders, film_unnamed_extras=s.film_unnamed_extras,
         pushover_user_key_set=bool(s.pushover_user_key), pushover_app_token_set=bool(s.pushover_app_token),
         pushover_device=s.pushover_device,
         notify_events={e: integrations.Notifier(s).priority(e) for e in integrations.EVENTS},

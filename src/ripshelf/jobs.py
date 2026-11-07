@@ -48,6 +48,7 @@ from .makemkv.parse import (
     choose_main_feature,
     parse_info,
 )
+from .matchjobs import MatchMixin
 from .models import (
     ACTIVE_STATES,
     TERMINAL_STATES,
@@ -150,7 +151,7 @@ class DriveRuntime:
     tasks: set[asyncio.Task] = field(default_factory=set)
 
 
-class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin):
+class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin, MatchMixin):
     def __init__(self, settings: Settings, db: Database, backend: DriveBackend, bus: EventBus):
         self.s = settings
         self.db = db
@@ -1158,6 +1159,12 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         resume = [t for t in job.titles if t.index not in job.rip.files] \
             if job.rip.paused and job.rip.all_titles else None
         runs = [args]
+        extras = [] if backup or resume is not None or title_arg == "all" else self.film_extra_titles(job)
+        if extras:
+            # The extras the box names (scanned before the rip): each its own run, after the film.
+            runs += [[*args[:4], str(i), str(out_dir)] for i in extras]
+            expected += sum(t.size_bytes for t in job.titles if t.index in extras)
+            what += f", and {len(extras)} extra{'s' if len(extras) != 1 else ''} the box names"
         if resume is not None:
             expected = sum(t.size_bytes for t in resume)
             what = f"Ripping the {len(resume)} unfinished titles to scratch ({len(job.rip.files)} kept)"
@@ -1238,9 +1245,14 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             total = sum(Path(f).stat().st_size for f in job.rip.files.values())
             self._event(job, "rip", f"Rip complete: {len(job.rip.files)} titles ({gib(total)})")
         else:
-            job.rip.file = str(files[0])
-            job.rip.size_bytes = files[0].stat().st_size
-            self._event(job, "rip", f"Rip complete: {files[0].name} ({gib(job.rip.size_bytes)})")
+            main_file = files[0]
+            if extras:
+                job.rip.files = self._collect_files(job, out_dir)
+                main_file = Path(job.rip.files.get(job.main_title.index, files[0]))
+            job.rip.file = str(main_file)
+            job.rip.size_bytes = main_file.stat().st_size
+            self._event(job, "rip", f"Rip complete: {main_file.name} ({gib(job.rip.size_bytes)})"
+                        + (f", with {len(job.rip.files) - 1} extras" if extras else ""))
         job.rip.progress = tracker.snapshot().model_copy(update={"fraction": 1.0, "bytes_done": expected,
                                                                  "phase": "Ripped", "eta_s": 0})
         if job.tv:
@@ -1340,6 +1352,10 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             self._set_step(job, "Copying the kept original", "Transcoding was set to keep the rip as well")
             await self._copy_originals(job, [(o, dest) for o in originals.values()])
         job.destination = str(dest)
+        self._save(job)
+        self.rematch(job.id)
+        await self.file_film_extras(self.db.get_job(job.id), folder)
+        job = self.db.get_job(job.id)
         work = self.work_dir(job)
         try:
             library.write_disc_folder(folder, self._disc_json(job, dest, sha), work / "scan.log",

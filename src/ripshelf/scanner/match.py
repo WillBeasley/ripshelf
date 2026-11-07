@@ -179,7 +179,7 @@ def episode_for(name: str, episodes: list[Episode], season: int | None) -> tuple
 def _bluray(t: TitleInfo) -> bool:
     """A Blu-ray playlist, whose segment map names the disc's clips (a DVD's numbers
     each title's own cells from 1, so two titles' maps say nothing about each other)."""
-    return bool(t.source_file and t.source_file.lower().endswith(".mpls"))
+    return bool(t.source_file and t.source_file.lower().endswith((".mpls", ".m2ts")))
 
 
 def _candidates(titles: list[TitleInfo], mapping: list[TitleMap]) -> list[TitleInfo]:
@@ -194,6 +194,9 @@ def _candidates(titles: list[TitleInfo], mapping: list[TitleMap]) -> list[TitleI
             continue
         seen.add(key)
         out.append(t)
+    # A Blu-ray's loose clips that a playlist plays already.
+    played = {c for t in out if (t.source_file or "").lower().endswith(".mpls") for c in (t.segments_map or "").split(",")}
+    out = [t for t in out if not ((t.source_file or "").lower().endswith(".m2ts") and t.segments_map in played)]
     for t in list(out):
         others = [o for o in out if o is not t and o.duration_s < t.duration_s]
         if len(others) >= 3 and abs(sum(o.duration_s for o in others) - t.duration_s) < 0.03 * t.duration_s:
