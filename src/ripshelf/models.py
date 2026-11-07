@@ -6,12 +6,27 @@ TypeScript types from them, so change them here first.
 
 from __future__ import annotations
 
+import operator
 from datetime import date, datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from functools import reduce
+from pathlib import Path
+from types import UnionType
+from typing import Annotated, Any, Literal, Union, get_args, get_origin
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    SecretStr,
+    StringConstraints,
+    create_model,
+    field_validator,
+    model_validator,
+)
+from pydantic.fields import FieldInfo
+from pydantic_core import to_jsonable_python
 
+from .config import EDITABLE, FOLDERS, SECRETS, UI, Settings, ui_of
 from .makemkv.parse import RipProgress
 
 
@@ -928,191 +943,153 @@ class ProviderInfo(BaseModel):
     check: SettingsCheck | None = Field(None, description="the Settings test for it")
 
 
-class SettingsView(BaseModel):
-    setup_complete: bool = Field(True, description="the first-start setup page was finished or skipped")
-    tmdb_api_key_set: bool
-    tmdb_language: str
-    tvdb_api_key_set: bool = False
-    tvdb_pin_set: bool = False
-    tv_episode_order: TvEpisodeOrder = "tvdb_aired"
-    tvdb_episode_order: TvdbEpisodeOrder = "aired"
-    omdb_api_key_set: bool = False
-    thediscdb_contribute: ContributeMode = "off"
-    thediscdb_contribute_url: str = "https://thediscdb.com"
-    thediscdb_api_key_set: bool = False
-    metadata_providers: dict[ProviderList, list[ProviderSlot]] = Field(
-        {}, description="each list's providers, in the order they are asked")
+SettingsSection = Literal["identify", "drives", "scanner", "library", "media-servers", "transcoding",
+                          "notifications", "workers", "system"]
+SettingKind = Literal["bool", "choice", "number", "range", "text", "path", "list", "secret", "custom"]
+
+
+class SettingChoice(BaseModel):
+    value: str | int
+    label: str
+
+
+class SettingField(BaseModel):
+    """One editable setting, as config.Settings describes it, for the Settings screen's
+    labels, limits and search."""
+    name: str
+    section: SettingsSection | None = Field(description="None for one saved elsewhere (not a field on the page)")
+    title: str
+    help: str = ""
+    kind: SettingKind
+    advanced: bool = False
+    controller_only: bool = Field(False, description="used by this machine only, not by remote workers")
+    secret: bool = False
+    nullable: bool = Field(False, description="empty saves null (unset), else the default")
+    default: Any = None
+    minimum: float | None = None
+    maximum: float | None = None
+    step: float | None = None
+    choices: list[SettingChoice] = []
+    placeholder: str = ""
+    keywords: str = ""
+
+
+# Types the API spells out more exactly than the settings do (settings.json keeps plain dicts).
+_API_TYPES: dict[str, Any] = {
+    "metadata_providers": dict[ProviderList, list[ProviderSlot]],
+    "notify_events": dict[NotifyEvent, PushoverPriority | None],
+    "transcode_sources": dict[TranscodeSourceKind, TranscodeSource],
+}
+
+
+def _plain(annotation: Any) -> tuple[Any, bool]:
+    """A setting's type as the API sends it (paths and secrets as text), and whether it may be None."""
+    args = get_args(annotation) if get_origin(annotation) in (Union, UnionType) else ()
+    nullable = type(None) in args
+    if nullable:
+        rest = [a for a in args if a is not type(None)]
+        annotation = reduce(operator.or_, rest)
+    if annotation in (Path, SecretStr):
+        annotation = str
+    return annotation, nullable
+
+
+def _limits(f: FieldInfo) -> list[Any]:
+    return [m for m in f.metadata if not isinstance(m, UI)]
+
+
+def _update_model() -> type[BaseModel]:
+    """Every setting the UI may change, each optional: only what's sent is saved.
+    A secret sent as "" is cleared, and a folder sent as "" goes back to its default."""
+    fields: dict[str, Any] = {}
+    for name, f in Settings.model_fields.items():
+        if name not in EDITABLE or not ui_of(f).update:
+            continue
+        t, _ = _plain(f.annotation)
+        t = _API_TYPES.get(name, t)
+        u = ui_of(f)
+        limits = [] if name in SECRETS or name in FOLDERS else _limits(f)
+        if u.ge is not None or u.le is not None:
+            limits = [Field(ge=u.ge, le=u.le)]
+        fields[name] = (Annotated[(t, *limits)] | None if limits else t | None, None)
+    return create_model("SettingsUpdate", __module__=__name__, __doc__=_update_model.__doc__,
+                        __validators__={"blank_is_none": model_validator(mode="before")(_blank_is_none)}, **fields)
+
+
+def _blank_is_none(values: Any) -> Any:
+    """Text as typed, trimmed, and empty is None (unset, or the default; api.put_settings).
+    Secrets and folders keep "", which clears them."""
+    if not isinstance(values, dict):
+        return values
+    out = {}
+    for k, v in values.items():
+        if isinstance(v, str) and k not in SECRETS and k not in FOLDERS:
+            v = v.strip() or None
+        out[k] = v
+    return out
+
+
+class SettingsViewBase(BaseModel):
+    """What SettingsView adds to the settings themselves."""
     providers: list[ProviderInfo] = []
-    auto_confirm_threshold: float
-    auto_eject: bool
-    scan_timeout_s: int
-    scan_max_s: int = 7200
-    poll_interval_s: float
-    uhd_models: list[str]
-    disabled_drives: list[str]
-    rip_mode: RipMode = "titles"
-    drive_modes: dict[str, RipMode] = Field({}, description="drive id -> its own rip mode, overriding rip_mode")
-    drive_names: dict[str, str] = Field({}, description="drive id -> its name (set with PUT /drives/{id}/name)")
-    pushover_user_key_set: bool = False
-    pushover_app_token_set: bool = False
-    pushover_device: str | None = None
-    notify_events: dict[NotifyEvent, PushoverPriority | None] = Field(
-        {}, description="event -> Pushover priority (-2..1), or null for off")
-    notify_batch_s: float = 120
-    backup_keep: int = Field(7, description="daily database backups kept, 0 for none")
-    backups_dir: str = Field("", description="where the database backups go")
-    public_url: str | None
-    emby_url: str | None
-    emby_api_key_set: bool
-    emby_movies_library: str | None = None
-    emby_movies_path: str | None = None
-    emby_tv_library: str | None = None
-    emby_tv_path: str | None = None
-    jellyfin_url: str | None = None
-    jellyfin_api_key_set: bool = False
-    jellyfin_movies_library: str | None = None
-    jellyfin_movies_path: str | None = None
-    jellyfin_tv_library: str | None = None
-    jellyfin_tv_path: str | None = None
-    plex_url: str | None = None
-    plex_token_set: bool = False
-    plex_movies_library: str | None = None
-    plex_movies_path: str | None = None
-    plex_tv_library: str | None = None
-    plex_tv_path: str | None = None
-    makemkv_key_set: bool
     library_dir: str
+    scratch_dir: str
     movies_dir: str = Field("", description="where films go (a separate folder, or <library>/Movies)")
     tv_dir: str = Field("", description="where TV goes (a separate folder, or <library>/TV)")
     disc_backups_dir: str = Field("", description="where full disc backups go")
-    scratch_dir: str
     custom_movies_dir: str = Field("", description="the films folder as set, or empty for <library>/Movies")
     custom_tv_dir: str = Field("", description="the TV folder as set, or empty for <library>/TV")
     custom_disc_backups_dir: str = Field("", description="the disc backups folder as set, or empty for <library>/Disc backups")
     makemkv_drive_data: dict[str, bool] = Field(description="drive id -> has imported private data")
     makemkv_drive_dumps: dict[str, bool] = Field({}, description="drive id -> has a firmware dump (dump_*.tgz)")
-    tv_unmatched: TvUnmatched = "extras"
-    tv_rip_extras: bool = True
-    verify_order: bool = True
-    tv_auto_confirm: bool = True
-    tv_auto_threshold: float = 0.9
-    catalogue_search: CatalogueSearch = "off"
-    searxng_url: str | None = None
-    transcode_enabled: bool = True
-    transcode_codecs: list[str] = ["vc1"]
-    transcode_crop: TranscodeCrop = "when_transcoding"
-    transcode_hdr: bool = False
-    transcode_sources: dict[TranscodeSourceKind, TranscodeSource] = Field(
-        {}, description="per kind of disc, with the defaults filled in")
-    transcode_encoder: TranscodeEncoder = "auto"
-    transcode_quality: int = 21
-    transcode_keep_original: bool = False
-    transcode_parallel: int = 1
-    vaapi_device: str = "/dev/dri/renderD128"
-    scanner_enabled: bool = False
-    scanner_url: str | None = None
-    scanner_dpi: int = 300
-    scanner_source: ScannerSource = "platen"
-    scanner_trim: bool = True
-    scans_to_library: bool = True
-    scan_read_text: bool = True
-    ocr_languages: str = "eng"
-    extras_emby_folders: bool = True
-    film_unnamed_extras: Literal["skip", "extras"] = "skip"
-    tv_bonus_episodes: Literal["extra", "own_show"] = "extra"
-    vision_mode: VisionMode = "off"
-    vision_provider: VisionProvider = "local"
-    vision_url: str | None = None
-    vision_model: str = "qwen3-vl:4b-instruct"
-    vision_api_key_set: bool = False
+    backups_dir: str = Field("", description="where the database backups go")
 
 
-class SettingsUpdate(BaseModel):
-    setup_complete: bool | None = None
-    catalogue_search: CatalogueSearch | None = None
-    searxng_url: str | None = None
-    tv_auto_confirm: bool | None = None
-    tv_auto_threshold: float | None = Field(None, ge=0.5, le=1)
-    transcode_enabled: bool | None = None
-    transcode_codecs: list[str] | None = None
-    transcode_crop: TranscodeCrop | None = None
-    transcode_hdr: bool | None = None
-    transcode_sources: dict[TranscodeSourceKind, TranscodeSource] | None = None
-    transcode_encoder: TranscodeEncoder | None = None
-    transcode_quality: int | None = Field(None, ge=10, le=40)
-    transcode_keep_original: bool | None = None
-    transcode_parallel: int | None = Field(None, ge=1, le=8)
-    vaapi_device: str | None = None
-    tv_unmatched: TvUnmatched | None = None
-    tv_rip_extras: bool | None = None
-    verify_order: bool | None = None
-    tmdb_api_key: str | None = None
-    tmdb_language: str | None = None
-    tvdb_api_key: str | None = None
-    tvdb_pin: str | None = None
-    tv_episode_order: TvEpisodeOrder | None = None
-    tvdb_episode_order: TvdbEpisodeOrder | None = None
-    omdb_api_key: str | None = None
-    thediscdb_contribute: ContributeMode | None = None
-    thediscdb_contribute_url: str | None = Field(None, max_length=300)
-    thediscdb_api_key: str | None = None
-    metadata_providers: dict[ProviderList, list[ProviderSlot]] | None = None
-    auto_confirm_threshold: float | None = Field(None, ge=0, le=1)
-    auto_eject: bool | None = None
-    scan_timeout_s: int | None = Field(None, ge=30, le=3600)
-    scan_max_s: int | None = Field(None, ge=300, le=43200)
-    poll_interval_s: float | None = Field(None, ge=1, le=60)
-    uhd_models: list[str] | None = None
-    disabled_drives: list[str] | None = None
-    rip_mode: RipMode | None = None
-    drive_modes: dict[str, RipMode] | None = None
-    pushover_user_key: str | None = None
-    pushover_app_token: str | None = None
-    pushover_device: str | None = None
-    notify_events: dict[NotifyEvent, PushoverPriority | None] | None = None
-    notify_batch_s: float | None = Field(None, ge=0, le=3600)
-    backup_keep: int | None = Field(None, ge=0, le=365)
-    public_url: str | None = None
-    emby_url: str | None = None
-    emby_api_key: str | None = None
-    emby_movies_library: str | None = None
-    emby_movies_path: str | None = None
-    emby_tv_library: str | None = None
-    emby_tv_path: str | None = None
-    jellyfin_url: str | None = None
-    jellyfin_api_key: str | None = None
-    jellyfin_movies_library: str | None = None
-    jellyfin_movies_path: str | None = None
-    jellyfin_tv_library: str | None = None
-    jellyfin_tv_path: str | None = None
-    plex_url: str | None = None
-    plex_token: str | None = None
-    plex_movies_library: str | None = None
-    plex_movies_path: str | None = None
-    plex_tv_library: str | None = None
-    plex_tv_path: str | None = None
-    makemkv_key: str | None = None
-    library_dir: str | None = None
-    movies_dir: str | None = Field(None, description="empty for <library>/Movies")
-    tv_dir: str | None = Field(None, description="empty for <library>/TV")
-    disc_backups_dir: str | None = Field(None, description="empty for <library>/Disc backups")
-    scratch_dir: str | None = None
-    scanner_enabled: bool | None = None
-    scanner_url: str | None = Field(None, max_length=300)
-    scanner_dpi: Literal[100, 150, 200, 300, 400, 600] | None = None
-    scanner_source: ScannerSource | None = None
-    scanner_trim: bool | None = None
-    scans_to_library: bool | None = None
-    scan_read_text: bool | None = None
-    ocr_languages: str | None = Field(None, pattern=r"^[a-z_]{3,10}(\+[a-z_]{3,10})*$")
-    extras_emby_folders: bool | None = None
-    film_unnamed_extras: Literal["skip", "extras"] | None = None
-    tv_bonus_episodes: Literal["extra", "own_show"] | None = None
-    vision_mode: VisionMode | None = None
-    vision_provider: VisionProvider | None = None
-    vision_url: str | None = Field(None, max_length=300)
-    vision_model: str | None = Field(None, max_length=200)
-    vision_api_key: str | None = None
+def _view_model() -> type[BaseModel]:
+    """The settings as saved: every editable one, except a secret, which is only whether it's set
+    (<name>_set). Folders are in SettingsViewBase."""
+    fields: dict[str, Any] = {}
+    for name, f in Settings.model_fields.items():
+        if name not in EDITABLE or name in FOLDERS:
+            continue
+        if name in SECRETS:
+            fields[f"{name}_set"] = (bool, False)
+            continue
+        t, nullable = _plain(f.annotation)
+        t = _API_TYPES.get(name, t)
+        fields[name] = (t | None if nullable else t, f.get_default(call_default_factory=True))
+    return create_model("SettingsView", __base__=SettingsViewBase, __module__=__name__,
+                        __doc__=_view_model.__doc__, **fields)
+
+
+SettingsUpdate = _update_model()
+SettingsView = _view_model()
+
+
+def setting_fields() -> list[SettingField]:
+    out = []
+    for name, f in Settings.model_fields.items():
+        u = ui_of(f)
+        if not u:
+            continue
+        t, nullable = _plain(f.annotation)
+        limits = {k: getattr(m, k) for m in f.metadata for k in ("ge", "le") if hasattr(m, k)}
+        limits |= {k: v for k, v in (("ge", u.ge), ("le", u.le)) if v is not None}
+        choices = u.choices
+        if not choices and get_origin(t) is Literal:
+            choices = tuple((a, str(a)) for a in get_args(t))
+        secret = name in SECRETS
+        kind = ("secret" if secret else u.kind or ("bool" if t is bool else "choice" if choices
+                else "number" if t in (int, float) else "path" if name in FOLDERS else "list" if t == list[str]
+                else "text" if t is str else "custom"))
+        out.append(SettingField(
+            name=name, section=u.section, title=u.title, help=u.help, kind=kind, advanced=u.advanced,
+            controller_only=u.controller_only, secret=secret, nullable=nullable,
+            default=None if secret else to_jsonable_python(f.get_default(call_default_factory=True)),
+            minimum=limits.get("ge"), maximum=limits.get("le"), step=u.step or (1 if t is int else None),
+            choices=[SettingChoice(value=v, label=label) for v, label in choices],
+            placeholder=u.placeholder, keywords=u.keywords))
+    return out
 
 
 class SettingsTestRequest(BaseModel):
