@@ -406,6 +406,110 @@ class CoverScan(BaseModel):
     library_path: str | None = Field(None, description="its copy in the library, once filed")
 
 
+class TextLine(BaseModel):
+    """A line of text read on a scan."""
+
+    text: str
+    conf: float = Field(description="Tesseract's confidence, 0 to 100")
+    box: list[float] = Field(description="[left, top, right, bottom] as fractions of the picture as shown "
+                                         "(trimmed and turned)")
+    region: str = Field("page", description="the part of the picture: front, spine or back of a whole outer "
+                                            "sheet, left or right of its inside, else page")
+
+
+class ScanText(BaseModel):
+    """What was read on one scan."""
+
+    scan_id: str
+    key: str = Field(description="what the reading depends on (the file, kind, trim, turn and cut); a "
+                                 "different key means it needs reading again")
+    read_at: datetime
+    engine: str
+    seconds: float = 0
+    turned: int = Field(0, description="the quarter turns the text needed, which the scan was given")
+    lines: list[TextLine] = []
+    more: list[TextLine] = Field(default=[], description="the other reading of each part, used only for the "
+                                                         "release details")
+    barcodes: list[str] = Field(default=[], description="EAN-13 and UPC-A barcodes decoded from the picture")
+
+
+ListingKind = Literal["episode", "extra"]
+
+
+class ListingItem(BaseModel):
+    """An episode or extra the box lists."""
+
+    kind: ListingKind
+    title: Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)]
+    number: int | None = Field(None, description="the episode's number, when printed")
+    runtime_min: float | None = Field(None, description="the printed running time, in minutes")
+    extra_type: ExtraKind | None = Field(None, description="TheDiscDB's type, for an extra")
+    disc: int | None = Field(None, description="the disc it's on, when the box splits them by disc")
+    text: str | None = Field(None, description="the line as read, before the title was picked out of it")
+    scan_id: str | None = Field(None, description="the scan it was read on")
+    box: list[float] | None = Field(None, description="where on that scan, as fractions (see TextLine)")
+
+
+class ListingDetails(BaseModel):
+    """What the box says about the release."""
+
+    title: str | None = None
+    year: int | None = Field(None, description="the copyright year of the film or show")
+    cast: list[str] = []
+    feature_runtime_min: float | None = None
+    episode_count: int | None = Field(None, description="from wording such as \"13 episodes\"")
+    barcode: str | None = Field(None, description="EAN-13 or UPC-A, check digit verified")
+    barcode_source: Literal["barcode", "text"] | None = Field(None, description="decoded from the bars, "
+                                                                                 "or read from the digits")
+    catalogue_number: str | None = None
+    region: str | None = None
+    region_guessed: bool = Field(False, description="not printed as text: worked out from the video system "
+                                                    "and country")
+    video_system: Literal["PAL", "NTSC"] | None = None
+    country: str | None = Field(None, description="such as UK or US, from the box")
+    locale: str | None = None
+    aspect_ratio: str | None = None
+    languages: list[str] = []
+    subtitles: list[str] = []
+
+
+class Listing(BaseModel):
+    """What's on the disc, as the box tells it."""
+
+    items: list[ListingItem] = []
+    details: ListingDetails = Field(default_factory=ListingDetails)
+    notes: list[str] = Field(default=[], description="what the reader noticed, such as a count that "
+                                                     "doesn't match")
+
+
+ListingState = Literal["idle", "reading", "done", "failed", "unavailable"]
+
+
+class ScanListing(BaseModel):
+    """The listing read from a job's scans, and the user's own version of it."""
+
+    state: ListingState = "idle"
+    message: str | None = None
+    progress: str | None = Field(None, description="what is being read now")
+    read_at: datetime | None = None
+    engine: str | None = None
+    found: Listing | None = Field(None, description="what reading found, replaced by each reading")
+    edited: Listing | None = Field(None, description="the user's listing, kept until they drop it")
+    edited_from: datetime | None = Field(None, description="the reading the edits started from")
+
+    @property
+    def stale_edits(self) -> bool:
+        return bool(self.edited and self.read_at and self.edited_from and self.read_at > self.edited_from)
+
+
+class ListingView(BaseModel):
+    listing: ScanListing
+    current: Listing | None = Field(None, description="the edited listing if there is one, else the found one")
+    newer_reading: bool = Field(False, description="the scans were read again after the listing was edited, "
+                                                   "and the reading differs")
+    available: bool = Field(description="text reading can run here (Tesseract is installed and switched on)")
+
+
 ScannerSource = Literal["platen", "feeder"]
 ScannerState = Literal["scanning", "failed"]
 
@@ -512,6 +616,7 @@ class Job(BaseModel):
     contribution: Contribution | None = Field(None, description="this disc sent (or being sent) to TheDiscDB")
     scans: list[CoverScan] = Field(default=[], description="scans and photos of the box")
     scanner: ScannerRun | None = Field(None, description="a scan from the network scanner, under way or failed")
+    listing: ScanListing | None = Field(None, description="what's on the disc, read from the scans")
 
 
 class ContributionTitle(BaseModel):
@@ -674,7 +779,7 @@ class SetupProblem(BaseModel):
 
 TvUnmatched = Literal["extras", "specials", "skip"]
 SettingsCheck = Literal["tmdb", "tvdb", "tvmaze", "omdb", "thediscdb", "pushover", "emby", "jellyfin", "plex",
-                        "catalogue", "makemkv", "paths", "scanner"]
+                        "catalogue", "makemkv", "paths", "scanner", "ocr"]
 MediaServer = Literal["emby", "jellyfin", "plex"]
 TvEpisodeOrder = Literal["tmdb", "tvdb_aired", "tvdb_dvd"]
 NotifyEvent = Literal["disc", "review", "exists", "ripped", "transcoded", "copied", "done", "failed", "setup"]
@@ -800,6 +905,8 @@ class SettingsView(BaseModel):
     scanner_source: ScannerSource = "platen"
     scanner_trim: bool = True
     scans_to_library: bool = True
+    scan_read_text: bool = True
+    ocr_languages: str = "eng"
 
 
 class SettingsUpdate(BaseModel):
@@ -878,6 +985,8 @@ class SettingsUpdate(BaseModel):
     scanner_source: ScannerSource | None = None
     scanner_trim: bool | None = None
     scans_to_library: bool | None = None
+    scan_read_text: bool | None = None
+    ocr_languages: str | None = Field(None, pattern=r"^[a-z_]{3,10}(\+[a-z_]{3,10})*$")
 
 
 class SettingsTestRequest(BaseModel):
