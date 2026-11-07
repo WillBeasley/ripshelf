@@ -360,7 +360,7 @@ class ScansMixin:
 
     def _escl(self) -> Escl:
         if not self.s.scanner_enabled or not self.s.scanner_url:
-            raise ValueError("set up the scanner in Settings → Scanner first")
+            raise ValueError("set up the scanner in Settings → Scanner and covers first")
         kw = {} if self.escl_busy_wait_s is None else {"busy_wait_s": self.escl_busy_wait_s}
         return Escl(self.s.scanner_url, transport=self.escl_transport, **kw)
 
@@ -378,7 +378,7 @@ class ScansMixin:
         if p := self.vision_provider():
             info.vision, info.vision_cloud = p.describe(), p.cloud
         if not (self.s.scanner_enabled and self.s.scanner_url):
-            info.message = "The scanner isn't set up (Settings → Scanner)"
+            info.message = "The scanner isn't set up (Settings → Scanner and covers)"
             return info
         try:
             client = self._escl()

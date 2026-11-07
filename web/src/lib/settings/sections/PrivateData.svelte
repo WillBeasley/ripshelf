@@ -4,6 +4,7 @@
 	import { api } from '#lib/api.ts';
 	import { Action } from '#lib/actions.svelte.ts';
 	import { live } from '#lib/live.svelte.ts';
+	import More from '../More.svelte';
 	import type { SettingsForm } from '../form.svelte.ts';
 
 	let { form }: { form: SettingsForm } = $props();
@@ -46,19 +47,24 @@
 		const r = await importAct.run(() => api.importPrivateData(data));
 		if (r) {
 			importNote = `Imported into ${r.drive_ids.length} drive(s). Retry any scan that failed or timed out.`;
-			form.fill(await api.settings());
+			await form.refresh();
 			await loadFiles();
 		}
 	}
 </script>
 
-<form class="card stack" onsubmit={importData}>
-	<h2>Import MakeMKV private data</h2>
+<form class="card stack instant" onsubmit={importData}>
+	<div class="spread">
+		<h2>MakeMKV private data</h2>
+		<span class="chip" title="Imported when you press Import, not with Save">Saved straight away</span>
+	</div>
 	<p class="small muted">
-		A drive's <span class="mono">_private_data.tar</span> (LibreDrive and per-drive keys) from an existing
-		MakeMKV install. Without it some UHD discs fail with “volume key unknown”. Also takes a firmware dump
-		(<span class="mono">dump_*.tgz</span>), because older drives such as the LG GGC-H20N hang in MakeMKV 1.17.7 and
-		later without one. Remote workers fetch these when they connect.
+		A drive's <span class="mono">_private_data.tar</span>, or a firmware dump (<span class="mono">dump_*.tgz</span>),
+		from an existing MakeMKV install. Remote workers fetch them when they connect.
+		<More>
+			The private data has LibreDrive and per-drive keys: without it some UHD discs fail with “volume key unknown”.
+			Older drives such as the LG GGC-H20N hang in MakeMKV 1.17.7 and later without a firmware dump.
+		</More>
 	</p>
 	<label class="field">Upload <input type="file" accept=".tar,.tgz" bind:this={fileInput} /></label>
 	<label class="field">…or a path on the server <input bind:value={importPath} placeholder="/path/to/_private_data.tar" /></label>
@@ -83,7 +89,7 @@
 				<div class="small">
 					<span class="mono">{mf.name}</span> · {kb(mf.size)} ·
 					{mf.drives ? mf.drives.map(driveLabel).join(', ') : 'all drives'}
-					<div class="mono muted" title="sha256">{mf.sha256}</div>
+					<div class="mono muted sha" title="sha256">{mf.sha256}</div>
 				</div>
 				<button type="button" onclick={() => deleteFile(mf)} disabled={filesAct.busy}>Delete</button>
 			</div>
@@ -93,6 +99,12 @@
 </form>
 
 <style>
+	.sha {
+		word-break: break-all;
+	}
+	.chip {
+		white-space: nowrap;
+	}
 	p {
 		margin: 0;
 	}

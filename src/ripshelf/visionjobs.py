@@ -123,7 +123,7 @@ class VisionMixin:
         job = self._job(job_id)
         self._find(job, scan_id)
         if not self.vision_provider():
-            raise ValueError("set up a vision model in Settings → Scanner first")
+            raise ValueError("set up a vision model in Settings → Scanner and covers first")
         self._vision_asked.setdefault(job_id, set()).add(scan_id)
         self.queue_vision(job_id)
 

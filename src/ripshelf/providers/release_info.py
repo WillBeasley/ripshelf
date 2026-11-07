@@ -6,7 +6,7 @@ plus pictures of the front and back cover. ripshelf works out what it can:
 - **Barcode lookups.** UPCitemdb's free API (no key, about 100 lookups a day) turns a
   barcode into the product's title, ASIN and pictures, and searches its listings by
   title and format when there is no barcode yet.
-- **ASIN from a web search.** With SearXNG set up (Settings → Identification), the
+- **ASIN from a web search.** With SearXNG set up (Settings → Identify), the
   barcode, or the title and format, is searched for on Amazon's site for the locale,
   and the ``/dp/<ASIN>`` in the result addresses is used.
 - **Release date.** TMDB's release dates of type 5 (physical) for the locale's country,

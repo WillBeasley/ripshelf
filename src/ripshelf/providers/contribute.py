@@ -1,4 +1,4 @@
-"""Contributing discs to TheDiscDB (opt-in, Settings → Metadata providers).
+"""Contributing discs to TheDiscDB (opt-in, Settings → Identify).
 
 TheDiscDB takes discs from rippers through its import API (built for the Engram
 ripper; see EngramEndpoints.cs in TheDiscDb/web for what it reads):
@@ -103,7 +103,7 @@ def scan_log(path: Path) -> str | None:
 def eligibility(s: Settings, job: JobRecord, log_path: Path) -> tuple[bool, str | None, bool]:
     """(can it be sent, why not, does TheDiscDB know it already)."""
     if s.thediscdb_contribute == "off":
-        return False, "Contributing is off (Settings → Metadata providers)", False
+        return False, "Contributing is off (Settings → Identify)", False
     if job.disc_match and job.disc_match.provider == "thediscdb":
         return False, "TheDiscDB already knows this disc, because it identified it", True
     if job.mode == "backup" and job.media == MediaKind.tv:

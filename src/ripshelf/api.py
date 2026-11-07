@@ -560,7 +560,7 @@ async def listing_read(job_id: int, request: Request):
 
     def go():
         if not settings(request).scan_read_text:
-            raise ValueError("reading the text on scans is off (Settings → Scanner)")
+            raise ValueError("reading the text on scans is off (Settings → Scanner and covers)")
         view = m.listing_view(job_id)
         m.read_scans(job_id, again=True)
         return view

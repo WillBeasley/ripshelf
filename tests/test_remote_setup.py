@@ -160,7 +160,7 @@ def test_slug_and_compose():
 
 def test_remote_workers_off_until_one_is_added(client):
     r = register(client, "anything")
-    assert r.status_code == 403 and "Remote workers" in r.json()["detail"]
+    assert r.status_code == 403 and "Settings → Workers" in r.json()["detail"]
     assert client.get("/api/remote-workers").json() == {"workers": [], "shared_token": False}
 
 

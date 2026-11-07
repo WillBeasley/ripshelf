@@ -4,7 +4,7 @@
 	import { api, type MediaServer } from '#lib/api.ts';
 	import { Action } from '#lib/actions.svelte.ts';
 	import TestButton from '#lib/components/TestButton.svelte';
-	import SecretField from '../SecretField.svelte';
+	import Field from '../Field.svelte';
 	import type { SettingsForm } from '../form.svelte.ts';
 
 	export type Server = { id: MediaServer; name: string; key: 'emby_api_key' | 'jellyfin_api_key' | 'plex_token'; port: number };
@@ -28,38 +28,36 @@
 	}
 </script>
 
-<section class="card stack">
-	<h2>{srv.name}</h2>
+<section class="card stack" aria-label={srv.name}>
 	<p class="small muted">
 		{srv.name} is told about each new film or episode, so it shows up straight away. Leave the URL empty to skip it.
 	</p>
-	<label class="field">
-		{srv.name} URL <input bind:value={f[`${srv.id}_url`]} placeholder="http://{srv.id}.lan:{srv.port}" />
-	</label>
+	<Field {form} name="{srv.id}_url" placeholder="http://{srv.id}.lan:{srv.port}" />
 	{#if srv.id === 'plex'}
-		<SecretField {form} name={srv.key} label="Plex token" />
-		<p class="small muted">
-			Plex has no API keys. Open any item in Plex Web, choose Get Info → View XML, and copy the X-Plex-Token
-			value from the end of the address.
-		</p>
+		<Field {form} name={srv.key} help="Plex has no API keys; the token is in Plex Web.">
+			{#snippet more()}
+				Open any item in Plex Web, choose Get Info → View XML, and copy the X-Plex-Token value from the end of the
+				address.
+			{/snippet}
+		</Field>
 	{:else if srv.id === 'jellyfin'}
-		<SecretField {form} name={srv.key} label="Jellyfin API key" />
-		<p class="small muted">Make one in Jellyfin under Dashboard → API Keys.</p>
+		<Field {form} name={srv.key} help="Make one in Jellyfin under Dashboard → API Keys." />
 	{:else}
-		<SecretField {form} name={srv.key} label="Emby API key" />
+		<Field {form} name={srv.key} help="Make one in Emby under Settings → Advanced → API Keys." />
 	{/if}
 	<div class="row">
 		<button type="button" onclick={() => loadLibraries()} disabled={libAct.busy || !f[`${srv.id}_url`].trim()}>
 			{libAct.busy ? 'Fetching…' : 'Fetch libraries'}
 		</button>
-		{#if libAct.error}<span class="small error-text">{libAct.error}</span>{/if}
+		{#if libAct.error}<span class="small error-text">{libAct.error}</span>
+		{:else if libs.length}<span class="small ok">✓ {libs.length} libraries</span>{/if}
 	</div>
 	{#each [['movies', 'Movies', view.movies_dir], ['tv', 'TV', view.tv_dir]] as [kind, label, ours] (kind)}
 		{@const k = kind as 'movies' | 'tv'}
 		{@const chosen = f[`${srv.id}_${k}_library`]}
 		{@const path = f[`${srv.id}_${k}_path`]}
 		{@const lib = libs.find((l) => l.id === chosen)}
-		<label class="field">
+		<label class="field" id="setting-{srv.id}_{k}_library">
 			{label} library
 			<select value={chosen} onchange={(e) => pickLibrary(k, e.currentTarget.value)}
 				disabled={!libs.length && !chosen}>
@@ -92,5 +90,11 @@
 <style>
 	p {
 		margin: 0;
+	}
+	.ok {
+		color: var(--ok);
+	}
+	.mono {
+		overflow-wrap: anywhere;
 	}
 </style>

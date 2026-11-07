@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Scans and photos of the disc's box: from the network scanner (Settings → Scanner),
+	// Scans and photos of the disc's box: from the network scanner (Settings → Scanner and covers),
 	// an uploaded picture, or a phone's camera. Front and back scans become TheDiscDB's
 	// covers, and a whole outer sheet can be cut into both.
 	import type { CoverScan, Job, ScannerInfo, ScanSplit } from '../api-types';
@@ -117,7 +117,7 @@
 				{#if scanner.busy_job && scanner.busy_job !== job.id}<span class="muted"> · scanning for job {scanner.busy_job}</span>{/if}
 				<button class="link small" onclick={checkScanner}>Check again</button>
 			{:else if scanner && !scanner.enabled}
-				<span class="muted">No scanner set up. Add one in <a href="/settings#scanner">Settings → Scanner</a>, or add pictures below.</span>
+				<span class="muted">No scanner set up. Add one in <a href="/settings/scanner">Settings → Scanner and covers</a>, or add pictures below.</span>
 			{:else if scanner}
 				<span class="error-text">{scanner.message}</span>
 				<button class="link small" onclick={checkScanner}>Try again</button>

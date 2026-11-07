@@ -1,12 +1,12 @@
 <script lang="ts">
-	// Settings: Pushover notifications, and which events send them.
+	// Settings → Notifications: Pushover, which events send one, and this browser's alert sound.
+	import { alerts } from '#lib/alerts.svelte.ts';
 	import TestButton from '#lib/components/TestButton.svelte';
-	import SecretField from '../SecretField.svelte';
+	import Field from '../Field.svelte';
 	import type { SettingsForm } from '../form.svelte.ts';
 
 	let { form }: { form: SettingsForm } = $props();
 	const f = $derived(form.f);
-	const view = $derived(form.view!);
 
 	const priorities: [string, string][] = [
 		['off', 'Off'],
@@ -34,49 +34,115 @@
 	const setEventPriority = (e: string, v: string) => {
 		f.notify_events = { ...f.notify_events, [e]: v === 'off' ? null : Number(v) };
 	};
+	const keysSet = $derived(
+		(form.isSet('pushover_user_key') || !!form.secrets.pushover_user_key?.trim()) &&
+			(form.isSet('pushover_app_token') || !!form.secrets.pushover_app_token?.trim())
+	);
 </script>
 
-<section class="card stack">
-	<h2>Notifications (Pushover)</h2>
-	<label class="field">
-		This UI's address from a phone, so every notification links to its job
-		<input bind:value={f.public_url} placeholder="http://192.168.1.10:8380" />
-	</label>
-	{#if !f.public_url.trim()}
-		<p class="small error-text">Not set, so notifications will have no link to the job.</p>
-	{/if}
-	<p class="small muted">Off until both keys are set.</p>
-	<SecretField {form} name="pushover_user_key" label={'User key'} />
-	<SecretField {form} name="pushover_app_token" label={'Application API token'} />
-	<label class="field">Device (optional, else all your devices) <input bind:value={f.pushover_device} /></label>
-	<div class="events">
-		{#each events as [e, label, hint] (e)}
-			<label class="field">
-				{label}
-				<span class="small muted">{hint}</span>
-				<select value={eventPriority(e)} onchange={(ev) => setEventPriority(e, ev.currentTarget.value)}>
-					{#each priorities as [v, plabel] (v)}<option value={v}>{plabel}</option>{/each}
-				</select>
-			</label>
-		{/each}
-	</div>
-	<label class="field">
-		Batch window in seconds. More of the same kind within this time come as one summary (0 sends every one at once)
-		<input type="number" min="0" max="3600" bind:value={f.notify_batch_s} />
-	</label>
+<section class="card stack" aria-labelledby="pushover">
+	<h2 id="pushover">Pushover</h2>
+	<p class="small muted">
+		Notifications to your phone with <a href="https://pushover.net" target="_blank" rel="noreferrer">Pushover</a>, off
+		until both keys are set.
+	</p>
+	<Field {form} name="pushover_user_key" />
+	<Field {form} name="pushover_app_token" />
+	<Field {form} name="pushover_device" />
 	<TestButton check="pushover" values={form.body} label="Send a test message" />
+	{#if !form.view?.public_url}
+		<p class="small warn-note">
+			Set <a href="/settings/system#setting-public_url">this UI's address</a> so each notification links to its job.
+		</p>
+	{/if}
+</section>
+
+<section class="card stack" aria-labelledby="events">
+	<h2 id="events">Events</h2>
+	<div class="setting" id="setting-notify_events">
+		<ul class="events" class:muted-list={!keysSet}>
+			{#each events as [e, label, hint] (e)}
+				<li>
+					<label for="event-{e}">
+						<span>{label}</span>
+						<span class="small muted">{hint}</span>
+					</label>
+					<select id="event-{e}" value={eventPriority(e)} onchange={(ev) => setEventPriority(e, ev.currentTarget.value)}>
+						{#each priorities as [v, plabel] (v)}<option value={v}>{plabel}</option>{/each}
+					</select>
+				</li>
+			{/each}
+		</ul>
+	</div>
+	<Field {form} name="notify_batch_s" />
+</section>
+
+<section class="card stack" aria-labelledby="sound">
+	<div class="spread">
+		<h2 id="sound">Alert sound</h2>
+		<span class="chip" title="Kept in this browser, not saved with Settings">This device only</span>
+	</div>
+	<div class="setting" id="setting-alert_sound">
+		<label class="check">
+			<input type="checkbox" checked={alerts.sound} onchange={(e) => (alerts.sound = e.currentTarget.checked)} />
+			Play a sound when something needs attention
+		</label>
+	</div>
+	<p class="small muted">
+		A disc waiting for review, a clash, or a failed job, while a page is open. Browsers stay silent until you've
+		clicked somewhere on the page once.
+	</p>
+	<div><button type="button" onclick={() => alerts.chime()}>Play the sound</button></div>
 </section>
 
 <style>
 	p {
 		margin: 0;
 	}
+	.warn-note {
+		color: var(--warn);
+	}
 	.events {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-		gap: 10px;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.events li {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 8px 0;
+		border-top: 1px solid var(--border);
+	}
+	.events li:first-child {
+		border-top: none;
+	}
+	.events label {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
 	}
 	.events select {
-		margin-top: auto; /* level across a row whatever the hint's length */
+		width: auto;
+		min-width: 11em;
+		flex-shrink: 0;
+	}
+	.muted-list {
+		opacity: 0.75;
+	}
+	.chip {
+		white-space: nowrap;
+	}
+	@media (max-width: 480px) {
+		.events li {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 6px;
+		}
+		.events select {
+			width: 100%;
+		}
 	}
 </style>

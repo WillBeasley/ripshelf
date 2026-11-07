@@ -432,7 +432,7 @@ export interface ConfirmRequest {
   candidate: Candidate;
 }
 /**
- * Sending this disc to TheDiscDB (the contribute setting in Settings → Metadata providers).
+ * Sending this disc to TheDiscDB (the contribute setting in Settings → Identify).
  *
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "Contribution".
