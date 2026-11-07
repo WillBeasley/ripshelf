@@ -750,6 +750,8 @@ class ContributionView(BaseModel):
     base_url: str
     todo: str | None = Field(None, description="what the user has to do before it can be sent")
     titles: list[ContributionTitle] = Field(default=[], description="the disc's titles, for naming the extras")
+    reread: bool = Field(False, description="the content hash is missing and the disc is in its drive, so it "
+                                            "can be read again for it (POST .../thediscdb/reread)")
 
 
 class ReleaseProduct(BaseModel):

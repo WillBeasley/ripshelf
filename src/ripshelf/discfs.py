@@ -39,22 +39,49 @@ SIZE_PATTERNS = ["BDMV/STREAM/*.m2ts", "VIDEO_TS/*"]
 SIZES = "disc-files.tsv"
 
 
-async def extract_structure(sevenzip: str, device: str, out_dir: Path, timeout: float = 120) -> list[str]:
-    out_dir.mkdir(parents=True, exist_ok=True)
+# 7-Zip opens a disc as UDF first. Left to guess, it takes the drive for an empty file
+# and some discs fail its other probes with an I/O error before UDF is tried (a DVD
+# that MakeMKV reads fine gave no structure files, so no hash for TheDiscDB). An
+# ISO 9660-only disc still opens with no type given.
+TYPES = ["-tudf", None]
+
+
+async def _sevenzip(sevenzip: str, args: list[str], timeout: float) -> tuple[int | None, str] | None:
+    """Run 7-Zip: (exit code, output), or None when it can't be run or times out."""
     try:
-        proc = await asyncio.create_subprocess_exec(
-            sevenzip, "x", "-y", "-bd", f"-o{out_dir}", device, *STRUCTURE_PATTERNS,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-        )
+        proc = await asyncio.create_subprocess_exec(sevenzip, *args, stdout=asyncio.subprocess.PIPE,
+                                                    stderr=asyncio.subprocess.STDOUT)
     except OSError as e:
         log.warning("7z not available: %s", e)
-        return []
-    if await procs.communicate(proc, timeout) is None:
-        log.warning("7z timed out reading %s", device)
+        return None
+    done = await procs.communicate(proc, timeout)
+    if done is None:
+        log.warning("7z timed out reading %s", args[-1] if args else "")
+        return None
+    return proc.returncode, done[0].decode(errors="replace")
+
+
+def _errors(text: str) -> str:
+    return "; ".join(ln.strip() for ln in text.splitlines() if "ERROR" in ln or "error" in ln)[:300]
+
+
+async def extract_structure(sevenzip: str, device: str, out_dir: Path, timeout: float = 120) -> list[str]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    files: list[str] = []
+    for t in TYPES:
+        got = await _sevenzip(sevenzip, ["x", "-y", "-bd", *([t] if t else []), f"-o{out_dir}", device,
+                                         *STRUCTURE_PATTERNS], timeout)
+        if got is None:
+            return []
+        files = sorted(str(p.relative_to(out_dir)) for p in out_dir.rglob("*") if p.is_file() and p.name != SIZES)
+        if files:
+            break
+        log.info("7z read no structure files from %s%s: %s", device, f" as {t[2:]}" if t else "",
+                 _errors(got[1]) or f"exit {got[0]}")
     sizes = await list_sizes(sevenzip, device, timeout)
     if sizes:
         (out_dir / SIZES).write_text("".join(f"{p}\t{n}\n" for p, n in sizes), encoding="utf-8")
-    return sorted(str(p.relative_to(out_dir)) for p in out_dir.rglob("*") if p.is_file() and p.name != SIZES)
+    return files
 
 
 def copy_structure(root: Path, out_dir: Path) -> list[str]:
@@ -85,17 +112,13 @@ def copy_structure(root: Path, out_dir: Path) -> list[str]:
 
 async def list_sizes(sevenzip: str, device: str, timeout: float = 120) -> list[tuple[str, int]]:
     """(path, size) of the disc's video files, from 7-Zip's listing (nothing is read but the directory)."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            sevenzip, "l", "-slt", "-bd", device, *SIZE_PATTERNS,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-        )
-    except OSError:
-        return []
-    done = await procs.communicate(proc, timeout)
-    if done is None:
-        return []
-    return parse_listing(done[0].decode(errors="replace"))
+    for t in TYPES:
+        got = await _sevenzip(sevenzip, ["l", "-slt", "-bd", *([t] if t else []), device, *SIZE_PATTERNS], timeout)
+        if got is None:
+            return []
+        if out := parse_listing(got[1]):
+            return out
+    return []
 
 
 def parse_listing(text: str) -> list[tuple[str, int]]:

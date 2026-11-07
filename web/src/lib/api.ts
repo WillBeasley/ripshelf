@@ -115,6 +115,7 @@ export const api = {
 		call<ContributionView>('PUT', `/jobs/${id}/thediscdb/extras`, { extras }),
 	contributionRelease: (id: number, newRelease: boolean) =>
 		call<ContributionView>('POST', `/jobs/${id}/thediscdb/release`, { new_release: newRelease }),
+	contributionReread: (id: number) => call<ContributionView>('POST', `/jobs/${id}/thediscdb/reread`),
 	contributionDetails: (id: number, details: ReleaseDetails) =>
 		call<ContributionView>('PUT', `/jobs/${id}/thediscdb/details`, details),
 	releaseLookup: (id: number, upc: string | null) =>

@@ -664,12 +664,27 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                     else "No structure files could be read from the disc")
         hit = self._recall(job)
         job.disc_ids = thediscdb.fingerprints(out)  # also what a contribution to TheDiscDB is keyed by
+        self._share_hash(job)
         if hit:
             self._event(job, "info", f"Recognised from the local disc cache: {hit[0].title}")
         else:
             await self._disc_db_lookup(job)
         self._save(job)
         return hit
+
+    def _share_hash(self, job: JobRecord) -> None:
+        """Give earlier jobs of the same disc that couldn't read it the content hash, so
+        they can go to TheDiscDB."""
+        ch = (job.disc_ids or {}).get("content_hash")
+        if not ch or not job.quick_fp:
+            return
+        for other_id in self.db.jobs_without_hash(job.quick_fp):
+            other = self.db.get_job(other_id)
+            if other_id == job.id or not other:
+                continue
+            other.disc_ids = {**(other.disc_ids or {}), **job.disc_ids}
+            self._save(other)
+            self._event(other, "info", f"The disc's content hash, read when it went in again (job {job.id})")
 
     async def _disc_db_lookup(self, job: JobRecord) -> None:
         """Ask TheDiscDB about the disc by its fingerprints (when it's on in either list in Settings)."""

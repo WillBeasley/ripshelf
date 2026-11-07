@@ -597,6 +597,10 @@ export interface ContributionView {
    * the disc's titles, for naming the extras
    */
   titles: ContributionTitle[];
+  /**
+   * the content hash is missing and the disc is in its drive, so it can be read again for it (POST .../thediscdb/reread)
+   */
+  reread: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

@@ -93,6 +93,11 @@
 		if (v) view = v;
 	}
 
+	async function reread() {
+		const v = await act.run(() => api.contributionReread(job.id));
+		if (v) view = v;
+	}
+
 	async function release(newRelease: boolean) {
 		const v = await act.run(() => api.contributionRelease(job.id, newRelease));
 		if (v) view = v;
@@ -106,6 +111,10 @@
 			<p class="small">Already in TheDiscDB. It recognised this disc, so there's nothing to add.</p>
 		{:else if !view.eligible && status !== 'sending' && view.reason}
 			<p class="small muted">Not ready to contribute. {view.reason}.</p>
+			{#if view.reread}
+				<!-- The disc is in its drive: read its files again for the content hash. -->
+				<button class="small" disabled={act.busy} onclick={reread}>Read the disc again</button>
+			{/if}
 		{:else}
 			<p class="small">
 				{#if status === 'sending'}
