@@ -450,6 +450,25 @@ class ListingItem(BaseModel):
     box: list[float] | None = Field(None, description="where on that scan, as fractions (see TextLine)")
 
 
+AudioFormat = Literal["Dolby Digital", "Dolby Digital Plus", "Dolby TrueHD", "Dolby Atmos", "DTS", "DTS-HD MA",
+                      "DTS-HD HR", "DTS:X", "LPCM", "MPEG", "PCM"]
+
+
+class AudioTrack(BaseModel):
+    """An audio track the box lists."""
+
+    language: str
+    format: AudioFormat | None = None
+    channels: Literal["mono", "2.0", "5.1", "6.1", "7.1"] | None = None
+    note: str | None = Field(None, description="such as commentary or audio description")
+
+
+class SubtitleTrack(BaseModel):
+    language: str
+    hard_of_hearing: bool = False
+    note: str | None = Field(None, description="such as \"movie only\" or \"extras\"")
+
+
 class ListingDetails(BaseModel):
     """What the box says about the release."""
 
@@ -469,8 +488,10 @@ class ListingDetails(BaseModel):
     country: str | None = Field(None, description="such as UK or US, from the box")
     locale: str | None = None
     aspect_ratio: str | None = None
-    languages: list[str] = []
-    subtitles: list[str] = []
+    audio: list[AudioTrack] = []
+    subtitles: list[SubtitleTrack] = []
+    video: list[str] = Field(default=[], description="resolution and HDR the box claims: 4K UHD, 1080p, HDR10, "
+                                                     "HDR10+, Dolby Vision")
 
 
 class Listing(BaseModel):

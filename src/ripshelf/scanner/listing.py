@@ -26,7 +26,16 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from ..models import ExtraKind, Listing, ListingDetails, ListingItem, ScanText, TextLine
+from ..models import (
+    AudioTrack,
+    ExtraKind,
+    Listing,
+    ListingDetails,
+    ListingItem,
+    ScanText,
+    SubtitleTrack,
+    TextLine,
+)
 from ..providers import release_info
 
 # The order parts of a box are read in: listings are on the back and inside.
@@ -114,6 +123,7 @@ def number(word: str) -> int | None:
 
 
 def runtime_min(text: str) -> float | None:
+    text = re.sub(r"(?<![A-Za-z0-9])[tlI|](?=\s?(?:hrs?|hours?)\b)", "1", text)  # "1hr" read as "thr"
     m = RUNTIME.search(text)
     if not m:
         return None
@@ -156,6 +166,8 @@ def _tidy_title(text: str) -> str:
     t = re.sub(r"\s*[\(\[]?\s*(?:approx\.?|approximately|c\.)?\s*" + RUNTIME.pattern + r"\s*(?:approx\.?)?\s*[\)\]]?",
                " ", t, flags=re.I)
     t = t.strip(" -–—:;,.'\"")
+    # "Growing the Orchard: a featurette" is called "Growing the Orchard".
+    t = re.sub(r"\s*[:\-–—,]\s*(?:an?\s+)?(?:featurette|documentary|short film|interview)s?$", "", t, flags=re.I)
     toks = t.split()
     # A short capitalised token stuck on the end is usually a logo beside the line.
     if len(toks) > 1 and re.fullmatch(r"[A-Z]{1,2}", toks[-1]) and len(toks[-2]) > 2:
@@ -358,8 +370,9 @@ def _details(srcs: list[Src], more: list[Src], barcodes: list[str]) -> ListingDe
               and not re.search(r"design|artwork|packaging", t, re.I)
               for m in re.finditer(r"\b((?:19|20)\d{2})\b", t)]
     d.year = min(years) if years else None
-    d.languages = _languages(texts, r"^\W*(?:languages?|audio)\b")
-    d.subtitles = _languages(texts, r"^\W*subtitles?\b")
+    d.audio = _audio(texts)
+    d.subtitles = _subtitles(texts)
+    d.video = _video(texts)
     d.title = _title(srcs)
     d.cast = _cast(srcs)
     return d
@@ -380,28 +393,101 @@ def _catalogue(srcs: list[Src], barcode: str | None) -> str | None:
     return None
 
 
-def _languages(texts: list[str], start: str) -> list[str]:
-    out: list[str] = []
+AUDIO_FORMATS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"atmos", re.I), "Dolby Atmos"),
+    (re.compile(r"true\s*hd", re.I), "Dolby TrueHD"),
+    (re.compile(r"dts[\s-]*hd\s*(?:ma|master)", re.I), "DTS-HD MA"),
+    (re.compile(r"dts[\s-]*hd\s*(?:hr|high)", re.I), "DTS-HD HR"),
+    (re.compile(r"dts\s*:\s*x", re.I), "DTS:X"),
+    (re.compile(r"\bdts\b", re.I), "DTS"),
+    (re.compile(r"\blpcm\b|linear pcm", re.I), "LPCM"),
+    (re.compile(r"dolby\s*digital\s*(?:plus|\+)|\bdd\+", re.I), "Dolby Digital Plus"),
+    (re.compile(r"dolby|\bdigital\b|\bdd\b|\bac-?3\b", re.I), "Dolby Digital"),
+]
+CHANNELS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\bmono\b|\b1\.0\b", re.I), "mono"),
+    (re.compile(r"\b7\.1\b", re.I), "7.1"),
+    (re.compile(r"\b6\.1\b", re.I), "6.1"),
+    (re.compile(r"\b5\.1\b|surround", re.I), "5.1"),
+    (re.compile(r"\b2\.0\b|stereo", re.I), "2.0"),
+]
+SECTION_START = r"^\W*(?:aspect|feature|region|languages?|audio|sound|subtitles?|running|ratio)\b"
+
+
+def _block(texts: list[str], start: str) -> list[str]:
+    """A labelled list ("LANGUAGES English, French" or "Subtitles:" and the lines
+    under it), cut where something else sits beside it on the line."""
     for i, t in enumerate(texts):
         if not re.search(start, t, re.I):
             continue
         chunk = [re.sub(start, "", t, flags=re.I)]
         for nxt in texts[i + 1:i + 6]:
-            if re.search(r"^\W*(?:aspect|feature|region|languages?|audio|subtitles?|running)\b", nxt, re.I) \
-                    or not LANGUAGE.search(nxt):
+            if re.search(SECTION_START, nxt, re.I) or not LANGUAGE.search(nxt):
                 break
             chunk.append(nxt)
-        for part in chunk:
-            # Stop at whatever sits beside the list on the same line.
-            part = re.split(r"\s{2,}|\|| - |all rights", part, maxsplit=1, flags=re.I)[0]
-            for m in LANGUAGE.finditer(part):
-                name = m.group(1).capitalize()
-                if m.group(2):
-                    name += " (Hard of Hearing)"
-                if name not in out:
-                    out.append(name)
-        if out:
-            break
+        return [re.split(r"\s{2,}|\|| all rights", part, maxsplit=1, flags=re.I)[0] for part in chunk]
+    return []
+
+
+def _first(pats: list[tuple[re.Pattern, str]], text: str) -> str | None:
+    return next((v for p, v in pats if p.search(text)), None)
+
+
+def _audio(texts: list[str]) -> list[AudioTrack]:
+    """Audio tracks: each language, with the format and channels printed beside it, or
+    those printed for the whole list (the logo and "Mono" next to it)."""
+    block = _block(texts, r"^\W*(?:languages?|audio(?:\s*tracks?)?|sound)\b\W*")
+    if not block:
+        return []
+    near = [t for t in texts if re.search(r"dolby|dts|\bdigital\b|pcm|mono|stereo|surround|\d\.1\b", t, re.I)
+            and not re.search(r"subtitle", t, re.I)]
+    fmt_all = next((f for t in block + near if (f := _first(AUDIO_FORMATS, t))), None)
+    ch_all = next((c for t in block + near if (c := _first(CHANNELS, t))), None)
+    out: list[AudioTrack] = []
+    for part in block:
+        # "English 5.1 DTS, French 2.0" names each track's own; else the list's.
+        for piece in re.split(r",|/|;|\band\b", part):
+            m = LANGUAGE.search(piece)
+            if not m:
+                continue
+            lang = m.group(1).capitalize()
+            rest = piece[m.end():]
+            note = "commentary" if re.search(r"commentary", piece, re.I) else \
+                "audio description" if re.search(r"audio description|descriptive", piece, re.I) else None
+            track = AudioTrack(language=lang, format=_first(AUDIO_FORMATS, rest) or fmt_all,
+                               channels=_first(CHANNELS, rest) or ch_all, note=note)
+            if track not in out:
+                out.append(track)
+    return out
+
+
+def _subtitles(texts: list[str]) -> list[SubtitleTrack]:
+    """Subtitles as printed. A qualifier in brackets ("German (Hard of Hearing)") is for
+    the language before it; one after a dash ("- Movie only") for the whole line."""
+    out: list[SubtitleTrack] = []
+    for part in _block(texts, r"^\W*subtitles?\b\W*"):
+        line_note = None
+        if m := re.search(r"\s[-–]\s*([a-z][a-z ]{2,30})$", part, re.I):
+            line_note = m.group(1).strip().lower()
+            part = part[:m.start()]
+        for m in LANGUAGE.finditer(part):
+            track = SubtitleTrack(language=m.group(1).capitalize(), hard_of_hearing=bool(m.group(2)), note=line_note)
+            if track not in out:
+                out.append(track)
+    return out
+
+
+VIDEO = [(re.compile(r"\b(?:4K|ultra\s*hd|uhd|2160p)\b", re.I), "4K UHD"), (re.compile(r"\b1080[pi]\b", re.I), "1080p"),
+         (re.compile(r"hdr\s*10\s*\+|hdr10\+", re.I), "HDR10+"), (re.compile(r"\bhdr(?:\s*10)?\b(?!\s*10\s*\+)", re.I), "HDR10"),
+         (re.compile(r"dolby\s*vision", re.I), "Dolby Vision")]
+
+
+def _video(texts: list[str]) -> list[str]:
+    out = []
+    for t in texts:
+        for pat, name in VIDEO:
+            if pat.search(t) and name not in out:
+                out.append(name)
     return out
 
 

@@ -42,17 +42,30 @@ def size(data: bytes) -> tuple[int, int]:
 
 def trim_box(img: Image.Image) -> list[int] | None:
     """Where the picture is on the glass, as [left, top, right, bottom], or None when it
-    fills the scan (or nothing stands out). The glass's colour is the edges' median, so
-    a white or a black lid both work."""
+    fills the scan (or nothing stands out). The glass is a side of the scan in one even
+    near-white or near-black colour, so a white lid and an open one both work."""
     w, h = img.size
     scale = min(1.0, TRIM_SAMPLE_PX / max(w, h))
-    small = img.convert("L").resize((max(1, round(w * scale)), max(1, round(h * scale))))
+    small = img.convert("RGB").resize((max(1, round(w * scale)), max(1, round(h * scale))))
     sw, sh = small.size
     px = small.load()
-    edge = sorted([px[x, 0] for x in range(sw)] + [px[x, sh - 1] for x in range(sw)]
-                  + [px[0, y] for y in range(sh)] + [px[sw - 1, y] for y in range(sh)])
-    glass = edge[len(edge) // 2]
-    diff = ImageChops.difference(small, Image.new("L", small.size, glass))
+    sides = [[px[x, 0] for x in range(sw)], [px[x, sh - 1] for x in range(sw)],
+             [px[0, y] for y in range(sh)], [px[sw - 1, y] for y in range(sh)]]
+    glass = None
+    # The glass shows along at least one side: one even colour there, near white (the
+    # lid) or near black (the lid left open). A picture to its edges has neither.
+    for side in sides:
+        median = tuple(sorted(p[c] for p in side)[len(side) // 2] for c in range(3))
+        even = sum(max(abs(p[c] - median[c]) for c in range(3)) <= TRIM_DIFF for p in side) >= 0.9 * len(side)
+        neutral = max(median) - min(median) <= 30 and (min(median) >= 190 or max(median) <= 50)
+        if even and neutral:
+            glass = median
+            break
+    if glass is None:
+        return None
+    # How far each pixel is from the glass's colour, in whichever channel differs most.
+    r, g, b = ImageChops.difference(small, Image.new("RGB", small.size, glass)).split()
+    diff = ImageChops.lighter(ImageChops.lighter(r, g), b)
     mask = diff.point(lambda v: 255 if v > TRIM_DIFF else 0).filter(ImageFilter.MedianFilter(5))
     box = mask.getbbox()
     if not box:

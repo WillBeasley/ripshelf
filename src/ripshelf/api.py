@@ -44,6 +44,8 @@ from .models import (
     Job,
     JobDetail,
     JobState,
+    Listing,
+    ListingView,
     LogPage,
     MakeMKVFile,
     MediaRequest,
@@ -59,6 +61,7 @@ from .models import (
     ScannerScanRequest,
     ScanSource,
     ScanSplit,
+    ScanText,
     ScanUpdate,
     SearchRequest,
     ServerLibrariesRequest,
@@ -480,6 +483,56 @@ async def scan_covers(job_id: int, scan_id: str, request: Request, body: ScanSpl
     return await _contribution_call(lambda: manager(request).scan_covers(job_id, scan_id, body))
 
 
+@api.get("/jobs/{job_id}/scans/{scan_id}/text", response_model=ScanText)
+async def scan_text(job_id: int, scan_id: str, request: Request):
+    """What was read on the scan: its lines of text, with their boxes, and its barcodes."""
+    t = manager(request).scan_text(job_id, scan_id)
+    if not t:
+        raise HTTPException(404)
+    return t
+
+
+@api.get("/jobs/{job_id}/listing", response_model=ListingView)
+async def listing(job_id: int, request: Request):
+    """What's on the disc, as read from the box: the reading, and the user's version of it."""
+    return _sync_call(lambda: manager(request).listing_view(job_id))
+
+
+@api.put("/jobs/{job_id}/listing", response_model=ListingView)
+async def listing_save(job_id: int, body: Listing, request: Request):
+    """Keep the user's listing. Reading the scans again never replaces it."""
+    return _sync_call(lambda: manager(request).save_listing(job_id, body))
+
+
+@api.delete("/jobs/{job_id}/listing/edits", response_model=ListingView)
+async def listing_drop_edits(job_id: int, request: Request):
+    """Drop the user's listing and go back to what was read."""
+    return _sync_call(lambda: manager(request).drop_listing_edits(job_id))
+
+
+@api.post("/jobs/{job_id}/listing/read", response_model=ListingView)
+async def listing_read(job_id: int, request: Request):
+    """Read every scan again, in the background (the job's ``listing`` says how it goes)."""
+    m = manager(request)
+
+    def go():
+        if not settings(request).scan_read_text:
+            raise ValueError("reading the text on scans is off (Settings → Scanner)")
+        view = m.listing_view(job_id)
+        m.read_scans(job_id, again=True)
+        return view
+    return _sync_call(go)
+
+
+def _sync_call(fn):
+    try:
+        return fn()
+    except KeyError:
+        raise HTTPException(404) from None
+    except ValueError as e:
+        raise bad_request(e) from None
+
+
 @api.get("/scanner", response_model=ScannerInfo)
 async def scanner_info(request: Request):
     """The network scanner's model and state, and whether it's scanning for a job."""
@@ -642,6 +695,7 @@ def settings_view(s: Settings) -> SettingsView:
         vaapi_device=s.vaapi_device,
         scanner_enabled=s.scanner_enabled, scanner_url=s.scanner_url, scanner_dpi=s.scanner_dpi,
         scanner_source=s.scanner_source, scanner_trim=s.scanner_trim, scans_to_library=s.scans_to_library,
+        scan_read_text=s.scan_read_text, ocr_languages=s.ocr_languages,
         pushover_user_key_set=bool(s.pushover_user_key), pushover_app_token_set=bool(s.pushover_app_token),
         pushover_device=s.pushover_device,
         notify_events={e: integrations.Notifier(s).priority(e) for e in integrations.EVENTS},
