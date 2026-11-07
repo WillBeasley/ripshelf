@@ -125,7 +125,7 @@ def number(word: str) -> int | None:
 
 
 def runtime_min(text: str) -> float | None:
-    text = re.sub(r"(?<![A-Za-z0-9])[tlI|](?=\s?(?:hrs?|hours?)\b)", "1", text)  # "1hr" read as "thr"
+    text = re.sub(r"(?<![A-Za-z0-9])[tTlI|](?=\s?(?:hrs?|hours?)\b)", "1", text)  # "1hr" read as "thr"
     m = RUNTIME.search(text)
     if not m:
         return None
@@ -606,7 +606,10 @@ def merge(own: Listing, readings: list[tuple[str, Listing]], texts: list[ScanTex
                 continue
             if f == "barcode" and (d.barcode_source == "barcode" or not release_info.valid_upc(other)):
                 continue
-            if mine in (None, [], "") or (f == "region" and d.region_guessed):
+            # A title Tesseract read only part of ("Postman" off the spine) gives way to
+            # the model's whole one ("Postman Pat: Special Delivery Service").
+            fragment = f == "title" and mine and _squash(mine) in _squash(other) and len(other) > len(mine) + 3
+            if mine in (None, [], "") or (f == "region" and d.region_guessed) or fragment:
                 setattr(d, f, other)
                 d.sources[f] = "vision"
                 if f == "region":

@@ -13,16 +13,21 @@ import asyncio
 import logging
 import re
 import shutil
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import httpx
+
 from . import library
 from .db import now
 from .identify.scoring import title_similarity
-from .models import DiscKind, JobState, MediaKind, ScanMatch, TitleMatch
+from .identify.tmdb import TmdbError
+from .models import DiscKind, Evidence, JobState, MediaKind, ScanMatch, TitleMatch, TitleRole
 from .providers import release_info
 from .scanner import match as matcher
+from .tv import tmdb_tv
 
 if TYPE_CHECKING:
     from .db import JobRecord
@@ -222,6 +227,11 @@ class MatchMixin:
         if not job or not listing or job.state != JobState.review or job.identity:
             return
         if job.media == MediaKind.tv and job.tv and job.tv.show:
+            # A show is proposed: the box may say it's another, and it has the picks.
+            if not job.tv.user_edited and job.id not in self._show_tasks:
+                task = asyncio.create_task(self.fix_show_from_scan(job_id))
+                self._show_tasks[job_id] = task
+                task.add_done_callback(lambda _t, j=job_id: self._show_tasks.pop(j, None))
             return
         d = listing.details
         key = f"{d.title}|{d.year}|{d.barcode}"
@@ -248,3 +258,100 @@ def product_name(title: str) -> str:
     t = re.sub(r"(?i)\b(dvd|blu-?ray|4k|ultra hd|uhd|region\s*\w+|special edition|collector'?s edition|"
                r"widescreen|box set|\d+-disc)\b.*$", " ", t)
     return re.sub(r"\s+", " ", t).strip(" -–:,") or ""
+
+
+class ShowFromScanMixin:
+    """The show (and season) a TV disc's box names its episodes from, and its picks put
+    straight into the mapping for review. Nothing is confirmed here."""
+
+    def _scan_episode_names(self, job: JobRecord) -> list[str]:
+        listing = self._listing_for(job)
+        return [it.title for it in listing.items if it.kind == "episode"] if listing else []
+
+    async def fix_show_from_scan(self, job_id: int) -> bool:
+        """When the box's episode names are another show's (or another season's) than the
+        one proposed, switch to it; then take the box's picks. True if anything changed."""
+        job = self.db.get_job(job_id)
+        if not job or job.media != MediaKind.tv or not job.tv or job.state != JobState.review \
+                or job.identity or job.tv.user_edited:
+            return False
+        names = self._scan_episode_names(job)
+        changed = False
+        if len(names) >= 2 and (tmdb := self._tmdb()):
+            try:
+                changed = await self._switch_show(job_id, names, tmdb)
+            except (TmdbError, httpx.HTTPError) as e:
+                log.info("no show from the cover scan for job %s: %s", job_id, e)
+            finally:
+                await tmdb.aclose()
+        return self.apply_scan_picks(job_id) or changed
+
+    async def _switch_show(self, job_id: int, names: list[str], tmdb) -> bool:
+        job = self.db.get_job(job_id)
+        plan = job.tv
+        shows = {s.tmdb_id: s for s in ([plan.show] if plan.show else []) + list(plan.candidates or [])}
+        hints = await self.scan_hints(job)
+        for n in hints.names[:2]:
+            for s in (await tmdb_tv.find_shows(tmdb, n, None))[:3]:
+                shows.setdefault(s.tmdb_id, s)
+        box_prefix = matcher.shared_prefix(names)
+        need = max(2, -(-len(names) * 3 // 5))  # three in five of the names, and two at least
+        best, best_hits, best_season = None, 0, None
+        for show in list(shows.values())[:MAX_SHOWS_CHECKED]:
+            episodes = await tmdb_tv.all_episodes(tmdb, show)
+            show_prefix = matcher.shared_prefix([e.name for e in episodes])
+            hits = [e for n in names
+                    if (e := matcher.episode_for(n, episodes, None, box_prefix, show_prefix)[0])]
+            if len(hits) > best_hits:
+                seasons = Counter(e.season for e in hits)
+                best, best_hits, best_season = show, len(hits), seasons.most_common(1)[0][0]
+        if not best or best_hits < need:
+            return False
+        if plan.show and plan.show.tmdb_id == best.tmdb_id and plan.season == best_season:
+            return False
+        was = f"{plan.show.name} season {plan.season}" if plan.show else "no show"
+        await self._propose(job_id, best, best_season, None, None, None, tmdb)
+        job = self.db.get_job(job_id)
+        best = best.model_copy(update={"evidence": [*best.evidence, Evidence(
+            ok=True, text=f"{best_hits} of the {len(names)} episodes the cover scan lists are this show's")]})
+        job.tv.show, job.tv.from_scan = best, True
+        job.tv.candidates = [best, *[c for c in job.tv.candidates if c.tmdb_id != best.tmdb_id]]
+        self._save(job)
+        self._event(job, "info", f"The cover scan's episodes are {best.name} season {best_season} "
+                                 f"({best_hits} of {len(names)}), not {was}: proposed that instead")
+        self.rematch(job_id)
+        return True
+
+    def apply_scan_picks(self, job_id: int) -> bool:
+        """Put the cover scan's episodes into the mapping, when every episode line it lists
+        matched a title (high or medium) with an episode of the show. Titles the mapping had
+        as episodes that the box doesn't list become extras. Review still confirms."""
+        job = self.db.get_job(job_id)
+        if not job or not job.tv or job.state != JobState.review or job.identity or job.tv.user_edited:
+            return False
+        names = self._scan_episode_names(job)
+        m = job.scan_match
+        picks = {x.title_index: x for x in (m.matches if m else [])
+                 if x.kind == "episode" and x.episodes and x.confidence != "low"}
+        if not names or len(picks) < len(names):
+            return False
+        plan = job.tv
+        rows = {r.title_index: r for r in plan.mapping}
+        if all(rows.get(i) and rows[i].role == TitleRole.episode and rows[i].episodes == x.episodes
+               for i, x in picks.items()):
+            return False
+        claimed = {(e.season, e.episode) for x in picks.values() for e in x.episodes}
+        for r in plan.mapping:
+            if (x := picks.get(r.title_index)):
+                r.role, r.episodes = TitleRole.episode, list(x.episodes)
+                r.note = f"from the cover scan: “{x.name}”"
+            elif r.role == TitleRole.episode and (not r.episodes or {(e.season, e.episode) for e in r.episodes} & claimed):
+                r.role, r.episodes, r.note = TitleRole.extra, [], "not one of the episodes the box lists"
+        plan.from_scan = True
+        self._save(job)
+        self._event(job, "info", f"Set {len(picks)} episodes from the cover scan; check them and confirm")
+        self.rematch(job_id)
+        return True
+
+
+MAX_SHOWS_CHECKED = 6

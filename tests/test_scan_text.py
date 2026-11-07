@@ -176,7 +176,8 @@ def test_details_a_blu_ray_prints():
 
 @pytest.mark.parametrize("text, minutes", [
     ("2hrs 45mins approx", 165), ("165 mins", 165), ("2h 45m", 165), ("Approx. 22 mins", 22),
-    ("70 mins approx", 70), ("Running time 1 hour 52 minutes", 112), ("thr 52mins", 112), ("no time here", None),
+    ("70 mins approx", 70), ("Running time 1 hour 52 minutes", 112), ("thr 52mins", 112), ("Feature running time; Thr approx", 60),
+    ("no time here", None),
 ])
 def test_runtimes(text, minutes):
     assert listing.runtime_min(text) == minutes

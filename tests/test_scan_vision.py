@@ -206,6 +206,14 @@ def test_merging_the_two_readings():
     assert d.aspect_ratio == "16:9" and d.sources["aspect_ratio"] == "vision"
 
 
+
+def test_a_fragment_of_the_title_gives_way():
+    tess = text("Kite Post", "1. Big Parcel (15 mins)")
+    own = listing.build([tess])
+    own.details.title = "Kite Post"
+    theirs = vision.tidy({**READING, "details": {**READING["details"], "title": "Pippa & Goose: Kite Post"}})
+    assert listing.merge(own, [("s1", theirs)], [tess]).details.title == "Pippa & Goose: Kite Post"
+
 # --- the manager ------------------------------------------------------------------------------
 
 

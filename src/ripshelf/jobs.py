@@ -48,7 +48,7 @@ from .makemkv.parse import (
     choose_main_feature,
     parse_info,
 )
-from .matchjobs import MatchMixin
+from .matchjobs import MatchMixin, ShowFromScanMixin
 from .models import (
     ACTIVE_STATES,
     TERMINAL_STATES,
@@ -153,7 +153,7 @@ class DriveRuntime:
     tasks: set[asyncio.Task] = field(default_factory=set)
 
 
-class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin, MatchMixin, VisionMixin, PendingMixin):
+class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin, MatchMixin, VisionMixin, PendingMixin, ShowFromScanMixin):
     def __init__(self, settings: Settings, db: Database, backend: DriveBackend, bus: EventBus):
         self.s = settings
         self.db = db
@@ -176,6 +176,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         self._init_reading()
         self._init_vision()
         self._init_pending()
+        self._show_tasks: dict[int, asyncio.Task] = {}
         self.support = SupportFiles(settings.makemkv_files_dir)
         self.hub = WorkerHub(on_drives_changed=self._remote_drives,
                              local_ids=lambda: {i for i, d in self.drives.items() if not d.remote})
