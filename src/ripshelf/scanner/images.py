@@ -102,6 +102,63 @@ def thumbnail(img: Image.Image, px: int = THUMB_PX) -> bytes:
     return jpeg(small, 85)
 
 
+# A case's sheet (its width over its height) and its spine (over its width): a DVD's
+# Amaray sheet is about 273 x 183 mm with a 14 mm spine, a Blu-ray's (and a 4K's) about
+# 275 x 150 mm with an 11.5 mm one.
+SHEETS = [(273 / 183, 14 / 273), (275 / 150, 11.5 / 275)]
+SPINE_SAMPLE_PX = 600  # the spine is looked for in a copy this wide
+SPINE_EDGE_DIFF = 40  # a change of colour this big, across two pixels, is an edge
+SPINE_EDGE_MIN = 0.4  # an edge of the spine runs down at least this much of the sheet
+SPINE_EDGE_LIFT = 1.8  # and stands out this much from the sheet's columns around it
+
+
+def find_spine(img: Image.Image) -> ScanSplit | None:
+    """Where a whole outer sheet (turned the right way up) folds: the spine, found as two
+    edges running down the sheet near its middle, as far apart as a case's spine is
+    (from the sheet's shape). None when the picture isn't a sheet's shape or the edges
+    aren't clear, so it isn't cut on a guess."""
+    ratio = img.width / max(1, img.height)
+    if not 1.3 <= ratio <= 2.05:
+        return None
+    spine0 = min(SHEETS, key=lambda s: abs(s[0] - ratio))[1]
+    w = SPINE_SAMPLE_PX
+    h = max(8, round(img.height * w / img.width))
+    small = img.convert("RGB").resize((w, h), Image.Resampling.BILINEAR)
+    small = small.crop((0, round(h * 0.05), w, round(h * 0.95)))  # not the sheet's own top and bottom
+    # Per column, how much of the sheet changes colour sharply there: an edge down the
+    # whole sheet scores near 1, a picture's or text's edges much less.
+    diff = ImageChops.difference(small.crop((0, 0, w - 2, small.height)), small.crop((2, 0, w, small.height)))
+    r, g, b = diff.split()
+    strong = ImageChops.lighter(ImageChops.lighter(r, g), b).point(lambda v: 255 if v > SPINE_EDGE_DIFF else 0)
+    cols = [v / 255 for v in strong.resize((w - 2, 1), Image.Resampling.BOX).tobytes()]
+
+    def at(x: int) -> float:  # an edge may fall between columns
+        return max(cols[max(0, x - 1):x + 2])
+
+    lo, hi = round(w * 0.35), round(w * 0.65)
+    narrow, wide = max(3, round(w * spine0 * 0.6)), round(w * spine0 * 1.5)
+    best = None
+    for a in range(lo, hi):
+        for b in range(a + narrow, min(hi + wide, a + wide + 1, w - 3)):
+            edge = min(at(a), at(b))
+            # The nearer the middle and the nearer a case's spine, the likelier.
+            mid = (a + b + 2) / 2 / w
+            score = edge * (1 - abs(mid - 0.5)) * (1 - 0.5 * abs((b - a) / w - spine0) / spine0)
+            if not best or score > best[0]:
+                best = (score, a, b, edge)
+    if not best:
+        return None
+    _, a, b, edge = best
+    around = sorted(cols[lo:hi])
+    typical = around[len(around) // 2]
+    if edge < SPINE_EDGE_MIN or edge < SPINE_EDGE_LIFT * typical:
+        return None
+    # Column x is the change between pixels x and x + 2, so the edge is at x + 1.
+    left, right = (a + 1) / w, (b + 1) / w
+    split = ScanSplit(position=round((left + right) / 2, 4), spine=round(right - left, 4), auto=True)
+    return split if 0.2 <= split.position <= 0.8 and split.spine <= 0.2 else None
+
+
 def halves(img: Image.Image, split: ScanSplit) -> tuple[Image.Image, Image.Image]:
     """(front, back) from a whole outer sheet: the back on the left, the spine, and the
     front on the right, unless swapped."""

@@ -186,6 +186,9 @@ class ReadingMixin:
             sc.rotate = (sc.rotate + reading.turned) % 360
             sc.split = None
             self._forget_thumbs(job, sc)
+        if sc.kind == "outside_full" and (sc.split is None or sc.split.auto):
+            sc.split = reading.split  # where the spine is, as found (none: cut by hand)
+        if reading.turned or sc.kind == "outside_full":
             self._save_scans(job)
         text = ScanText(scan_id=scan_id, key=self._read_key(sc), read_at=now(), engine=engine,
                         seconds=round(time.monotonic() - started, 1), turned=reading.turned,

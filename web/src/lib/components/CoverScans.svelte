@@ -28,7 +28,7 @@
 	let duplex = $state(false);
 	let uploadKind = $state<ScanKind>('front');
 	let splitting = $state<string | null>(null);
-	let split = $state<ScanSplit>({ position: 0.5, spine: 0.05, swap: false });
+	let split = $state<ScanSplit>({ position: 0.5, spine: 0.05, swap: false, auto: false });
 	let note = $state<string | null>(null);
 	let big = $state<CoverScan | null>(null);
 	let dialog = $state<HTMLDialogElement | null>(null);
@@ -86,7 +86,7 @@
 	}
 
 	function startSplit(sc: CoverScan) {
-		split = { ...(sc.split ?? { position: 0.5, spine: 0.05, swap: false }) };
+		split = { ...(sc.split ?? { position: 0.5, spine: 0.05, swap: false, auto: false }) };
 		splitting = sc.id;
 	}
 
@@ -227,6 +227,9 @@
 										<div class="half l" style:width={left}><span>{split.swap ? 'Front' : 'Back'}</span></div>
 										<div class="half r" style:width={right}><span>{split.swap ? 'Back' : 'Front'}</span></div>
 									</div>
+									{#if sc.split?.auto}
+										<p class="small muted">The spine was found in the picture (auto-cut). Move it if it's off.</p>
+									{/if}
 									<label class="small">Spine at {Math.round(split.position * 100)}%
 										<input type="range" min="0.2" max="0.8" step="0.005" bind:value={split.position} /></label>
 									<label class="small">Spine width {Math.round(split.spine * 100)}%
@@ -238,7 +241,12 @@
 									</div>
 								</div>
 							{:else}
-								<button class="link small" disabled={act.busy} onclick={() => startSplit(sc)}>Cut into front and back covers…</button>
+								{#if sc.split?.auto}
+									<span class="small muted">Auto-cut at its spine ({Math.round(sc.split.position * 100)}%)</span>
+									<button class="link small" disabled={act.busy} onclick={() => startSplit(sc)}>Adjust the cut…</button>
+								{:else}
+									<button class="link small" disabled={act.busy} onclick={() => startSplit(sc)}>Cut into front and back covers…</button>
+								{/if}
 							{/if}
 						{/if}
 					</li>

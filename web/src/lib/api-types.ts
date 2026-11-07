@@ -676,6 +676,10 @@ export interface ScanSplit {
    * the front is the left half
    */
   swap: boolean;
+  /**
+   * found by ripshelf (the spine's edges in the picture), not set by hand
+   */
+  auto: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

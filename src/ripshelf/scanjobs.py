@@ -130,16 +130,20 @@ class ScansMixin:
         # Scans have the empty glass around them; a photo is all picture.
         trim = source != "camera" and self.s.scanner_trim
 
-        def measure() -> tuple[int, int, list[int] | None]:
+        def measure() -> tuple[int, int, list[int] | None, ScanSplit | None]:
             img = images.open_image(data)
-            return img.width, img.height, images.trim_box(img) if trim else None
+            box = images.trim_box(img) if trim else None
+            # A whole sheet the right way up: where its spine is (a sideways one is
+            # turned by the reading, and its spine found then).
+            split = images.find_spine(img.crop(box) if box else img) if kind == "outside_full" else None
+            return img.width, img.height, box, split
 
-        width, height, crop = await asyncio.to_thread(measure)
+        width, height, crop, split = await asyncio.to_thread(measure)
         if kind in NUMBERED and page is None:
             page = max((s.page or 0 for s in job.scans if s.kind == kind), default=0) + 1
         sc = CoverScan(id=uuid.uuid4().hex[:12], kind=kind, source=source, page=page, created_at=now(),
                        content_type=ctype, width=width, height=height,
-                       sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data), crop=crop)
+                       sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data), crop=crop, split=split)
         d = self._scans_dir(job)
         d.mkdir(parents=True, exist_ok=True)
         (d / f"{sc.id}.{EXTS[ctype]}").write_bytes(data)
@@ -182,6 +186,9 @@ class ScansMixin:
                     sc.crop = await asyncio.to_thread(lambda: images.trim_box(images.open_image(data)))
             else:
                 sc.crop = None
+        if sc.kind == "outside_full" and (sc.split is None or sc.split.auto) \
+                and (body.kind is not None or body.rotate is not None or body.trim is not None):
+            sc.split = await self._find_spine(job_id, sc)
         self._forget_thumbs(job, sc)
         self._save_scans(job)
         self.read_scans(job_id)  # read again if what the reading depends on changed
@@ -218,7 +225,8 @@ class ScansMixin:
         img = await asyncio.to_thread(images.render, data, sc.crop, sc.rotate)
         if sc.kind in COVER_KINDS:
             return await self.set_cover(job_id, sc.kind, await asyncio.to_thread(images.jpeg, img))
-        split = split or sc.split or ScanSplit()
+        # A cut given here is the user's, so it's kept (never found again over it).
+        split = split.model_copy(update={"auto": False}) if split else sc.split or images.find_spine(img) or ScanSplit()
         front, back = await asyncio.to_thread(images.halves, img, split)
         await self.set_cover(job_id, "front", await asyncio.to_thread(images.jpeg, front))
         view = await self.set_cover(job_id, "back", await asyncio.to_thread(images.jpeg, back))
@@ -227,6 +235,17 @@ class ScansMixin:
         self._save_scans(job)
         self.read_scans(job_id)  # the parts are read where the sheet is cut
         return view
+
+    async def _find_spine(self, job_id: int, sc: CoverScan) -> ScanSplit | None:
+        """Where the spine of a whole sheet is, as it's trimmed and turned now."""
+        found = self.scan_file(job_id, sc.id)
+        if not found:
+            return None
+        data = found[0].read_bytes()
+        try:
+            return await asyncio.to_thread(lambda: images.find_spine(images.render(data, sc.crop, sc.rotate)))
+        except images.ImageError:
+            return None
 
     def _covers_from_scans(self, job: JobRecord) -> bool:
         """Covers the disc has no picture for yet, from the box's scans: scans taken
@@ -247,7 +266,12 @@ class ScansMixin:
             try:
                 img = images.render(found[0].read_bytes(), sc.crop, sc.rotate)
                 if sc.kind == "outside_full":
-                    front, back = images.halves(img, sc.split or ScanSplit())
+                    # Cut where the spine is: as set, or found. Not found, it waits for
+                    # "Cut into front and back covers" rather than being cut on a guess.
+                    split = sc.split or images.find_spine(img)
+                    if not split:
+                        continue
+                    front, back = images.halves(img, split)
                     img = front if side == "front" else back
                 self._write_cover(job, side, images.jpeg(img), "image/jpeg")
                 added = True

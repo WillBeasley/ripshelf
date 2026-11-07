@@ -34,6 +34,7 @@ from PIL import Image, ImageChops, ImageFilter, ImageOps
 
 from .. import proc
 from ..models import ScanSplit, TextLine
+from . import images
 
 log = logging.getLogger(__name__)
 
@@ -83,6 +84,7 @@ class Reading:
     more: list[TextLine] = field(default_factory=list)  # the losing readings, for the details
     barcodes: list[str] = field(default_factory=list)
     turned: int = 0  # quarter turns clockwise the picture needed, in degrees
+    split: ScanSplit | None = None  # where a whole sheet's spine was found, once turned the right way up
 
 
 def parse_tsv(tsv: str) -> list[Line]:
@@ -282,6 +284,10 @@ async def read_picture(reader: Tesseract, img: Image.Image, kind: str, split: Sc
     if turn and conf >= OSD_MIN_CONFIDENCE:
         out.turned = turn
         img = img.rotate(-turn, expand=True)
+    if kind == "outside_full" and (split is None or split.auto or out.turned):
+        # Read the sheet's parts where its spine is (found again once it was turned).
+        out.split = images.find_spine(img)
+        split = out.split
     page = to_ocr_size(img)
     pw, ph = page.size
     for part in parts(kind, page.size, split):
