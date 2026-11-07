@@ -403,6 +403,9 @@ class CoverScan(BaseModel):
     crop: list[int] | None = Field(None, description="the picture within the scan, [left, top, right, "
                                                      "bottom] in the original's pixels, when trimmed")
     split: ScanSplit | None = Field(None, description="the cut last used for the covers, for a whole sheet")
+    vision: Literal["queued", "reading", "done", "failed"] | None = Field(
+        None, description="reading it with the vision model")
+    vision_message: str | None = Field(None, description="why the vision model's reading failed, or what it took")
     library_path: str | None = Field(None, description="its copy in the library, once filed")
 
 
@@ -434,6 +437,8 @@ class ScanText(BaseModel):
 
 
 ListingKind = Literal["episode", "extra"]
+ItemSource = Literal["tesseract", "vision", "both", "you"]
+FieldSource = Literal["tesseract", "vision", "barcode", "you"]
 
 
 class ListingItem(BaseModel):
@@ -448,6 +453,8 @@ class ListingItem(BaseModel):
     text: str | None = Field(None, description="the line as read, before the title was picked out of it")
     scan_id: str | None = Field(None, description="the scan it was read on")
     box: list[float] | None = Field(None, description="where on that scan, as fractions (see TextLine)")
+    source: ItemSource | None = Field(None, description="who read it: Tesseract, the vision model, both, or "
+                                                        "the user")
 
 
 AudioFormat = Literal["Dolby Digital", "Dolby Digital Plus", "Dolby TrueHD", "Dolby Atmos", "DTS", "DTS-HD MA",
@@ -492,6 +499,7 @@ class ListingDetails(BaseModel):
     subtitles: list[SubtitleTrack] = []
     video: list[str] = Field(default=[], description="resolution and HDR the box claims: 4K UHD, 1080p, HDR10, "
                                                      "HDR10+, Dolby Vision")
+    sources: dict[str, FieldSource] = Field(default={}, description="field -> who read it")
 
 
 class Listing(BaseModel):
@@ -835,7 +843,9 @@ class SetupProblem(BaseModel):
 
 TvUnmatched = Literal["extras", "specials", "skip"]
 SettingsCheck = Literal["tmdb", "tvdb", "tvmaze", "omdb", "thediscdb", "pushover", "emby", "jellyfin", "plex",
-                        "catalogue", "makemkv", "paths", "scanner", "ocr"]
+                        "catalogue", "makemkv", "paths", "scanner", "ocr", "vision"]
+VisionMode = Literal["off", "struggles", "every", "manual"]
+VisionProvider = Literal["local", "openai", "anthropic"]
 MediaServer = Literal["emby", "jellyfin", "plex"]
 TvEpisodeOrder = Literal["tmdb", "tvdb_aired", "tvdb_dvd"]
 NotifyEvent = Literal["disc", "review", "exists", "ripped", "transcoded", "copied", "done", "failed", "setup"]
@@ -965,6 +975,11 @@ class SettingsView(BaseModel):
     ocr_languages: str = "eng"
     extras_emby_folders: bool = True
     film_unnamed_extras: Literal["skip", "extras"] = "skip"
+    vision_mode: VisionMode = "off"
+    vision_provider: VisionProvider = "local"
+    vision_url: str | None = None
+    vision_model: str = "qwen3-vl:4b-instruct"
+    vision_api_key_set: bool = False
 
 
 class SettingsUpdate(BaseModel):
@@ -1047,6 +1062,11 @@ class SettingsUpdate(BaseModel):
     ocr_languages: str | None = Field(None, pattern=r"^[a-z_]{3,10}(\+[a-z_]{3,10})*$")
     extras_emby_folders: bool | None = None
     film_unnamed_extras: Literal["skip", "extras"] | None = None
+    vision_mode: VisionMode | None = None
+    vision_provider: VisionProvider | None = None
+    vision_url: str | None = Field(None, max_length=300)
+    vision_model: str | None = Field(None, max_length=200)
+    vision_api_key: str | None = None
 
 
 class SettingsTestRequest(BaseModel):

@@ -15,5 +15,9 @@ export RIPSHELF_FAKE_RIP_SECONDS="${RIPSHELF_FAKE_RIP_SECONDS:-60}"
 # A pretend network scanner, served by the backend itself.
 export RIPSHELF_SCANNER_ENABLED="${RIPSHELF_SCANNER_ENABLED:-1}"
 export RIPSHELF_SCANNER_URL="${RIPSHELF_SCANNER_URL:-http://127.0.0.1:$RIPSHELF_PORT/fake-escl/eSCL}"
+# A pretend vision model (OpenAI-compatible), also served by the backend.
+export RIPSHELF_VISION_MODE="${RIPSHELF_VISION_MODE:-struggles}"
+export RIPSHELF_VISION_URL="${RIPSHELF_VISION_URL:-http://127.0.0.1:$RIPSHELF_PORT/fake-vision}"
+export RIPSHELF_VISION_MODEL="${RIPSHELF_VISION_MODEL:-fake-vl}"
 mkdir -p var/fake/library
 exec .venv/bin/ripshelf

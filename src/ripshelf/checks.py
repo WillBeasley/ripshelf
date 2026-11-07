@@ -24,6 +24,8 @@ from .providers.thediscdb import DiscDbError, TheDiscDb
 from .providers.tvmaze import Tvmaze, TvmazeError
 from .scanner.escl import Escl, ScannerError, base_url
 from .scanner.ocr import OcrUnavailable, Tesseract, barcodes_available
+from .scanner.vision import Provider
+from .scanner.vision import check as vision_check
 from .tv.tvdb import Tvdb, TvdbError
 
 
@@ -283,6 +285,25 @@ async def ocr(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
     return SettingsTestResult(ok=True, message=f"{version} is ready", details=details)
 
 
+async def vision_model(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
+    """Send the vision model a small made-up back cover and see a listing come back."""
+    kind = v.vision_provider or s.vision_provider
+    url = _value(s, v, "vision_url")
+    model = _value(s, v, "vision_model")
+    if kind != "anthropic" and not url:
+        return _fail("No address for the vision model")
+    if not model:
+        return _fail("No model name")
+    provider = Provider(kind=kind, url=url if kind != "anthropic" else None, model=model,
+                        key=_value(s, v, "vision_api_key"))
+    if kind == "anthropic" and not provider.key:
+        return _fail("No Anthropic API key")
+    ok, message, details = await vision_check(provider)
+    if provider.cloud:
+        details.append("Scans are sent to this service, outside your network")
+    return SettingsTestResult(ok=ok, message=message, details=details)
+
+
 def _escl_base(url: str) -> str:
     try:
         return base_url(url)
@@ -305,6 +326,7 @@ CHECKS = {
     "paths": paths,
     "scanner": scanner,
     "ocr": ocr,
+    "vision": vision_model,
 }
 
 # The secrets each check uses. A box left empty means "the saved one", so a pass
@@ -318,6 +340,7 @@ CHECK_SECRETS = {
     "jellyfin": ("jellyfin_api_key",),
     "plex": ("plex_token",),
     "pushover": ("pushover_user_key", "pushover_app_token"),
+    "vision": ("vision_api_key",),
 }
 
 

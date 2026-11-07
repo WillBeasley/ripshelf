@@ -128,6 +128,11 @@ EDITABLE = {
     "ocr_languages",
     "extras_emby_folders",
     "film_unnamed_extras",
+    "vision_mode",
+    "vision_provider",
+    "vision_url",
+    "vision_model",
+    "vision_api_key",
 }
 
 
@@ -328,6 +333,15 @@ class Settings(BaseSettings):
     # A film's other titles the box doesn't name: left out, or ripped and filed in
     # extras/ as "Title N".
     film_unnamed_extras: Literal["skip", "extras"] = "skip"
+    # A vision model reading the scans beside Tesseract: never, only scans Tesseract
+    # struggled with, every scan, or only when asked. "local" is an OpenAI-compatible
+    # server on the LAN (Ollama), "openai" a hosted OpenAI-compatible service, and
+    # "anthropic" Anthropic's API (no address needed).
+    vision_mode: Literal["off", "struggles", "every", "manual"] = "off"
+    vision_provider: Literal["local", "openai", "anthropic"] = "local"
+    vision_url: str | None = None
+    vision_model: str = "qwen3-vl:4b-instruct"
+    vision_api_key: SecretStr | None = None
 
     @property
     def settings_file(self) -> Path:

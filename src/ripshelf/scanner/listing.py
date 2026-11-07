@@ -89,6 +89,7 @@ LANGUAGES = ["English", "French", "German", "Italian", "Spanish", "Castilian", "
              "Mandarin", "Cantonese", "Chinese", "Welsh", "Irish", "Latvian", "Lithuanian", "Estonian"]
 LANGUAGE = re.compile(r"\b(" + "|".join(LANGUAGES) + r")\b(\s*\((?:for the )?hard of hearing\)|\s*for the hard of hearing"
                       r"|\s*sdh\b)?", re.I)
+EXTRAS_TYPES = ["Extra", "Featurette", "DeletedScene", "Trailer", "Interview", "Scene", "Music", "Short", "Other"]
 # Extras' types, by the words in them, first match wins. TheDiscDB's types.
 TYPES: list[tuple[re.Pattern, ExtraKind]] = [
     (re.compile(r"trailer|teaser|tv spots?\b|promo\b", re.I), "Trailer"),
@@ -202,7 +203,8 @@ def _item(kind: str, srcs: list[Src], disc: int | None) -> ListingItem | None:
     same_scan = [s for s in srcs if s.scan_id == srcs[0].scan_id]
     return ListingItem(kind=kind, title=title, number=num, runtime_min=runtime_min(raw),
                        extra_type=extra_type(raw) if kind == "extra" else None, disc=disc,
-                       text=raw, scan_id=srcs[0].scan_id, box=_union(s.line.box for s in same_scan))
+                       text=raw, scan_id=srcs[0].scan_id, box=_union(s.line.box for s in same_scan),
+                       source="tesseract")
 
 
 def _joins(prev: Src, nxt: Src) -> bool:
@@ -540,6 +542,74 @@ def _cast(srcs: list[Src]) -> list[str]:
         if len(names) >= 2:
             return names
     return []
+
+
+DETAIL_FIELDS = ["title", "year", "cast", "feature_runtime_min", "episode_count", "barcode", "catalogue_number",
+                 "region", "video_system", "country", "locale", "aspect_ratio", "audio", "subtitles", "video"]
+
+
+def _sim(a: str, b: str) -> float:
+    from rapidfuzz import fuzz
+
+    na, nb = re.sub(r"[^a-z0-9 ]", "", a.lower()), re.sub(r"[^a-z0-9 ]", "", b.lower())
+    return fuzz.ratio(na, nb) / 100 if na and nb else 0.0
+
+
+def _in_line(title: str, text: str) -> float:
+    """How well a title appears within a line of text read on the scan."""
+    from rapidfuzz import fuzz
+
+    na, nb = re.sub(r"[^a-z0-9 ]", "", title.lower()), re.sub(r"[^a-z0-9 ]", "", text.lower())
+    return fuzz.partial_ratio(na, nb) / 100 if len(na) >= 3 and nb else 0.0
+
+
+def merge(own: Listing, readings: list[tuple[str, Listing]], texts: list[ScanText]) -> Listing:
+    """Tesseract's listing with what the vision model read (scan id, listing) added.
+
+    - **Items** both found are one item, marked "both", with Tesseract's place on the
+      scan; the model's type is taken where Tesseract only guessed "Extra". An item only
+      the model found is added, marked "both" when its title is in a line Tesseract read
+      (which gives its place on the scan), else "vision": unconfirmed.
+    - **Details**: the barcode always from the bars when decoded; otherwise each field
+      from Tesseract when it read it, else from the model. A region Tesseract only
+      guessed gives way to one the model read off the box.
+    """
+    out = own.model_copy(deep=True)
+    d = out.details
+    for f in DETAIL_FIELDS:
+        if getattr(d, f) not in (None, [], ""):
+            d.sources[f] = "barcode" if f == "barcode" and d.barcode_source == "barcode" else "tesseract"
+    lines = {t.scan_id: t.lines for t in texts}
+    for scan_id, theirs in readings:
+        for vi in theirs.items:
+            same = max((x for x in out.items if x.kind == vi.kind), key=lambda x: _sim(x.title, vi.title), default=None)
+            if same and _sim(same.title, vi.title) >= 0.8:
+                same.source = "both" if same.source in ("tesseract", "both") else same.source
+                if vi.extra_type and same.extra_type in (None, "Extra"):
+                    same.extra_type = vi.extra_type
+                if same.runtime_min is None and vi.runtime_min:
+                    same.runtime_min = vi.runtime_min
+                continue
+            add = vi.model_copy(update={"scan_id": scan_id, "source": "vision"})
+            hit = max(lines.get(scan_id, []), key=lambda ln: _in_line(vi.title, ln.text), default=None)
+            if hit and _in_line(vi.title, hit.text) >= 0.85:
+                add.box, add.text, add.source = hit.box, hit.text, "both"
+            out.items.append(add)
+        vd = theirs.details
+        for f in DETAIL_FIELDS:
+            mine, other = getattr(d, f), getattr(vd, f)
+            if other in (None, [], ""):
+                continue
+            if f == "barcode" and (d.barcode_source == "barcode" or not release_info.valid_upc(other)):
+                continue
+            if mine in (None, [], "") or (f == "region" and d.region_guessed):
+                setattr(d, f, other)
+                d.sources[f] = "vision"
+                if f == "region":
+                    d.region_guessed = False
+                if f == "barcode":
+                    d.barcode_source = "text"
+    return out
 
 
 def build(texts: list[ScanText]) -> Listing:
