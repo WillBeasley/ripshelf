@@ -29,10 +29,10 @@ Installed with pip from PyPI, unmodified. All are permissive.
 
 | Package | Licence |
 |---|---|
-| FastAPI, Pydantic, pydantic-core, pydantic-settings, RapidFuzz, anyio, h11, httptools, PyYAML, watchfiles, annotated-types, annotated-doc, typing-inspection, pyzbar | MIT |
+| FastAPI, Pydantic, pydantic-core, pydantic-settings, RapidFuzz, anyio, h11, httptools, PyYAML, watchfiles, annotated-types, annotated-doc, typing-inspection, pyzbar, anthropic, jiter, docstring-parser | MIT |
 | Pillow | MIT-CMU (HPND) |
-| uvloop | MIT or Apache-2.0 |
-| Starlette, Uvicorn, HTTPX, httpcore, click, idna, python-dotenv, websockets | BSD-3-Clause |
+| uvloop, sniffio | MIT or Apache-2.0 |
+| Starlette, Uvicorn, HTTPX, httpx2, httpcore, click, idna, python-dotenv, websockets | BSD-3-Clause |
 | python-multipart, opentelemetry-api | Apache-2.0 |
 | certifi | MPL-2.0 (unmodified) |
 | typing-extensions | PSF-2.0 |
