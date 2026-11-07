@@ -89,16 +89,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		scroll-margin-top: 80px;
-		border-radius: 8px;
-	}
-	.setting:global(.found) {
-		animation: found 1.6s ease-out;
-	}
-	@keyframes found {
-		from {
-			box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 45%, transparent);
-		}
 	}
 	.help {
 		margin: 0;

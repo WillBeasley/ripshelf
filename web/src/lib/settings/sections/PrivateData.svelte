@@ -53,7 +53,7 @@
 	}
 </script>
 
-<form class="card stack instant" onsubmit={importData}>
+<form class="card stack instant setting" id="setting-private_data" onsubmit={importData}>
 	<div class="spread">
 		<h2>MakeMKV private data</h2>
 		<span class="chip" title="Imported when you press Import, not with Save">Saved straight away</span>

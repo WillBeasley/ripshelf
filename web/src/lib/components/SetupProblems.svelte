@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { live } from '../live.svelte';
 	import Command from './Command.svelte';
-	const problems = $derived(live.status?.problems ?? []);
+	// Only these problems (by code), as in a Settings section. Settings itself needs no link to Settings.
+	let { codes, link = !codes }: { codes?: string[]; link?: boolean } = $props();
+	const problems = $derived((live.status?.problems ?? []).filter((p) => !codes || codes.includes(p.code)));
 </script>
 
 {#if problems.length}
@@ -15,7 +17,7 @@
 				</li>
 			{/each}
 		</ul>
-		<a href="/settings">Open settings</a>
+		{#if link}<a href="/settings">Open settings</a>{/if}
 	</section>
 {/if}
 
