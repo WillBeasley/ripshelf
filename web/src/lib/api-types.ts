@@ -620,6 +620,14 @@ export interface CoverScan {
    */
   split: ScanSplit | null;
   /**
+   * reading it with the vision model
+   */
+  vision: ("queued" | "reading" | "done" | "failed") | null;
+  /**
+   * why the vision model's reading failed, or what it took
+   */
+  vision_message: string | null;
+  /**
    * its copy in the library, once filed
    */
   library_path: string | null;
@@ -1448,6 +1456,10 @@ export interface ListingItem {
    * where on that scan, as fractions (see TextLine)
    */
   box: number[] | null;
+  /**
+   * who read it: Tesseract, the vision model, both, or the user
+   */
+  source: ("tesseract" | "vision" | "both" | "you") | null;
 }
 /**
  * What the box says about the release.
@@ -1494,6 +1506,12 @@ export interface ListingDetails {
    * resolution and HDR the box claims: 4K UHD, 1080p, HDR10, HDR10+, Dolby Vision
    */
   video: string[];
+  /**
+   * field -> who read it
+   */
+  sources: {
+    [k: string]: "tesseract" | "vision" | "barcode" | "you";
+  };
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1850,6 +1868,7 @@ export interface ProviderInfo {
         | "paths"
         | "scanner"
         | "ocr"
+        | "vision"
       )
     | null;
 }
@@ -2079,6 +2098,14 @@ export interface ScannerInfo {
    * the job the scanner is scanning for
    */
   busy_job: number | null;
+  /**
+   * the vision model set up to read scans (model at where), if any
+   */
+  vision: string | null;
+  /**
+   * the vision model is a cloud service
+   */
+  vision_cloud: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -2158,7 +2185,8 @@ export interface SettingsTestRequest {
     | "makemkv"
     | "paths"
     | "scanner"
-    | "ocr";
+    | "ocr"
+    | "vision";
   values: SettingsUpdate;
 }
 /**
@@ -2261,6 +2289,11 @@ export interface SettingsUpdate {
   ocr_languages?: string | null;
   extras_emby_folders?: boolean | null;
   film_unnamed_extras?: ("skip" | "extras") | null;
+  vision_mode?: ("off" | "struggles" | "every" | "manual") | null;
+  vision_provider?: ("local" | "openai" | "anthropic") | null;
+  vision_url?: string | null;
+  vision_model?: string | null;
+  vision_api_key?: string | null;
 }
 /**
  * What the transcode step may do to rips from one kind of disc.
@@ -2385,6 +2418,11 @@ export interface SettingsUpdate1 {
   ocr_languages?: string | null;
   extras_emby_folders?: boolean | null;
   film_unnamed_extras?: ("skip" | "extras") | null;
+  vision_mode?: ("off" | "struggles" | "every" | "manual") | null;
+  vision_provider?: ("local" | "openai" | "anthropic") | null;
+  vision_url?: string | null;
+  vision_model?: string | null;
+  vision_api_key?: string | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -2540,6 +2578,11 @@ export interface SettingsView {
   ocr_languages: string;
   extras_emby_folders: boolean;
   film_unnamed_extras: "skip" | "extras";
+  vision_mode: "off" | "struggles" | "every" | "manual";
+  vision_provider: "local" | "openai" | "anthropic";
+  vision_url: string | null;
+  vision_model: string;
+  vision_api_key_set: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

@@ -204,6 +204,19 @@
 							<button class="link small danger" disabled={act.busy}
 								onclick={() => act.run(() => api.deleteScan(job.id, sc.id))}>Remove</button>
 						</div>
+						{#if sc.vision === 'queued' || sc.vision === 'reading'}
+							<div class="small vision busy" role="status"><span class="spinner" aria-hidden="true"></span>{sc.vision_message}</div>
+						{:else if sc.vision === 'failed'}
+							<div class="small error-text">Vision model: {sc.vision_message}</div>
+						{:else if sc.vision === 'done'}
+							<div class="small muted">{sc.vision_message}</div>
+						{/if}
+						{#if scanner?.vision && sc.vision !== 'queued' && sc.vision !== 'reading'}
+							<button class="link small" disabled={act.busy} title="Read with {scanner.vision}"
+								onclick={() => act.run(() => api.readWithVision(job.id, sc.id))}>
+								{sc.vision === 'done' ? 'Read again with the vision model' : 'Read with the vision model'}
+							</button>
+						{/if}
 						{#if sc.kind === 'front' || sc.kind === 'back'}
 							<button class="link small" disabled={act.busy} onclick={() => covers(sc)}>Use as the {sc.kind} cover</button>
 						{:else if sc.kind === 'outside_full'}
@@ -315,6 +328,12 @@
 		height: 1px;
 		overflow: hidden;
 		clip: rect(0 0 0 0);
+	}
+	.vision.busy {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--info);
 	}
 	.ok-text {
 		color: var(--ok);

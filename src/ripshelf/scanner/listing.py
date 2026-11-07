@@ -556,11 +556,15 @@ def _sim(a: str, b: str) -> float:
 
 
 def _in_line(title: str, text: str) -> float:
-    """How well a title appears within a line of text read on the scan."""
+    """How well a title appears within a line of text read on the scan: each of its
+    words (of three letters or more) found among the line's, allowing a misread letter."""
     from rapidfuzz import fuzz
 
-    na, nb = re.sub(r"[^a-z0-9 ]", "", title.lower()), re.sub(r"[^a-z0-9 ]", "", text.lower())
-    return fuzz.partial_ratio(na, nb) / 100 if len(na) >= 3 and nb else 0.0
+    want = [w for w in re.sub(r"[^a-z0-9 ]", " ", title.lower()).split() if len(w) >= 3]
+    have = re.sub(r"[^a-z0-9 ]", " ", text.lower()).split()
+    if not want or not have:
+        return 0.0
+    return min(max(fuzz.ratio(w, h) for h in have) for w in want) / 100
 
 
 def merge(own: Listing, readings: list[tuple[str, Listing]], texts: list[ScanText]) -> Listing:
