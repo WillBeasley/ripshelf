@@ -19,6 +19,8 @@ The image is built from `python:3.12-slim-bookworm` (Debian 12) by the [Dockerfi
 | **Intel media driver** (`intel-media-va-driver-non-free`, amd64 only) | MIT and BSD-3-Clause | Debian `non-free` package, because it contains GPU kernels without their source. Freely redistributable. |
 | **libva, vainfo** | MIT | Debian packages. |
 | **p7zip** (`p7zip-full`) | LGPL-2.1-or-later | Debian package. The RAR code (`p7zip-rar`) is not included. |
+| **Tesseract OCR** (`tesseract-ocr`, with the `eng` and `osd` data) | Apache-2.0 | Debian packages, unmodified. ripshelf runs `tesseract` as a separate program to read the text on scans of the box. |
+| **ZBar** (`libzbar0`) | LGPL-2.1-or-later | Debian package, unmodified, loaded by pyzbar to read barcodes on scans. |
 | **Python 3.12** | PSF-2.0 | From the base image. |
 
 ### Python packages
@@ -27,7 +29,8 @@ Installed with pip from PyPI, unmodified. All are permissive.
 
 | Package | Licence |
 |---|---|
-| FastAPI, Pydantic, pydantic-core, pydantic-settings, RapidFuzz, anyio, h11, httptools, PyYAML, watchfiles, annotated-types, annotated-doc, typing-inspection | MIT |
+| FastAPI, Pydantic, pydantic-core, pydantic-settings, RapidFuzz, anyio, h11, httptools, PyYAML, watchfiles, annotated-types, annotated-doc, typing-inspection, pyzbar | MIT |
+| Pillow | MIT-CMU (HPND) |
 | uvloop | MIT or Apache-2.0 |
 | Starlette, Uvicorn, HTTPX, httpcore, click, idna, python-dotenv, websockets | BSD-3-Clause |
 | python-multipart, opentelemetry-api | Apache-2.0 |

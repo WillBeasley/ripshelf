@@ -497,6 +497,11 @@ pyyaml==6.0.3 \
     --hash=sha256:fa160448684b4e94d80416c0fa4aac48967a969efe22931448d853ada8baf926 \
     --hash=sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0
     # via uvicorn
+pyzbar==0.1.9 \
+    --hash=sha256:13e3ee5a2f3a545204a285f41814d5c0db571967e8d4af8699a03afc55182a9c \
+    --hash=sha256:4559628b8192feb25766d954b36a3753baaf5c97c03135aec7e4a026036b475d \
+    --hash=sha256:8f4c5264c9c7c6b9f20d01efc52a4eba1ded47d9ba857a94130afe33703eb518
+    # via ripshelf (pyproject.toml)
 rapidfuzz==3.14.6 \
     --hash=sha256:07c7aa0b1e4b9999a54f9e73317d6743ff85442c8ef7b7fbbe6b190fd37d9e75 \
     --hash=sha256:0844066900cdc9909ce4ab4fb5ba1d8e0c021252d770f2ea476f3443df1d22ef \

@@ -28,7 +28,7 @@ jobs:
       - name: Tools
         run: |
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg mkvtoolnix git xz-utils
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg mkvtoolnix tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd libzbar0 git xz-utils
           useradd -m tester
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
