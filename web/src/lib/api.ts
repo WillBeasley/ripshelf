@@ -6,6 +6,9 @@ import type {
 	ContributionExtra,
 	ContributionView,
 	CoverScan,
+	Listing,
+	ListingView,
+	ScanText,
 	DeleteJobsResult,
 	Drive,
 	DriveStats,
@@ -124,6 +127,11 @@ export const api = {
 	deleteCover: (id: number, side: CoverSide) =>
 		call<ContributionView>('DELETE', `/jobs/${id}/thediscdb/cover/${side}`),
 	scanner: () => call<ScannerInfo>('GET', '/scanner'),
+	listing: (id: number) => call<ListingView>('GET', `/jobs/${id}/listing`),
+	saveListing: (id: number, listing: Listing) => call<ListingView>('PUT', `/jobs/${id}/listing`, listing),
+	dropListingEdits: (id: number) => call<ListingView>('DELETE', `/jobs/${id}/listing/edits`),
+	readAgain: (id: number) => call<ListingView>('POST', `/jobs/${id}/listing/read`),
+	scanText: (id: number, scan: string) => call<ScanText>('GET', `/jobs/${id}/scans/${scan}/text`),
 	scanUrl: (id: number, scan: string) => `/api/jobs/${id}/scans/${scan}`,
 	scanThumbUrl: (id: number, sc: CoverScan, large = false) =>
 		`/api/jobs/${id}/scans/${sc.id}/thumb?v=${sc.rotate}-${(sc.crop ?? []).join('.')}${large ? '&large=true' : ''}`,

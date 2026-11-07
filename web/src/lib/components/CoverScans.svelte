@@ -5,6 +5,7 @@
 	import type { CoverScan, Job, ScannerInfo, ScanSplit } from '../api-types';
 	import { api, type ScanKind } from '../api';
 	import { Action } from '../actions.svelte';
+	import ScanListing from './ScanListing.svelte';
 
 	let { job, open = false }: { job: Job; open?: boolean } = $props();
 	const act = new Action();
@@ -230,6 +231,8 @@
 				{/each}
 			</ul>
 		{/if}
+
+		<ScanListing {job} />
 	</div>
 </details>
 

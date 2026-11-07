@@ -92,6 +92,8 @@
 		scanner_source: 'platen' as 'platen' | 'feeder',
 		scanner_trim: true,
 		scans_to_library: true,
+		scan_read_text: true,
+		ocr_languages: 'eng',
 		library_dir: '',
 		movies_dir: '',
 		tv_dir: '',
@@ -199,6 +201,8 @@
 			scanner_source: v.scanner_source ?? 'platen',
 			scanner_trim: v.scanner_trim ?? true,
 			scans_to_library: v.scans_to_library ?? true,
+			scan_read_text: v.scan_read_text ?? true,
+			ocr_languages: v.ocr_languages ?? 'eng',
 			library_dir: v.library_dir,
 			movies_dir: v.custom_movies_dir ?? '',
 			tv_dir: v.custom_tv_dir ?? '',
@@ -365,6 +369,8 @@
 			scanner_source: f.scanner_source,
 			scanner_trim: f.scanner_trim,
 			scans_to_library: f.scans_to_library,
+			scan_read_text: f.scan_read_text,
+			ocr_languages: f.ocr_languages.trim() || 'eng',
 			...changedFolders()
 		};
 	}
@@ -751,6 +757,19 @@
 					<input type="checkbox" bind:checked={f.scanner_trim} /> Cut away the empty glass around a scan
 				</label>
 				<TestButton check="scanner" values={body} label="Test the scanner" />
+				<h3>Reading the box</h3>
+				<label class="check">
+					<input type="checkbox" bind:checked={f.scan_read_text} /> Read the text on scans and list what's on the disc
+				</label>
+				<label class="field">
+					Languages (Tesseract's codes, joined with +)
+					<input class="mono" bind:value={f.ocr_languages} placeholder="eng" />
+				</label>
+				<p class="small muted">
+					Uses Tesseract, which the image includes. Elsewhere, install it (and zbar for barcodes): see the
+					cover scans guide. Each language needs its data installed, such as tesseract-ocr-fra for <span class="mono">fra</span>.
+				</p>
+				<TestButton check="ocr" values={body} label="Test text reading" />
 				<h3>In the library</h3>
 				<label class="check">
 					<input type="checkbox" bind:checked={f.scans_to_library} /> Copy scans to the library
