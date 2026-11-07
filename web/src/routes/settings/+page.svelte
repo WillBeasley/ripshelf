@@ -100,6 +100,7 @@
 		vision_model: 'qwen3-vl:4b-instruct',
 		extras_emby_folders: true,
 		film_unnamed_extras: 'skip' as 'skip' | 'extras',
+		tv_bonus_episodes: 'extra' as 'extra' | 'own_show',
 		library_dir: '',
 		movies_dir: '',
 		tv_dir: '',
@@ -216,6 +217,7 @@
 			vision_model: v.vision_model ?? '',
 			extras_emby_folders: v.extras_emby_folders ?? true,
 			film_unnamed_extras: v.film_unnamed_extras ?? 'skip',
+			tv_bonus_episodes: v.tv_bonus_episodes ?? 'extra',
 			library_dir: v.library_dir,
 			movies_dir: v.custom_movies_dir ?? '',
 			tv_dir: v.custom_tv_dir ?? '',
@@ -390,6 +392,7 @@
 			vision_model: f.vision_model.trim(),
 			extras_emby_folders: f.extras_emby_folders,
 			film_unnamed_extras: f.film_unnamed_extras,
+			tv_bonus_episodes: f.tv_bonus_episodes,
 			...changedFolders()
 		};
 	}
@@ -855,6 +858,19 @@
 						<option value="extras">Rip them into extras/ as "Title N"</option>
 					</select>
 				</label>
+				<label class="field">
+					Bonus episodes of other shows
+					<select bind:value={f.tv_bonus_episodes}>
+						<option value="extra">An extra of this show, named "Other show - Episode"</option>
+						<option value="own_show">An episode in the other show's own folder</option>
+					</select>
+				</label>
+				<p class="small muted">
+					When a TV disc's box lists a bonus episode of a different show ("Includes bonus episode", "Plus meet…"),
+					it's found in that show's episode list and ripped. As an extra it goes in the show's
+					<span class="mono">extras</span> folder; in its own show, as
+					<span class="mono">Other show (year)/Season 01/Other show - S01E24 - Episode.mkv</span>.
+				</p>
 				<h3>In the library</h3>
 				<label class="check">
 					<input type="checkbox" bind:checked={f.scans_to_library} /> Copy scans to the library

@@ -151,18 +151,28 @@
 		const names = (l?.items ?? []).filter((i) => i.kind === 'episode').map((i) => i.title);
 		if (!l || !names.length) return null;
 		const picks = (job.scan_match?.matches ?? []).filter((x) => x.kind === 'episode' && x.episodes.length);
+		const bonus = (job.scan_match?.matches ?? []).filter((x) => x.bonus && x.confidence !== 'low');
 		const byTitle = new Map((plan?.mapping ?? []).map((r) => [r.title_index, r]));
 		const agrees =
 			picks.length >= names.length &&
 			picks.every((x) => {
 				const r = byTitle.get(x.title_index);
 				return r?.role === 'episode' && JSON.stringify(r.episodes.map(epKey)) === JSON.stringify(x.episodes.map(epKey));
-			});
+			}) &&
+			bonus.every((x) => byTitle.get(x.title_index)?.role === 'extra');
 		return {
 			title: l.details.title,
 			names,
 			picks: picks.length >= names.length ? picks : [],
-			extras: l.items.filter((i) => i.kind === 'extra').map((i) => i.title),
+			// A bonus episode of another show, as found in its episode list ("Guess with Jess
+			// S01E24 Where's My Feather Gone?"), or as the box gives it.
+			bonus: l.items
+				.filter((i) => i.kind === 'extra' && i.show)
+				.map((i) => {
+					const b = bonus.find((x) => x.bonus?.box_title === i.title)?.bonus;
+					return b ? `${b.show.name} ${code(b.episode)} ${b.episode.name}` : `${i.show} “${i.title}”`;
+				}),
+			extras: l.items.filter((i) => i.kind === 'extra' && !i.show).map((i) => i.title),
 			agrees
 		};
 	});
@@ -270,7 +280,7 @@
 						.map((x) => x.episodes.map(code).join(' & ') + (x.episodes[0] && byKey.get(epKey(x.episodes[0]))?.name ? ` ${byKey.get(epKey(x.episodes[0]))?.name}` : ''))
 						.join(', ')}{:else}{box.names.length} episode{box.names.length === 1 ? '' : 's'}: {box.names
 						.map((n) => `“${n}”`)
-						.join(', ')}{/if}{#if box.extras.length}, plus {box.extras.join(', ')}{/if}
+						.join(', ')}{/if}{#if box.bonus.length}, plus bonus: {box.bonus.join(', ')}{/if}{#if box.extras.length}, plus {box.extras.join(', ')}{/if}
 				{#if box.agrees}<div class="muted">The mapping below says the same. Check it and confirm.</div>{/if}
 			</div>
 			{#if !box.agrees}
@@ -627,6 +637,19 @@
 	.pick select:last-child {
 		flex: 1;
 		min-width: 0;
+	}
+	@media (max-width: 560px) {
+		/* The episode's name in full under the role, rather than cut off beside it. */
+		.pick select:last-child:not(:first-child) {
+			flex-basis: 100%;
+		}
+		.thumb {
+			width: 56px;
+		}
+		.thumb img,
+		.nothumb {
+			width: 52px;
+		}
 	}
 	.problems {
 		margin: 0;

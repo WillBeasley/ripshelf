@@ -54,6 +54,7 @@ export type RipState = "pending" | "running" | "done" | "failed" | "cancelled";
 
 export interface Api {
   AudioTrack?: AudioTrack;
+  BonusEpisode?: BonusEpisode;
   Candidate?: Candidate;
   Capability?: Capability;
   ClashFile?: ClashFile;
@@ -203,6 +204,81 @@ export interface AudioTrack {
   note: string | null;
 }
 /**
+ * A bonus episode of another show the box lists, found in that show's episode list.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "BonusEpisode".
+ */
+export interface BonusEpisode {
+  /**
+   * the show as the box names it
+   */
+  box_show: string;
+  /**
+   * the episode as the box names it
+   */
+  box_title: string;
+  show: Show;
+  episode: Episode;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "Show".
+ */
+export interface Show {
+  tmdb_id: number;
+  tvdb_id: number | null;
+  imdb_id: string | null;
+  name: string;
+  original_name: string | null;
+  year: number | null;
+  poster_url: string | null;
+  /**
+   * typical minutes, from TMDB
+   */
+  episode_runtime: number | null;
+  /**
+   * season number -> episode count
+   */
+  seasons: {
+    [k: string]: number;
+  };
+  genre_ids: number[];
+  vote_count: number | null;
+  /**
+   * metadata providers that found it, best first
+   */
+  providers: string[];
+  excluded: boolean;
+  score: number;
+  evidence: Evidence[];
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "Evidence".
+ */
+export interface Evidence {
+  /**
+   * true = supports, false = contradicts, null = neutral
+   */
+  ok: boolean | null;
+  text: string;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "Episode".
+ */
+export interface Episode {
+  season: number;
+  episode: number;
+  name: string;
+  /**
+   * minutes
+   */
+  runtime: number | null;
+  air_date: string | null;
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "Candidate".
  */
@@ -235,17 +311,6 @@ export interface Candidate {
   excluded: boolean;
   score: number;
   evidence: Evidence[];
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "Evidence".
- */
-export interface Evidence {
-  /**
-   * true = supports, false = contradicts, null = neutral
-   */
-  ok: boolean | null;
-  text: string;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -301,38 +366,6 @@ export interface Collection {
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "Show".
- */
-export interface Show {
-  tmdb_id: number;
-  tvdb_id: number | null;
-  imdb_id: string | null;
-  name: string;
-  original_name: string | null;
-  year: number | null;
-  poster_url: string | null;
-  /**
-   * typical minutes, from TMDB
-   */
-  episode_runtime: number | null;
-  /**
-   * season number -> episode count
-   */
-  seasons: {
-    [k: string]: number;
-  };
-  genre_ids: number[];
-  vote_count: number | null;
-  /**
-   * metadata providers that found it, best first
-   */
-  providers: string[];
-  excluded: boolean;
-  score: number;
-  evidence: Evidence[];
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "CollectionDisc".
  */
 export interface CollectionDisc {
@@ -350,20 +383,6 @@ export interface CollectionDisc {
 export interface EpisodeRef {
   season: number;
   episode: number;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "Episode".
- */
-export interface Episode {
-  season: number;
-  episode: number;
-  name: string;
-  /**
-   * minutes
-   */
-  runtime: number | null;
-  air_date: string | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1149,6 +1168,14 @@ export interface TvPlan {
    * the mapping comes from a disc database's record of this disc
    */
   disc_db: boolean;
+  /**
+   * bonus episodes of other shows the box lists, as found in those shows' episode lists
+   */
+  bonus: BonusEpisode[];
+  /**
+   * the show or episodes were set from the cover scan, so it's reviewed, not confirmed without review
+   */
+  from_scan: boolean;
   auto_confirmed: boolean;
   /**
    * why it was (or wasn't) confirmed without review
@@ -1470,6 +1497,10 @@ export interface ListingItem {
    * who read it: Tesseract, the vision model, both, or the user
    */
   source: ("tesseract" | "vision" | "both" | "you") | null;
+  /**
+   * for a bonus episode of another show (an extra): that show, the title being the episode's
+   */
+  show: string | null;
 }
 /**
  * What the box says about the release.
@@ -1600,6 +1631,10 @@ export interface TitleMatch {
    * what the existing mapping says instead, when it disagrees
    */
   current: string | null;
+  /**
+   * a bonus episode of another show, found in its episode list
+   */
+  bonus: BonusEpisode | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -2364,6 +2399,7 @@ export interface SettingsUpdate {
   ocr_languages?: string | null;
   extras_emby_folders?: boolean | null;
   film_unnamed_extras?: ("skip" | "extras") | null;
+  tv_bonus_episodes?: ("extra" | "own_show") | null;
   vision_mode?: ("off" | "struggles" | "every" | "manual") | null;
   vision_provider?: ("local" | "openai" | "anthropic") | null;
   vision_url?: string | null;
@@ -2493,6 +2529,7 @@ export interface SettingsUpdate1 {
   ocr_languages?: string | null;
   extras_emby_folders?: boolean | null;
   film_unnamed_extras?: ("skip" | "extras") | null;
+  tv_bonus_episodes?: ("extra" | "own_show") | null;
   vision_mode?: ("off" | "struggles" | "every" | "manual") | null;
   vision_provider?: ("local" | "openai" | "anthropic") | null;
   vision_url?: string | null;
@@ -2653,6 +2690,7 @@ export interface SettingsView {
   ocr_languages: string;
   extras_emby_folders: boolean;
   film_unnamed_extras: "skip" | "extras";
+  tv_bonus_episodes: "extra" | "own_show";
   vision_mode: "off" | "struggles" | "every" | "manual";
   vision_provider: "local" | "openai" | "anthropic";
   vision_url: string | null;
