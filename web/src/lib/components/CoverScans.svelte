@@ -6,6 +6,7 @@
 	import { api, type ScanKind } from '../api';
 	import { Action } from '../actions.svelte';
 	import ScanListing from './ScanListing.svelte';
+	import ScanMatchView from './ScanMatchView.svelte';
 
 	let { job, open = false }: { job: Job; open?: boolean } = $props();
 	const act = new Action();
@@ -233,6 +234,7 @@
 		{/if}
 
 		<ScanListing {job} />
+		<ScanMatchView {job} />
 	</div>
 </details>
 

@@ -255,7 +255,7 @@ def match(titles: list[TitleInfo], listing: Listing, *, media: str = "movie", ep
             if agrees:
                 fscore = min(1.0, fscore + 0.1)
             out.matches.append(TitleMatch(
-                title_index=feature.index, kind="feature", name=listing.details.title or "The film",
+                title_index=feature.index, duration_s=feature.duration_s, kind="feature", name=listing.details.title or "The film",
                 score=round(fscore, 3), confidence=confidence(fscore), reason=why, agrees=agrees,
                 current=None if agrees in (None, True) else f"title {main_title} is ripped as the film"))
             cands = [t for t in cands if t is not feature]
@@ -347,7 +347,7 @@ def _assign(out: ScanMatch, items: list[tuple[int, ListingItem]], cands: list[Ti
         elif agrees is False:
             score = min(score, 0.7)
         out.matches.append(TitleMatch(
-            title_index=t.index, kind=it.kind, item=i, name=it.title, episodes=eps, extra_type=it.extra_type,
+            title_index=t.index, duration_s=t.duration_s, kind=it.kind, item=i, name=it.title, episodes=eps, extra_type=it.extra_type,
             score=round(score, 3), confidence=confidence(score), reason=reason or "the best fit left",
             agrees=agrees, current=cur))
     out.matches.sort(key=lambda m: m.title_index)

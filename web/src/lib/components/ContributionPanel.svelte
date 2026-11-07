@@ -43,13 +43,18 @@
 		if (!view) return;
 		const saved = new Map((view.contribution?.extras ?? []).map((x) => [x.title_index, x]));
 		const confirmed = view.contribution?.items_confirmed;
+		// Extras the cover scan names, for titles not named yet.
+		const scanned = new Map(
+			(job.scan_match?.matches ?? []).filter((x) => x.kind === 'extra' && x.confidence !== 'low').map((x) => [x.title_index, x])
+		);
 		draft = Object.fromEntries(
 			view.titles
 				.filter((t) => !t.fixed)
 				.map((t) => {
 					const x = saved.get(t.title_index);
-					const kind: Kind = x?.kind ?? (!confirmed && t.suggested ? 'Extra' : '');
-					return [t.title_index, { kind, name: x?.name ?? '' }];
+					const s = !confirmed ? scanned.get(t.title_index) : undefined;
+					const kind: Kind = x?.kind ?? s?.extra_type ?? (!confirmed && t.suggested ? 'Extra' : '');
+					return [t.title_index, { kind, name: x?.name ?? s?.name ?? '' }];
 				})
 		);
 	}
