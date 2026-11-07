@@ -145,7 +145,7 @@ class ScansMixin:
         (d / f"{sc.id}.{EXTS[ctype]}").write_bytes(data)
         job = self._job(job_id)  # the picture took a while to read
         job.scans.append(sc)
-        self._save(job)
+        self._save_scans(job)
         what = {"scanner": "Scanned", "upload": "Added a picture of", "camera": "Took a photo of"}[source]
         self._event(job, "info", f"{what} the {self._kind_name(sc)}")
         if kind in COVER_KINDS:
@@ -183,7 +183,7 @@ class ScansMixin:
             else:
                 sc.crop = None
         self._forget_thumbs(job, sc)
-        self._save(job)
+        self._save_scans(job)
         self.read_scans(job_id)  # read again if what the reading depends on changed
         return sc
 
@@ -197,7 +197,7 @@ class ScansMixin:
         self._text_path(job, sc.id).unlink(missing_ok=True)
         self._vision_path(job, sc.id).unlink(missing_ok=True)
         job.scans = [x for x in job.scans if x.id != scan_id]
-        self._save(job)
+        self._save_scans(job)
         if job.listing:
             self._rebuild_listing(job_id)
 
@@ -224,7 +224,7 @@ class ScansMixin:
         view = await self.set_cover(job_id, "back", await asyncio.to_thread(images.jpeg, back))
         job = self._job(job_id)
         self._find(job, scan_id).split = split
-        self._save(job)
+        self._save_scans(job)
         self.read_scans(job_id)  # the parts are read where the sheet is cut
         return view
 
@@ -277,6 +277,8 @@ class ScansMixin:
                 shutil.copyfile(p, dest / p.name)
                 job.scans.append(sc.model_copy(update={"library_path": None}))
         self._inherit_reading(job, other)
+        cur = self.db.get_job(job.id)
+        job.scans_rev = max(job.scans_rev, cur.scans_rev if cur else 0) + 1  # the caller saves it
         return bool(job.scans)
 
     # --- the library ------------------------------------------------------------------
@@ -325,7 +327,7 @@ class ScansMixin:
         for sc in job.scans:
             if sc.id in filed:
                 sc.library_path = str(filed[sc.id])
-        self._save(job)
+        self._save_scans(job)
         if filed:
             n = len(filed)
             self._event(job, "finalise", f"Copied {n} scan{'s' if n != 1 else ''} to {folder}")
@@ -378,14 +380,14 @@ class ScansMixin:
         run = ScannerRun(state="scanning", kind=body.kind, source=source,
                          duplex=body.duplex and source == "feeder", started_at=now())
         job.scanner = run
-        self._save(job)
+        self._save_scans(job)
         self._scanner_job = job_id
 
         def show(r: ScannerRun | None) -> None:
             job = self.db.get_job(job_id)
             if job:
                 job.scanner = r
-                self._save(job)
+                self._save_scans(job)
 
         async def keep(data: bytes) -> None:
             await self.add_scan(job_id, data, run.kind, "scanner")
@@ -439,7 +441,7 @@ class ScansMixin:
         job = self._job(job_id)
         if job.scanner:
             job.scanner = None
-            self._save(job)
+            self._save_scans(job)
 
 
 def file_into(folder: Path, prefix: str, src: Path, scans: list[CoverScan]) -> dict[str, Path]:

@@ -33,7 +33,7 @@ from . import __version__, art, discfs, integrations, library, providers, snapsh
 from .bus import EventBus
 from .config import EULA_PENDING, Settings
 from .contributejobs import ContributeMixin
-from .db import Database, JobRecord, now
+from .db import SCAN_FIELDS, Database, JobRecord, now
 from .hw.drives import DiscIdentity, DriveHw
 from .identify import catalogue, scoring
 from .identify.label import clean_bdmt_title, name_differs_from_label, parse_label
@@ -512,6 +512,12 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         self._save(fresh)
 
     def _save(self, job: JobRecord) -> None:
+        cur = self.db.get_job(job.id)
+        if cur and cur.scans_rev > job.scans_rev:
+            # Read before a scan arrived (the pipeline holds its copy across a scan or a rip):
+            # keep the scans as they are now.
+            for f in SCAN_FIELDS:
+                setattr(job, f, getattr(cur, f))
         if job.id in self._presets:
             job.preset = self._presets[job.id]
         self.db.save_job(job)
@@ -519,6 +525,12 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         d = self.drives.get(job.drive_id)
         if d and d.job_id == job.id:
             self.publish_drive(d)
+
+    def _save_scans(self, job: JobRecord) -> None:
+        """Save a change to the scans' fields (SCAN_FIELDS), made on a copy just read."""
+        cur = self.db.get_job(job.id)
+        job.scans_rev = max(job.scans_rev, cur.scans_rev if cur else 0) + 1
+        self._save(job)
 
     def _set_state(self, job: JobRecord, state: JobState, message: str | None = None) -> None:
         if state == job.state:

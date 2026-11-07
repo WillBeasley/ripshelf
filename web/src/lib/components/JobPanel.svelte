@@ -5,6 +5,7 @@
 	import { ENCODER_NAMES, duration, jobTitle, kindLabel, size, when } from '../format';
 	import { live } from '../live.svelte';
 	import { closeJob } from '../nav';
+	import { page } from '$app/state';
 	import ContributionPanel from './ContributionPanel.svelte';
 	import CoverScans from './CoverScans.svelte';
 	import Progress from './Progress.svelte';
@@ -13,6 +14,12 @@
 	import StatePill from './StatePill.svelte';
 
 	let { jobId }: { jobId: number } = $props();
+	// Opened from a drive card's "Add a cover scan": straight to the scans.
+	const showScans = $derived(page.url.searchParams.get('show') === 'scans');
+	let scansEl = $state<HTMLElement | null>(null);
+	$effect(() => {
+		if (showScans && scansEl) scansEl.scrollIntoView({ block: 'start' });
+	});
 	const act = new Action();
 
 	let detail = $state<JobDetail | null>(null);
@@ -162,6 +169,8 @@
 			</div>
 		{/if}
 
+		<div bind:this={scansEl}><CoverScans {job} open={showScans} /></div>
+
 		<section>
 			<h3>Destination</h3>
 			<p class="mono">{job.destination ?? 'Not decided until the disc is identified'}</p>
@@ -221,9 +230,6 @@
 			<Snapshots {job} />
 		{/if}
 
-		{#if job.state !== 'detected'}
-			<CoverScans {job} />
-		{/if}
 
 		{#if job.identity || job.disc_match}
 			<ContributionPanel {job} />

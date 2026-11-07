@@ -150,3 +150,16 @@ async def test_scan_for_the_next_disc(harness, settings):
         assert run.state == "scanning" and h.m.pending_scans(DRIVE).scanner
         got = await until(lambda: (p := h.m.pending_scans(DRIVE)).scans and not p.scanner and p, 20, "the scan")
         assert got.scans[0].kind == "outside_full" and got.scans[0].source == "scanner" and got.scans[0].crop
+
+
+async def test_a_scan_survives_a_save_from_an_older_copy(harness, settings):
+    """The pipeline holds a copy of the job across a scan or a rip; saving it after a
+    scan arrived must not lose the scan."""
+    async with harness() as h:
+        job = put(h, heron_job(state=JobState.review))
+        stale = h.db.get_job(job.id)  # what the pipeline read earlier
+        await h.m.add_scan(job.id, picture(), "back", "upload")
+        stale.disc.name = "changed by the pipeline"
+        h.m._save(stale)
+        now = h.db.get_job(job.id)
+        assert len(now.scans) == 1 and now.disc.name == "changed by the pipeline"

@@ -6,6 +6,7 @@
 	import { isAfterDrive, live } from '../live.svelte';
 	import { openJob } from '../nav';
 	import DriveName from './DriveName.svelte';
+	import PendingScans from './PendingScans.svelte';
 	import PresetForm from './PresetForm.svelte';
 	import Progress from './Progress.svelte';
 	import StatePill from './StatePill.svelte';
@@ -44,6 +45,14 @@
 			(['detected', 'scanning'].includes(current.state) || (current.state === 'failed' && !current.main_title))
 	);
 	let presetOpen = $state(false);
+	// Pictures of the next disc's box, kept by the drive until a disc goes in.
+	let nextOpen = $state(false);
+	let nextCount = $state(0);
+	$effect(() => {
+		if (!drive.enabled) return;
+		drive.id;
+		api.pendingScans(drive.id).then((p) => (nextCount = p.scans.length)).catch(() => {});
+	});
 	const preset = $derived(current?.preset ?? null);
 	const presetText = $derived.by(() => {
 		if (!preset) return '';
@@ -139,6 +148,13 @@
 			{/if}
 		{/if}
 
+		{#if !['done', 'failed', 'cancelled'].includes(current.state)}
+			<button class="link small scan-link" onclick={() => openJob(current.id, 'scans')}>
+				{(current.scans ?? []).length ? `Cover scans (${(current.scans ?? []).length})` : 'Add a cover scan'}
+				<span class="muted">· helps identify it</span>
+			</button>
+		{/if}
+
 		{#if current.state === 'review'}
 			<a class="button attention" href="/review">Needs review →</a>
 		{:else if current.state === 'clash'}
@@ -148,6 +164,12 @@
 		{/if}
 	{:else if drive.status === 'empty' || drive.status === 'tray_open'}
 		<p class="small muted">No disc</p>
+	{/if}
+	{#if drive.enabled && !current}
+		<button class="link small scan-link" aria-expanded={nextOpen} onclick={() => (nextOpen = !nextOpen)}>
+			{nextCount ? `Scans for the next disc (${nextCount})` : 'Add a scan for the next disc'}
+		</button>
+		{#if nextOpen}<PendingScans driveId={drive.id} onchange={(n) => (nextCount = n)} />{/if}
 	{/if}
 	{#if drive.enabled && afterDrive && job}
 		<p class="small muted">
@@ -212,6 +234,10 @@
 </article>
 
 <style>
+	.scan-link {
+		align-self: flex-start;
+		text-align: left;
+	}
 	.drive {
 		display: flex;
 		flex-direction: column;
