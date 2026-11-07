@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import os
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -139,14 +140,14 @@ class Tesseract:
         self._version: str | None = None
 
     def _args(self) -> list[str]:
-        return proc.split_command(self.command)
+        return proc.split_command(default_command(self.command))
 
     async def version(self) -> str:
         """``tesseract 5.3.4``; OcrUnavailable if it can't be run."""
         if self._version:
             return self._version
         args = self._args()
-        if not args or not (shutil.which(args[0]) or (len(args) == 1 and _is_file(args[0]))):
+        if not args or not (shutil.which(args[0]) or _is_file(args[0])):
             raise OcrUnavailable(f"Tesseract isn't installed ({self.command} wasn't found)")
         out = await self._run([*args, "--version"], b"")
         first = (out or "").strip().splitlines()[:1]
@@ -187,9 +188,20 @@ class Tesseract:
 
 
 def _is_file(p: str) -> bool:
-    import os
-
     return os.path.isfile(p)
+
+
+def default_command(command: str) -> str:
+    """"tesseract" on the PATH; on Windows, where the UB Mannheim installer puts it
+    (it doesn't add itself to the PATH)."""
+    if command != "tesseract" or not proc.WINDOWS or shutil.which(command):
+        return command
+    for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"),
+                 os.environ.get("LOCALAPPDATA") and os.path.join(os.environ["LOCALAPPDATA"], "Programs")):
+        exe = os.path.join(base, "Tesseract-OCR", "tesseract.exe") if base else None
+        if exe and os.path.isfile(exe):
+            return exe
+    return command
 
 
 def _png(img: Image.Image) -> bytes:

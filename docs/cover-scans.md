@@ -14,6 +14,58 @@ Open a job (on Drives, Review or Finished) and expand **Cover scans**. Each pict
 
 You can change a picture's kind after adding it, turn it a quarter at a time (⟳) and remove it. Click a thumbnail to see it larger, or to open the original file.
 
+## What's on the disc
+
+ripshelf reads the text on each scan and lists what the box says is on the disc, under the scans in **What's on the disc**:
+
+- **Extras.** These are the items under a heading such as "Special features", "Bonus material" or "Extras", with:
+  - their running times;
+  - a type, TheDiscDB's (Featurette, Deleted scene, Trailer, Interview, Music, Short and so on), guessed from their words;
+  - a name. When an item quotes a title ("In-depth documentary on the making of the film 'Return to the Orchard'"), the quoted title is its name.
+- **Episodes.** These are the items under an "Episodes" or "Disc 2" heading, or a column of short titles (a children's DVD's ten episode names), with their numbers and running times where printed.
+- **About the release.** Where printed:
+  - the title, the year and the top billing;
+  - the running time, and an episode count ("Contains 10 wide-eyed adventures");
+  - the barcode, decoded from the bars or read from its digits, with the check digit verified;
+  - the catalogue number, region, PAL or NTSC, country and aspect ratio;
+  - the audio tracks, each with its format (Dolby Digital, DTS-HD MA, Atmos…) and channels;
+  - the subtitles, flagging hard of hearing ones;
+  - any 4K, HDR or Dolby Vision claims.
+
+Pointing at (or tapping into) a row marks where on the scan it was read. Each row can be edited, removed or added to. **Save listing** keeps your version. Reading the scans again (when one is added, changed or turned, or with **Read again**) never replaces it. If a new reading finds something different, the panel asks whether to use it or keep yours.
+
+In the TheDiscDB panel, **From cover scan** fills the release details' empty fields with the barcode, region and locale read here. Nothing is saved until you press **Save details**.
+
+Reading takes a few seconds a picture, one job at a time. Phase 3 will use the listing to name the disc's titles. For now it's for you to check and correct.
+
+### How the reading works
+
+[Tesseract](https://github.com/tesseract-ocr/tesseract) reads the text, and [zbar](https://github.com/mchehab/zbar) the barcode. For each picture:
+
+1. **Size.** It is scaled to about 300 dpi.
+2. **Orientation.** It is turned the right way up if it was scanned on its side. The scan's thumbnail turns with it.
+3. **Parts.** A whole outer sheet is read as its back, spine and front, cut where the spine is. **Cut into front and back covers…** moves the cut.
+4. **Two readings.** Each part is read as it is (best for flatbed scans) and with local contrast (best for phone photos, with glare and coloured stripes behind the text). The fuller reading of each line is kept.
+
+What it reads well:
+- printed text on a flatbed scan
+- a phone photo taken flat and in focus
+
+What it reads badly, or not at all:
+- stylised titles and text over pictures (the front cover's title is usually read from the spine instead)
+- curved or angled photos
+- anything printed as an icon, such as a region globe or a PAL logo (the region is then guessed from "PAL" and "U.K." where those are printed, and marked as guessed)
+
+Check the listing against the box, as you would a TheDiscDB submission.
+
+**Settings → Scanner** has a switch for reading, Tesseract's languages (`eng`, or `eng+fra` and so on; each needs its data installed) and **Test text reading**.
+
+The container image includes Tesseract and zbar. Elsewhere:
+- Debian or Ubuntu: `apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd libzbar0`
+- Windows: `winget install -e --id UB-Mannheim.TesseractOCR`. ripshelf finds it in Program Files, and pyzbar brings zbar with it.
+
+Without Tesseract, scans are kept as before, and the panel says text reading isn't available, so you can type the listing in yourself.
+
 ## TheDiscDB covers
 
 When the disc is being sent to [TheDiscDB](thediscdb-contributing.md), a front or back scan also becomes that cover. You don't need to upload it again in the TheDiscDB panel.
@@ -45,7 +97,7 @@ The scan runs in the background, and the job shows how it's going. It also shows
 
 **Laying things on the glass.** Put the picture face down. The glass is A4 (or Letter), and an unfolded DVD or Blu-ray sheet (about 273 mm wide) is wider than that. Lay it sideways along the glass's long edge, then turn the scan with ⟳.
 
-**Trimming.** The scan covers the whole glass, so ripshelf finds the picture on it and leaves the empty glass out of the thumbnails and covers. **Untrim** shows the whole scan again, and **Cut away the empty glass around a scan** in Settings turns this off. The original file is always kept as the scanner sent it.
+**Trimming.** The scan covers the whole glass, so ripshelf finds the picture on it and leaves the empty glass out of the thumbnails, covers and reading. The glass is any side of the scan in one even near-white or near-black colour (the lid, closed or open). An uploaded flatbed scan is trimmed the same way, and a phone photo isn't. **Untrim** shows the whole scan again, and **Cut away the empty glass around a scan** in Settings turns this off. The original file is always kept as the scanner sent it.
 
 300 dpi is plenty for covers and for reading small print.
 
@@ -90,5 +142,10 @@ TV/Pippa & Goose (2013)/scans/PIPPA_&_GOOSE_KITE_TRAM - front.jpg
 | `DELETE /api/jobs/{id}/scans/{scan}` | remove the picture |
 | `POST /api/jobs/{id}/scans/{scan}/covers` | use it as the TheDiscDB covers, with `{"position": 0.5, "spine": 0.05, "swap": false}` for a whole sheet |
 | `GET /api/scanner` | the scanner's model and state |
+| `GET /api/jobs/{id}/listing` | what's on the disc: the reading (`listing.found`), your version (`listing.edited`), which one counts (`current`), and whether a newer reading differs from your version |
+| `PUT /api/jobs/{id}/listing` | save your version |
+| `DELETE /api/jobs/{id}/listing/edits` | drop your version and go back to the reading |
+| `POST /api/jobs/{id}/listing/read` | read every scan again |
+| `GET /api/jobs/{id}/scans/{scan}/text` | the lines read on one scan, with their boxes and confidence, and its barcodes |
 
 In development, `scripts/dev-fake.sh` serves a pretend scanner at `/fake-escl/eSCL` and points Settings at it. Its glass holds a made-up DVD's cover sheet, and its feeder holds three insert pages.
