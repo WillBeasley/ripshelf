@@ -53,6 +53,7 @@ export type TitleRole1 = "episode" | "play_all" | "duplicate" | "extra" | "skip"
 export type RipState = "pending" | "running" | "done" | "failed" | "cancelled";
 
 export interface Api {
+  AudioTrack?: AudioTrack;
   Candidate?: Candidate;
   Capability?: Capability;
   ClashFile?: ClashFile;
@@ -100,6 +101,10 @@ export interface Api {
   JobStep?: JobStep;
   JobUpdated?: JobUpdated;
   JobsDeleted?: JobsDeleted;
+  Listing?: Listing;
+  ListingDetails?: ListingDetails;
+  ListingItem?: ListingItem;
+  ListingView?: ListingView;
   LogEntry?: LogEntry;
   LogPage?: LogPage;
   MakeMKVFile?: MakeMKVFile;
@@ -121,7 +126,9 @@ export interface Api {
   RipProgress?: RipProgress;
   RipProgressEvent?: RipProgressEvent;
   RipState?: RipState;
+  ScanListing?: ScanListing;
   ScanSplit?: ScanSplit;
+  ScanText?: ScanText;
   ScanUpdate?: ScanUpdate;
   ScannerInfo?: ScannerInfo;
   ScannerRun?: ScannerRun;
@@ -142,6 +149,8 @@ export interface Api {
   Status?: Status;
   StatusChanged?: StatusChanged;
   StorageFolder?: StorageFolder;
+  SubtitleTrack?: SubtitleTrack;
+  TextLine?: TextLine;
   TitleInfo?: TitleInfo;
   TitleMap?: TitleMap;
   TitleMapUpdate?: TitleMapUpdate;
@@ -159,6 +168,35 @@ export interface Api {
   TvSplitRequest?: TvSplitRequest;
   WebResult?: WebResult;
   WebSearchRequest?: WebSearchRequest;
+}
+/**
+ * An audio track the box lists.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "AudioTrack".
+ */
+export interface AudioTrack {
+  language: string;
+  format:
+    | (
+        | "Dolby Digital"
+        | "Dolby Digital Plus"
+        | "Dolby TrueHD"
+        | "Dolby Atmos"
+        | "DTS"
+        | "DTS-HD MA"
+        | "DTS-HD HR"
+        | "DTS:X"
+        | "LPCM"
+        | "MPEG"
+        | "PCM"
+      )
+    | null;
+  channels: ("mono" | "2.0" | "5.1" | "6.1" | "7.1") | null;
+  /**
+   * such as commentary or audio description
+   */
+  note: string | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1016,6 +1054,10 @@ export interface Job {
    * a scan from the network scanner, under way or failed
    */
   scanner: ScannerRun | null;
+  /**
+   * what's on the disc, read from the scans
+   */
+  listing: ScanListing | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1321,6 +1363,145 @@ export interface ScannerRun {
   message: string | null;
 }
 /**
+ * The listing read from a job's scans, and the user's own version of it.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScanListing".
+ */
+export interface ScanListing {
+  state: "idle" | "reading" | "done" | "failed" | "unavailable";
+  message: string | null;
+  /**
+   * what is being read now
+   */
+  progress: string | null;
+  read_at: string | null;
+  engine: string | null;
+  /**
+   * what reading found, replaced by each reading
+   */
+  found: Listing | null;
+  /**
+   * the user's listing, kept until they drop it
+   */
+  edited: Listing | null;
+  /**
+   * the reading the edits started from
+   */
+  edited_from: string | null;
+}
+/**
+ * What's on the disc, as the box tells it.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "Listing".
+ */
+export interface Listing {
+  items: ListingItem[];
+  details: ListingDetails;
+  /**
+   * what the reader noticed, such as a count that doesn't match
+   */
+  notes: string[];
+}
+/**
+ * An episode or extra the box lists.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ListingItem".
+ */
+export interface ListingItem {
+  kind: "episode" | "extra";
+  title: string;
+  /**
+   * the episode's number, when printed
+   */
+  number: number | null;
+  /**
+   * the printed running time, in minutes
+   */
+  runtime_min: number | null;
+  /**
+   * TheDiscDB's type, for an extra
+   */
+  extra_type:
+    ("Extra" | "Featurette" | "DeletedScene" | "Trailer" | "Interview" | "Scene" | "Music" | "Short" | "Other") | null;
+  /**
+   * the disc it's on, when the box splits them by disc
+   */
+  disc: number | null;
+  /**
+   * the line as read, before the title was picked out of it
+   */
+  text: string | null;
+  /**
+   * the scan it was read on
+   */
+  scan_id: string | null;
+  /**
+   * where on that scan, as fractions (see TextLine)
+   */
+  box: number[] | null;
+}
+/**
+ * What the box says about the release.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ListingDetails".
+ */
+export interface ListingDetails {
+  title: string | null;
+  /**
+   * the copyright year of the film or show
+   */
+  year: number | null;
+  cast: string[];
+  feature_runtime_min: number | null;
+  /**
+   * from wording such as "13 episodes"
+   */
+  episode_count: number | null;
+  /**
+   * EAN-13 or UPC-A, check digit verified
+   */
+  barcode: string | null;
+  /**
+   * decoded from the bars, or read from the digits
+   */
+  barcode_source: ("barcode" | "text") | null;
+  catalogue_number: string | null;
+  region: string | null;
+  /**
+   * not printed as text: worked out from the video system and country
+   */
+  region_guessed: boolean;
+  video_system: ("PAL" | "NTSC") | null;
+  /**
+   * such as UK or US, from the box
+   */
+  country: string | null;
+  locale: string | null;
+  aspect_ratio: string | null;
+  audio: AudioTrack[];
+  subtitles: SubtitleTrack[];
+  /**
+   * resolution and HDR the box claims: 4K UHD, 1080p, HDR10, HDR10+, Dolby Vision
+   */
+  video: string[];
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "SubtitleTrack".
+ */
+export interface SubtitleTrack {
+  language: string;
+  hard_of_hearing: boolean;
+  /**
+   * such as "movie only" or "extras"
+   */
+  note: string | null;
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "JobDetail".
  */
@@ -1391,6 +1572,10 @@ export interface JobDetail {
    * a scan from the network scanner, under way or failed
    */
   scanner: ScannerRun | null;
+  /**
+   * what's on the disc, read from the scans
+   */
+  listing: ScanListing | null;
   events: JobEvent[];
   titles: TitleInfo[];
 }
@@ -1428,6 +1613,25 @@ export interface JobUpdated {
 export interface JobsDeleted {
   type: "jobs_deleted";
   ids: number[];
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ListingView".
+ */
+export interface ListingView {
+  listing: ScanListing;
+  /**
+   * the edited listing if there is one, else the found one
+   */
+  current: Listing | null;
+  /**
+   * the scans were read again after the listing was edited, and the reading differs
+   */
+  newer_reading: boolean;
+  /**
+   * text reading can run here (Tesseract is installed and switched on)
+   */
+  available: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1569,6 +1773,7 @@ export interface ProviderInfo {
         | "makemkv"
         | "paths"
         | "scanner"
+        | "ocr"
       )
     | null;
 }
@@ -1709,6 +1914,56 @@ export interface RipProgressEvent {
   progress: RipProgress;
 }
 /**
+ * What was read on one scan.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScanText".
+ */
+export interface ScanText {
+  scan_id: string;
+  /**
+   * what the reading depends on (the file, kind, trim, turn and cut); a different key means it needs reading again
+   */
+  key: string;
+  read_at: string;
+  engine: string;
+  seconds: number;
+  /**
+   * the quarter turns the text needed, which the scan was given
+   */
+  turned: number;
+  lines: TextLine[];
+  /**
+   * the other reading of each part, used only for the release details
+   */
+  more: TextLine[];
+  /**
+   * EAN-13 and UPC-A barcodes decoded from the picture
+   */
+  barcodes: string[];
+}
+/**
+ * A line of text read on a scan.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "TextLine".
+ */
+export interface TextLine {
+  text: string;
+  /**
+   * Tesseract's confidence, 0 to 100
+   */
+  conf: number;
+  /**
+   * [left, top, right, bottom] as fractions of the picture as shown (trimmed and turned)
+   */
+  box: number[];
+  /**
+   * the part of the picture: front, spine or back of a whole outer sheet, left or right of its inside, else page
+   */
+  region: string;
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "ScanUpdate".
  */
@@ -1826,7 +2081,8 @@ export interface SettingsTestRequest {
     | "catalogue"
     | "makemkv"
     | "paths"
-    | "scanner";
+    | "scanner"
+    | "ocr";
   values: SettingsUpdate;
 }
 /**
@@ -1925,6 +2181,8 @@ export interface SettingsUpdate {
   scanner_source?: ("platen" | "feeder") | null;
   scanner_trim?: boolean | null;
   scans_to_library?: boolean | null;
+  scan_read_text?: boolean | null;
+  ocr_languages?: string | null;
 }
 /**
  * What the transcode step may do to rips from one kind of disc.
@@ -2045,6 +2303,8 @@ export interface SettingsUpdate1 {
   scanner_source?: ("platen" | "feeder") | null;
   scanner_trim?: boolean | null;
   scans_to_library?: boolean | null;
+  scan_read_text?: boolean | null;
+  ocr_languages?: string | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -2196,6 +2456,8 @@ export interface SettingsView {
   scanner_source: "platen" | "feeder";
   scanner_trim: boolean;
   scans_to_library: boolean;
+  scan_read_text: boolean;
+  ocr_languages: string;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

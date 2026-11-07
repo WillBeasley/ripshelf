@@ -83,6 +83,31 @@
 		};
 	}
 
+	// What the box's scans say: only fills what's empty, and nothing is saved until Save.
+	let fromScanNote = $state<string | null>(null);
+	async function fromScan() {
+		const v = await act.run(() => api.listing(jobId));
+		const d = v?.current?.details;
+		if (!d) {
+			fromScanNote = 'Nothing read from the cover scans yet';
+			return;
+		}
+		editing = true;
+		const got: string[] = [];
+		const take = <K extends 'upc' | 'locale' | 'region_code'>(k: K, val: string | null, what: string) => {
+			if (val && !form[k]) {
+				form = { ...form, [k]: val };
+				got.push(`${what} ${val}`);
+			}
+		};
+		take('upc', d.barcode, 'barcode');
+		take('region_code', d.region, d.region_guessed ? 'region (guessed)' : 'region');
+		take('locale', d.locale, 'locale');
+		fromScanNote = got.length
+			? `From the cover scan: ${got.join(', ')}${d.catalogue_number ? `. Catalogue number ${d.catalogue_number}` : ''}.`
+			: 'The cover scan has nothing for the empty fields';
+	}
+
 	function useProduct(p: ReleaseProduct) {
 		editing = true;
 		form = { ...form, upc: p.upc ?? form.upc, asin: p.asin ?? form.asin, asin_unavailable: false };
@@ -183,6 +208,7 @@
 			>Save details</button
 		>
 		<button disabled={act.busy || sending} onclick={lookup}>{act.busy ? 'Looking…' : 'Look up'}</button>
+		<button disabled={act.busy || sending} onclick={fromScan}>From cover scan</button>
 		{#if dirty}
 			<button
 				class="link small"
@@ -193,6 +219,7 @@
 			>
 		{/if}
 	</div>
+	{#if fromScanNote}<p class="small muted">{fromScanNote} Nothing is saved until you press Save details.</p>{/if}
 	{#if found}
 		<div class="found">
 			{#if found.products.length}
