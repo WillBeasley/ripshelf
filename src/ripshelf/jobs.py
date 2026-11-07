@@ -776,7 +776,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 code="scan_timeout",
                 message=f"{what}. The drive may be hanging, the disc may be badly damaged, or MakeMKV is stuck "
                         f"making a firmware dump for it (for older drives, import a dump_*.tgz in Settings, see "
-                        f"docs/troubleshooting.md). The limits are in Settings → Drives.",
+                        f"docs/troubleshooting.md). The limits are in Settings → Drives and ripping, under Advanced.",
                 actions=["retry_scan", "eject"]))
         if scan.key_invalid:
             raise JobError(Problem(code="makemkv_key", message="MakeMKV rejected the registration key",
@@ -936,7 +936,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             if not match:
                 self._event(job, "warning", "No TMDB API key is set, so identification needs a human"
                             if not self.s.secret("tmdb_api_key") else
-                            "No film search is switched on (Settings → Metadata providers)")
+                            "No film search is switched on (Settings → Identify)")
         elif not queries:
             self._event(job, "warning", "The disc label is generic; nothing to search for")
         else:
@@ -1016,7 +1016,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             return None  # a real title on the disc (bdmt) beats a web search
         if self.s.catalogue_search == "off":
             self._event(job, "info", f"The label looks like a catalogue number ({number}). Turn on catalogue "
-                                     "lookup in Settings → Identification to look it up")
+                                     "lookup in Settings → Identify to look it up")
             return None
         try:
             found = await catalogue.lookup(self.s, number, job.disc.kind.value if job.disc.kind else None)
@@ -1688,7 +1688,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         """Films for ``query`` from the film searches in Settings, unranked (no disc to compare against)."""
         if not any(n != "thediscdb" for n in providers.enabled(self.s, "movie")):
             raise ValueError("No TMDB API key set" if not self.s.secret("tmdb_api_key")
-                             else "No film search is switched on (Settings → Metadata providers)")
+                             else "No film search is switched on (Settings → Identify)")
         found, notes = await films.search(self.s, [query], year)
         if not found and any(level == "warning" for level, _ in notes):
             raise ValueError(next(n for level, n in notes if level == "warning"))
@@ -2117,7 +2117,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         if backup:
             out.append(SetupProblem(code="backup_dir", message=backup))
         if integrations.notifications_enabled(self.s) and not self.s.public_url:
-            out.append(SetupProblem(code="public_url", message="No UI address set (Settings → Notifications), so "
+            out.append(SetupProblem(code="public_url", message="No UI address set (Settings → System), so "
                                                                 "notifications can't link to the job"))
         if self.java_missing:
             out.append(SetupProblem(code="java_missing", message="MakeMKV has no Java runtime, needed for some " + (

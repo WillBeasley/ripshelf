@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Sending a confirmed disc to TheDiscDB (the contribute setting in Settings → Metadata providers).
+	// Sending a confirmed disc to TheDiscDB (the contribute setting in Settings → Identify).
 	import type { ContributionExtra, ContributionView, Job } from '../api-types';
 	import { api } from '../api';
 	import { Action } from '../actions.svelte';

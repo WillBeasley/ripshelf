@@ -63,7 +63,7 @@
 		{/if}
 	{:else}
 		<p class="small muted">
-			To search the web from here, set a SearXNG address in <a href="/settings#web-search">Settings</a>.
+			To search the web from here, set a SearXNG address in <a href="/settings/identify#setting-searxng_url">Settings</a>.
 		</p>
 	{/if}
 </div>

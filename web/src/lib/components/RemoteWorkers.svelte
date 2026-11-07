@@ -50,7 +50,10 @@
 </script>
 
 <section class="card stack">
-	<h2>Remote workers</h2>
+	<div class="spread">
+		<h2>Remote workers</h2>
+		<span class="chip" title="Added and revoked with their own buttons, not with Save">Saved straight away</span>
+	</div>
 	<p class="small muted">
 		A worker runs MakeMKV on another machine's drives (docs/workers.md). Each gets its own token. The
 		MakeMKV key, private data and firmware dumps are fetched from here when it connects. Without
@@ -116,6 +119,12 @@
 <style>
 	p {
 		margin: 0;
+	}
+	p .mono {
+		overflow-wrap: anywhere;
+	}
+	.chip {
+		white-space: nowrap;
 	}
 	pre {
 		margin: 0;

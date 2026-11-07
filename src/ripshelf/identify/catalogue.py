@@ -166,7 +166,7 @@ async def web_search(settings, query: str, client: httpx.AsyncClient | None = No
     It needs only the SearXNG address, not the automatic catalogue lookup.
     """
     if not (settings.searxng_url or "").strip():
-        raise CatalogueError("no SearXNG address is set (Settings → Identification → Web search)")
+        raise CatalogueError("no SearXNG address is set (Settings → Identify → Web search)")
     own = client is None
     client = client or httpx.AsyncClient(timeout=20, headers={"User-Agent": "ripshelf"})
     try:

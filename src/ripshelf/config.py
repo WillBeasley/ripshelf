@@ -135,7 +135,7 @@ class Settings(BaseSettings):
     # this is /backups, a bind mount that must exist; unset (development) they go to
     # <data>/backups.
     backup_dir: Path | None = None
-    # Remote workers. Each worker added in the UI (Settings → Remote workers) gets its
+    # Remote workers. Each worker added in the UI (Settings → Workers) gets its
     # own token. worker_token is a shared token for any worker, accepted by the
     # controller when set. A worker (`ripshelf worker`) needs controller_url and its token.
     worker_token: SecretStr | None = None
@@ -318,9 +318,9 @@ class Settings(BaseSettings):
     # A bonus episode of another show on a TV disc: an extra of this show, named after
     # the other show and the episode, or an episode in the other show's own folder.
     tv_bonus_episodes: Annotated[Literal["extra", "own_show"], UI(
-        "library", "A bonus episode of another show",
-        choices=(("extra", "Is an extra of this show, named after the other one"),
-                 ("own_show", "Goes in the other show's own folder")))] = "extra"
+        "library", "Bonus episodes of other shows",
+        choices=(("extra", 'An extra of this show, named "Other show - Episode"'),
+                 ("own_show", "An episode in the other show's own folder")))] = "extra"
     # Extras the box names (matched with confidence) are filed in Emby's extras folder
     # for their type, under their names: featurettes/, trailers/...
     extras_emby_folders: Annotated[bool, UI(

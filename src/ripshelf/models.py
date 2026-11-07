@@ -681,7 +681,7 @@ class ReleaseDetails(BaseModel):
 
 
 class Contribution(BaseModel):
-    """Sending this disc to TheDiscDB (the contribute setting in Settings → Metadata providers)."""
+    """Sending this disc to TheDiscDB (the contribute setting in Settings → Identify)."""
 
     status: Literal["not_sent", "sending", "sent", "failed"] = "not_sent"
     release_id: str | None = Field(None, description="TheDiscDB release this disc goes into; discs posted with "

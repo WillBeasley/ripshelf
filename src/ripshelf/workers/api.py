@@ -1,7 +1,7 @@
 """HTTP API for remote workers (controller side).
 
-Workers authenticate with a Bearer token, either their own (added in Settings → Remote
-workers; only its sha256 is stored, and it works for that worker id only) or the
+Workers authenticate with a Bearer token, either their own (added in Settings → Workers;
+only its sha256 is stored, and it works for that worker id only) or the
 shared ``worker_token``. Off until either exists.
 """
 
@@ -64,7 +64,7 @@ async def authorised(request: Request, authorization: Annotated[str | None, Head
                 db.touch_worker_token(row["id"])
             return Caller(row["id"], row["worker_id"])
     if not shared and not db.worker_tokens():
-        raise HTTPException(403, "remote workers are off (add one in Settings → Remote workers)")
+        raise HTTPException(403, "remote workers are off (add one in Settings → Workers)")
     raise HTTPException(401, "wrong worker token")
 
 
@@ -236,7 +236,7 @@ async def makemkv_file(worker_id: str, sha256: str, request: Request):
     return FileResponse(path, media_type="application/octet-stream")
 
 
-# --- Settings → Remote workers (the UI) --------------------------------------------------
+# --- Settings → Workers (the UI) --------------------------------------------------
 
 admin = APIRouter(prefix="/api/remote-workers")
 

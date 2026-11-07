@@ -111,7 +111,7 @@ class Agent:
                 self.abandon_all(str(e))
                 if not refused:
                     log.error("%s. This worker is stopped until it's accepted again (checked every %d s); "
-                              "a revoked worker needs a new token from Settings → Remote workers.",
+                              "a revoked worker needs a new token from Settings → Workers.",
                               e, REFUSED_RETRY_S)
                 refused = True
                 await asyncio.sleep(REFUSED_RETRY_S)

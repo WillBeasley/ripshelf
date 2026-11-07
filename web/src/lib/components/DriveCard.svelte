@@ -200,7 +200,7 @@
 					</button>
 				{/if}
 				{#if problem.actions.includes('setup')}
-					<a class="button" href="/settings">Setup</a>
+					<a class="button" href="/settings/drives">Setup</a>
 				{/if}
 			</div>
 		</div>

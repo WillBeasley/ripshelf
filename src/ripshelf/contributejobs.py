@@ -1,6 +1,6 @@
 """Sending confirmed discs to TheDiscDB (mixed into ``jobs.Manager``).
 
-It's opt-in, in Settings → Metadata providers. Before anything is sent, the user goes
+It's opt-in, in Settings → Identify. Before anything is sent, the user goes
 through the disc's titles and names the extras worth keeping (the film and episodes are
 named after themselves, and the rest are left out). In "ask" mode each eligible job then
 has a send button, and in "auto" mode a disc is sent once the user has confirmed what it
@@ -410,7 +410,7 @@ class ContributeMixin:
             except catalogue.CatalogueError as e:
                 notes.append(f"No web search for the ASIN: {e}.")
         else:
-            notes.append("Set up SearXNG (Settings → Identification) to search Amazon for the ASIN.")
+            notes.append("Set up SearXNG (Settings → Identify) to search Amazon for the ASIN.")
 
         if job.media == MediaKind.movie and job.identity.tmdb_id and (tmdb := self._tmdb()):
             try:
