@@ -388,6 +388,7 @@ class ScanSplit(BaseModel):
                                                              "of the width")
     spine: float = Field(0.05, ge=0, le=0.2, description="the spine's width, left out of both halves")
     swap: bool = Field(False, description="the front is the left half")
+    auto: bool = Field(False, description="found by ripshelf (the spine's edges in the picture), not set by hand")
 
 
 class CoverScan(BaseModel):
