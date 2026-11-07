@@ -18,6 +18,11 @@
 		const key = form.secrets[srv.key]?.trim() || null;
 		const url = f[`${srv.id}_url`].trim();
 		libs = (await libAct.run(() => api.serverLibraries(srv.id, url, key))) ?? [];
+		for (const k of ['movies', 'tv'] as const) {
+			// Pre-pick the only library of the right kind.
+			const fitting = libs.filter((l) => fits(l, k));
+			if (!f[`${srv.id}_${k}_library`] && fitting.length === 1) pickLibrary(k, fitting[0].id);
+		}
 	}
 	const fits = (l: ServerLibrary, k: 'movies' | 'tv') =>
 		!l.type || l.type === 'mixed' || l.type === (k === 'movies' ? 'movies' : 'tvshows');

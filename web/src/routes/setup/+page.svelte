@@ -1,7 +1,8 @@
 <script lang="ts">
-	// First-start setup, the basics, one step at a time. Each step is saved when you
-	// move on, so leaving half-way loses nothing; everything here is in Settings too.
-	import type { ProviderSlot, ServerLibrary, SettingsUpdate, SettingsView, SetupTools } from '#lib/api-types.ts';
+	// First-start setup, the basics, one step at a time. Each step is saved when you move on,
+	// so leaving half-way loses nothing. The fields are Settings' own (lib/settings), so
+	// they read and save the same way there.
+	import type { SettingsUpdate, SetupTools } from '#lib/api-types.ts';
 	import { goto } from '$app/navigation';
 	import { api } from '#lib/api.ts';
 	import { Action } from '#lib/actions.svelte.ts';
@@ -10,142 +11,46 @@
 	import FolderStatus from '#lib/components/FolderStatus.svelte';
 	import Command from '#lib/components/Command.svelte';
 	import SetupProblems from '#lib/components/SetupProblems.svelte';
+	import { SettingsForm, type SecretName } from '#lib/settings/form.svelte.ts';
+	import DriveList from '#lib/settings/DriveList.svelte';
+	import Field from '#lib/settings/Field.svelte';
+	import MediaServer from '#lib/settings/sections/MediaServer.svelte';
 
 	const steps = ['Drives', 'MakeMKV', 'Folders', 'Film and TV data', 'Extras (optional)'] as const;
+	// What each step saves.
+	const STEP_FIELDS: string[][] = [
+		['disabled_drives'],
+		['makemkv_key'],
+		['library_dir', 'scratch_dir'],
+		['tmdb_api_key', 'tvdb_api_key', 'omdb_api_key', 'metadata_providers'],
+		['transcode_enabled', 'transcode_codecs', 'transcode_crop', 'transcode_hdr', 'transcode_encoder', 'transcode_quality',
+			'transcode_keep_original', 'emby_url', 'emby_api_key', 'emby_movies_library', 'emby_movies_path', 'emby_tv_library',
+			'emby_tv_path', 'pushover_user_key', 'pushover_app_token']
+	];
 	let step = $state(0);
 	let saved = $state<number[]>([]); // steps saved (a ✓), not just passed
 
-	const act = new Action();
+	const form = new SettingsForm();
+	const act = form.act;
 	const importAct = new Action();
-	let view = $state<SettingsView | null>(null);
 	let tools = $state<SetupTools | null>(null);
 	let importNote = $state<string | null>(null);
 	let fileInput = $state<HTMLInputElement | null>(null);
 
-	// The fields of every step. Secrets start empty, and blank keeps the saved one.
-	let names = $state<Record<string, string>>({});
-	let disabled = $state<string[]>([]);
-	type Lists = { movie: ProviderSlot[]; tv: ProviderSlot[]; episodes: ProviderSlot[] };
-	let lists = $state<Lists>({ movie: [], tv: [], episodes: [] });
-	let f = $state({
-		makemkv_key: '',
-		library_dir: '',
-		scratch_dir: '',
-		tmdb_api_key: '',
-		tvdb_api_key: '',
-		omdb_api_key: '',
-		emby_url: '',
-		emby_api_key: '',
-		emby_movies_library: '',
-		emby_movies_path: '',
-		emby_tv_library: '',
-		emby_tv_path: '',
-		pushover_user_key: '',
-		pushover_app_token: '',
-		transcode_enabled: true,
-		// Off, crop only (re-encodes letterboxed rips, nothing else), or transcode the codecs listed.
-		transcode_mode: 'transcode' as 'off' | 'crop' | 'transcode',
-		transcode_codecs: 'vc1',
-		transcode_crop: true,
-		transcode_hdr: false,
-		transcode_encoder: 'auto' as 'auto' | 'qsv' | 'vaapi' | 'nvenc' | 'x265',
-		transcode_quality: 21,
-		transcode_keep_original: false
-	});
-
-	async function load() {
-		const [v, t] = await Promise.all([act.run(() => api.settings()), act.run(() => api.setupTools())]);
-		if (v) {
-			view = v;
-			disabled = [...v.disabled_drives];
-			lists = {
-				movie: [...(v.metadata_providers.movie ?? [])],
-				tv: [...(v.metadata_providers.tv ?? [])],
-				episodes: [...(v.metadata_providers.episodes ?? [])]
-			};
-			names = Object.fromEntries(live.drives.map((d) => [d.id, d.name ?? '']));
-			f.library_dir = v.library_dir;
-			f.scratch_dir = v.scratch_dir;
-			f.emby_url = v.emby_url ?? '';
-			f.emby_movies_library = v.emby_movies_library ?? '';
-			f.emby_movies_path = v.emby_movies_path ?? '';
-			f.emby_tv_library = v.emby_tv_library ?? '';
-			f.emby_tv_path = v.emby_tv_path ?? '';
-			f.transcode_enabled = v.transcode_enabled;
-			f.transcode_mode = !v.transcode_enabled ? 'off' : !v.transcode_codecs.length && v.transcode_crop === 'always' ? 'crop' : 'transcode';
-			f.transcode_codecs = v.transcode_codecs.join(', ') || 'vc1';
-			f.transcode_crop = v.transcode_crop !== 'off';
-			f.transcode_hdr = v.transcode_hdr;
-			f.transcode_encoder = v.transcode_encoder;
-			f.transcode_quality = v.transcode_quality;
-			f.transcode_keep_original = v.transcode_keep_original;
-		}
-		if (t) tools = t;
-	}
 	$effect(() => {
-		load();
+		form.load();
+		api.setupTools().then((t) => (tools = t)).catch(() => {});
 	});
-
-	const typed = (v: string) => (v.trim() ? v.trim() : undefined);
-
-	// What each step saves (only what was typed or changed).
-	function stepBody(i: number): SettingsUpdate {
-		if (!view) return {};
-		switch (i) {
-			case 0:
-				return { disabled_drives: disabled };
-			case 1:
-				return { makemkv_key: typed(f.makemkv_key) };
-			case 2:
-				return {
-					library_dir: f.library_dir.trim() !== view.library_dir ? f.library_dir.trim() : undefined,
-					scratch_dir: f.scratch_dir.trim() !== view.scratch_dir ? f.scratch_dir.trim() : undefined
-				};
-			case 3:
-				return {
-					tmdb_api_key: typed(f.tmdb_api_key),
-					tvdb_api_key: typed(f.tvdb_api_key),
-					omdb_api_key: typed(f.omdb_api_key),
-					metadata_providers: lists
-				};
-			default:
-				return {
-					emby_url: f.emby_url.trim() || null,
-					emby_api_key: typed(f.emby_api_key),
-					emby_movies_library: f.emby_movies_library || null,
-					emby_movies_path: f.emby_movies_path || null,
-					emby_tv_library: f.emby_tv_library || null,
-					emby_tv_path: f.emby_tv_path || null,
-					pushover_user_key: typed(f.pushover_user_key),
-					pushover_app_token: typed(f.pushover_app_token),
-					...transcodeBody()
-				};
-		}
-	}
+	const f = $derived(form.f);
 
 	async function save(i: number): Promise<boolean> {
-		if (i === 0) {
-			for (const d of live.drives) {
-				const name = (names[d.id] ?? '').trim();
-				if (name !== (d.name ?? '')) {
-					const r = await act.run(() => api.renameDrive(d.id, name));
-					if (r === undefined) return false;
-				}
-			}
-		}
-		const body = Object.fromEntries(Object.entries(stepBody(i)).filter(([, v]) => v !== undefined));
-		if (!Object.keys(body).length) return true;
-		const v = await act.run(() => api.saveSettings(body));
-		if (!v) return false;
-		view = v;
-		for (const k of ['makemkv_key', 'tmdb_api_key', 'tvdb_api_key', 'omdb_api_key', 'emby_api_key', 'pushover_user_key', 'pushover_app_token'] as const)
-			f[k] = '';
+		if (!(await form.save(STEP_FIELDS[i]))) return false;
 		if (i === 1) tools = (await api.setupTools().catch(() => null)) ?? tools;
 		return true;
 	}
 
 	// Without TMDB nothing is identified, so that step needs a key (or "Skip for now").
-	const needsTmdb = $derived(step === 3 && !view?.tmdb_api_key_set && !f.tmdb_api_key.trim());
+	const needsTmdb = $derived(step === 3 && form.ready && !form.isSet('tmdb_api_key') && !form.secrets.tmdb_api_key?.trim());
 
 	async function next() {
 		if (needsTmdb) {
@@ -159,33 +64,15 @@
 	}
 
 	async function finish() {
-		const v = await act.run(() => api.saveSettings({ setup_complete: true }));
+		const v = await act.run(() => api.saveSettings({ setup_complete: true } as SettingsUpdate));
 		if (v) {
 			live.setupComplete = true;
 			goto('/');
 		}
 	}
 
-	// The form as typed, for the Test buttons.
-	const typedValues = (): SettingsUpdate => ({
-		makemkv_key: typed(f.makemkv_key),
-		library_dir: f.library_dir.trim(),
-		scratch_dir: f.scratch_dir.trim(),
-		tmdb_api_key: typed(f.tmdb_api_key),
-		tvdb_api_key: typed(f.tvdb_api_key),
-		omdb_api_key: typed(f.omdb_api_key),
-		emby_url: f.emby_url.trim() || null,
-		emby_api_key: typed(f.emby_api_key),
-		emby_movies_library: f.emby_movies_library || null,
-		emby_movies_path: f.emby_movies_path || null,
-		emby_tv_library: f.emby_tv_library || null,
-		emby_tv_path: f.emby_tv_path || null,
-		pushover_user_key: typed(f.pushover_user_key),
-		pushover_app_token: typed(f.pushover_app_token)
-	});
-
 	const uhdDrives = $derived(live.drives.filter((d) => d.capabilities.includes('uhd')));
-	const needsData = $derived(uhdDrives.filter((d) => !view?.makemkv_drive_data[d.id]));
+	const needsData = $derived(uhdDrives.filter((d) => !form.view?.makemkv_drive_data[d.id]));
 
 	async function importData(e: SubmitEvent) {
 		e.preventDefault();
@@ -195,13 +82,13 @@
 			importAct.error = 'Choose a _private_data.tar first';
 			return;
 		}
-		const form = new FormData();
-		form.set('drive_ids', 'all');
-		form.set('file', file);
-		const r = await importAct.run(() => api.importPrivateData(form));
+		const data = new FormData();
+		data.set('drive_ids', 'all');
+		data.set('file', file);
+		const r = await importAct.run(() => api.importPrivateData(data));
 		if (r) {
 			importNote = `Imported for ${r.drive_ids.length} drive(s).`;
-			view = (await api.settings().catch(() => null)) ?? view;
+			await form.refresh();
 		}
 	}
 
@@ -215,65 +102,31 @@
 		tvmaze: 'TV shows and episode lists. No key.',
 		omdb: 'A second opinion on films (IMDb data). Off unless you want it.'
 	};
-	const KEY_FIELD: Record<string, 'tmdb_api_key' | 'tvdb_api_key' | 'omdb_api_key'> = {
-		tmdb: 'tmdb_api_key',
-		tvdb: 'tvdb_api_key',
-		omdb: 'omdb_api_key'
-	};
-	const providers = $derived(ORDER.map((n) => view?.providers.find((p) => p.name === n)).filter((p) => p != null));
+	const KEY_FIELD: Record<string, SecretName> = { tmdb: 'tmdb_api_key', tvdb: 'tvdb_api_key', omdb: 'omdb_api_key' };
+	const providers = $derived(ORDER.map((n) => form.view?.providers.find((p) => p.name === n)).filter((p) => p != null));
+	const lists = $derived(f.metadata_providers);
 	const providerOn = (name: string) => Object.values(lists).some((l) => l.some((r) => r.name === name && r.enabled));
 	function setProvider(name: string, on: boolean) {
-		lists = {
-			movie: lists.movie.map((r) => (r.name === name ? { ...r, enabled: on } : r)),
-			tv: lists.tv.map((r) => (r.name === name ? { ...r, enabled: on } : r)),
-			episodes: lists.episodes.map((r) => (r.name === name ? { ...r, enabled: on } : r))
-		};
-	}
-	const keySet = (name: string) =>
-		name === 'tmdb' ? view?.tmdb_api_key_set : name === 'tvdb' ? view?.tvdb_api_key_set : name === 'omdb' ? view?.omdb_api_key_set : true;
-
-	// The transcoding choice as settings, where "crop only" re-encodes just the letterboxed rips.
-	function transcodeBody(): SettingsUpdate {
-		const common = {
-			transcode_hdr: f.transcode_hdr,
-			transcode_encoder: f.transcode_encoder,
-			transcode_quality: Number(f.transcode_quality),
-			transcode_keep_original: f.transcode_keep_original
-		};
-		if (f.transcode_mode === 'off') return { transcode_enabled: false };
-		if (f.transcode_mode === 'crop')
-			return { ...common, transcode_enabled: true, transcode_codecs: [], transcode_crop: 'always' };
-		return {
-			...common,
-			transcode_enabled: true,
-			transcode_codecs: f.transcode_codecs.split(/[\s,]+/).map((c) => c.trim().toLowerCase()).filter(Boolean),
-			transcode_crop: f.transcode_crop ? 'when_transcoding' : 'off'
-		};
+		const set = (l: typeof lists.movie) => l.map((r) => (r.name === name ? { ...r, enabled: on } : r));
+		f.metadata_providers = { movie: set(lists.movie), tv: set(lists.tv), episodes: set(lists.episodes) };
 	}
 
-	// Emby's libraries, to pick where films and TV go (and map our folders onto theirs).
-	const embyAct = new Action();
-	let libraries = $state<ServerLibrary[]>([]);
-	async function loadLibraries() {
-		libraries = (await embyAct.run(() => api.serverLibraries('emby', f.emby_url.trim(), typed(f.emby_api_key) ?? null))) ?? [];
-		for (const k of ['movies', 'tv'] as const) {
-			// Pre-pick the only library of the right kind.
-			const fitting = libraries.filter((l) => fits(l, k));
-			if (!f[`emby_${k}_library`] && fitting.length === 1) pickLibrary(k, fitting[0].id);
+	// Transcoding as one choice: off, crop only (re-encodes just the letterboxed rips), or
+	// transcode the codecs listed. It sets Settings' transcoding fields.
+	type Mode = 'off' | 'crop' | 'transcode';
+	const mode = $derived<Mode>(
+		!f.transcode_enabled ? 'off' : !f.transcode_codecs.length && f.transcode_crop === 'always' ? 'crop' : 'transcode'
+	);
+	function setMode(m: Mode) {
+		f.transcode_enabled = m !== 'off';
+		if (m === 'crop') {
+			f.transcode_codecs = [];
+			f.transcode_crop = 'always';
+		} else if (m === 'transcode') {
+			if (!f.transcode_codecs.length) f.transcode_codecs = ['vc1'];
+			if (f.transcode_crop === 'always') f.transcode_crop = 'when_transcoding';
 		}
 	}
-	const fits = (l: ServerLibrary, k: 'movies' | 'tv') =>
-		!l.type || l.type === 'mixed' || l.type === (k === 'movies' ? 'movies' : 'tvshows');
-	function pickLibrary(k: 'movies' | 'tv', id: string) {
-		const lib = libraries.find((l) => l.id === id);
-		f[`emby_${k}_library`] = id;
-		f[`emby_${k}_path`] = lib?.locations[0] ?? '';
-	}
-
-	function toggle(id: string, on: boolean) {
-		disabled = on ? disabled.filter((d) => d !== id) : [...disabled, id];
-	}
-
 </script>
 
 <svelte:head><title>Setup · ripshelf</title></svelte:head>
@@ -296,8 +149,8 @@
 		{/each}
 	</ol>
 
-	{#if !view}
-		<p class="muted">Loading…</p>
+	{#if !form.ready}
+		<p class="muted">{act.error ?? 'Loading…'}</p>
 	{:else}
 		<section class="card stack">
 			{#if step === 0}
@@ -306,19 +159,7 @@
 					<p>No optical drives found. Plug one in (or check it's switched on), then <button type="button" class="link" onclick={() => api.redetect().then((d) => (live.drives = d))}>look again</button>.</p>
 				{:else}
 					<p class="muted small">Give each drive a name you'll recognise (e.g. "Top bay"), and untick any ripshelf should leave alone.</p>
-					{#each live.drives as d (d.id)}
-						<div class="drive">
-							<label class="check">
-								<input type="checkbox" checked={!disabled.includes(d.id)} onchange={(e) => toggle(d.id, e.currentTarget.checked)} />
-								<span>{`${d.vendor} ${d.model}`.replace(/\s+/g, ' ')}</span>
-							</label>
-							<span class="tags">
-								<span class="muted mono small">{d.device}</span>
-								{#each d.capabilities as c (c)}<span class="chip" class:uhd={c === 'uhd'}>{c === 'uhd' ? 'UHD' : c === 'bluray' ? 'Blu-ray' : 'DVD'}</span>{/each}
-							</span>
-							<input aria-label="Name for {d.device}" placeholder="Name (optional)" bind:value={names[d.id]} disabled={disabled.includes(d.id)} />
-						</div>
-					{/each}
+					<DriveList {form} modes={false} />
 				{/if}
 			{:else if step === 1}
 				<h2>MakeMKV</h2>
@@ -342,16 +183,13 @@
 						</div>
 					{/if}
 					<p class="small">
-						{#if view.makemkv_key_set}✓ ripshelf has a MakeMKV key, and gives it to MakeMKV.
+						{#if form.isSet('makemkv_key')}✓ ripshelf has a MakeMKV key, and gives it to MakeMKV.
 						{:else if tools.makemkv_registered}✓ MakeMKV is already registered (in the MakeMKV app). A key here replaces that one.
 						{:else}No MakeMKV key yet. Without one, MakeMKV runs as a trial.{/if}
 					</p>
 				{/if}
-				<label class="field">
-					MakeMKV key {view.makemkv_key_set ? '(set, leave blank to keep it)' : ''}
-					<input class="mono" bind:value={f.makemkv_key} autocomplete="off" placeholder="T-…" />
-				</label>
-				<TestButton check="makemkv" values={typedValues} label="Check the key" />
+				<Field {form} name="makemkv_key" />
+				<TestButton check="makemkv" values={form.body} label="Check the key" />
 				<p class="small muted">
 					MakeMKV is paid software; the free beta key is a courtesy while it's in beta. If ripshelf is useful to
 					you, please <a href="https://www.makemkv.com/buy/" target="_blank" rel="noreferrer">buy a licence</a>.
@@ -378,17 +216,9 @@
 			{:else if step === 2}
 				<h2>Folders</h2>
 				<p class="muted small">Full paths, as this machine sees them. A network share works for the library. Use its full path, not a mapped drive letter.</p>
-				<label class="field">
-					Library (films go in its Movies folder, TV in TV)
-					<input class="mono" bind:value={f.library_dir} required />
-				</label>
-				<FolderStatus path={f.library_dir} />
-				<label class="field">
-					Scratch (rips in progress, about 100 GB for a UHD disc)
-					<input class="mono" bind:value={f.scratch_dir} required />
-				</label>
-				<FolderStatus path={f.scratch_dir} />
-				<TestButton check="paths" values={typedValues} label="Check the folders are writable" />
+				<Field {form} name="library_dir"><FolderStatus path={f.library_dir} /></Field>
+				<Field {form} name="scratch_dir"><FolderStatus path={f.scratch_dir} /></Field>
+				<TestButton check="paths" values={form.body} label="Check the folders are writable" />
 			{:else if step === 3}
 				<h2>Film and TV data</h2>
 				<p class="small">
@@ -407,57 +237,42 @@
 						</label>
 						<p class="small muted">{WHY[p.name] ?? p.description}</p>
 						{#if keyField}
-							<label class="field small">
-								<span>API key {keySet(p.name) ? '(set, leave blank to keep it)' : ''}
-									{#if p.site}· <a href={p.site} target="_blank" rel="noreferrer">get one</a>{/if}</span>
-								<input class="mono" aria-label="{p.label} API key" bind:value={f[keyField]} autocomplete="off" />
-							</label>
-							{#if p.check}<TestButton check={p.check} values={typedValues} />{/if}
+							<Field {form} name={keyField} />
+							<div class="row">
+								{#if p.check}<TestButton check={p.check} values={form.body} />{/if}
+								{#if p.site}<a class="small" href={p.site} target="_blank" rel="noreferrer">Get a key →</a>{/if}
+							</div>
 						{/if}
 					</div>
 				{/each}
-				<p class="small muted">To change the order, or use a provider for films but not TV, see Settings → Metadata providers.</p>
+				<p class="small muted">To change the order, or use a provider for films but not TV, see <a href="/settings/identify">Settings → Identify</a>.</p>
 			{:else}
 				<h2>Extras <span class="chip">optional</span></h2>
 				<p class="muted small">These are all optional, so skip them now and set them up in Settings when you want.</p>
 				<h3>Transcoding</h3>
 				<div class="choices" role="radiogroup" aria-label="Transcoding">
-					<label class="check"><input type="radio" bind:group={f.transcode_mode} value="off" /> Off (copy rips as they are)</label>
-					<label class="check"><input type="radio" bind:group={f.transcode_mode} value="crop" /> Crop black bars only (re-encodes just the letterboxed rips)</label>
-					<label class="check"><input type="radio" bind:group={f.transcode_mode} value="transcode" /> Transcode to H.265</label>
+					{#each [['off', 'Off (copy rips as they are)'], ['crop', 'Crop black bars only (re-encodes just the letterboxed rips)'], ['transcode', 'Transcode to H.265']] as [m, label] (m)}
+						<label class="check"><input type="radio" name="transcode" checked={mode === m} onchange={() => setMode(m as Mode)} /> {label}</label>
+					{/each}
 				</div>
-				{#if f.transcode_mode === 'transcode'}
-					<label class="field">
-						Re-encode rips whose video is (ffprobe codec names, comma separated)
-						<input bind:value={f.transcode_codecs} placeholder="vc1" />
+				{#if mode === 'transcode'}
+					<Field {form} name="transcode_codecs" />
+					<label class="check">
+						<input type="checkbox" checked={f.transcode_crop !== 'off'}
+							onchange={(e) => (f.transcode_crop = e.currentTarget.checked ? 'when_transcoding' : 'off')} /> Crop black bars while transcoding
 					</label>
-					<label class="check"><input type="checkbox" bind:checked={f.transcode_crop} /> Crop black bars while transcoding</label>
 				{/if}
-				{#if f.transcode_mode !== 'off'}
-					<div class="row">
-						<label class="field">
-							Encoder
-							<select bind:value={f.transcode_encoder}>
-								<option value="auto">Automatic (the first GPU encoder that works, else the CPU)</option>
-								{#if !tools?.windows}
-									<option value="qsv">GPU (Intel Quick Sync)</option>
-									<option value="vaapi">GPU (VAAPI)</option>
-								{/if}
-								<option value="nvenc">GPU (NVIDIA NVENC)</option>
-								<option value="x265">CPU (x265)</option>
-							</select>
-						</label>
-						<label class="field">
-							Quality (lower is better and bigger)
-							<input type="number" min="10" max="40" bind:value={f.transcode_quality} />
-						</label>
+				{#if mode !== 'off'}
+					<div class="two">
+						<Field {form} name="transcode_encoder" />
+						<Field {form} name="transcode_quality" />
 					</div>
-					<label class="check"><input type="checkbox" bind:checked={f.transcode_hdr} /> Also HDR, Dolby Vision and UHD rips (left alone otherwise)</label>
-					<label class="check"><input type="checkbox" bind:checked={f.transcode_keep_original} /> Keep the original rip next to it</label>
+					<Field {form} name="transcode_hdr" />
+					<Field {form} name="transcode_keep_original" />
 				{/if}
 				{#if tools && !(tools.ffmpeg.found && tools.ffprobe.found)}
 					<div class="notice">
-						<p>ffmpeg isn't installed, so rips are copied as they are{f.transcode_mode !== 'off' ? ' until it is' : ''}.{tools.windows ? ' Install it:' : ''}</p>
+						<p>ffmpeg isn't installed, so rips are copied as they are{mode !== 'off' ? ' until it is' : ''}.{tools.windows ? ' Install it:' : ''}</p>
 						{#if tools.windows}<Command text="winget install -e --id Gyan.FFmpeg" />{/if}
 					</div>
 				{/if}
@@ -474,57 +289,12 @@
 					</div>
 				{/if}
 				<h3>Emby</h3>
-				<p class="small muted">Emby is told about each new film or episode, so it shows up straight away.</p>
-				<label class="field">Server address <input bind:value={f.emby_url} placeholder="http://emby.lan:8096" /></label>
-				<label class="field">API key {view.emby_api_key_set ? '(set)' : ''} <input class="mono" bind:value={f.emby_api_key} autocomplete="off" /></label>
-				<p class="small muted">
-					Make one in Emby (as an admin) under Settings (the dashboard) → Advanced → API Keys (on some versions the Security
-					tab under Advanced) → New API Key, named something like "ripshelf".
-				</p>
-				<div class="row">
-					<button type="button" onclick={loadLibraries} disabled={embyAct.busy || !f.emby_url.trim()}>
-						{embyAct.busy ? 'Connecting…' : libraries.length ? 'Fetch the libraries again' : 'Connect and fetch the libraries'}
-					</button>
-					{#if embyAct.error}<span class="small error-text">{embyAct.error}</span>
-					{:else if libraries.length}<span class="small ok">✓ {libraries.length} libraries</span>{/if}
-				</div>
-				{#if libraries.length || f.emby_movies_library || f.emby_tv_library}
-					{#each [['movies', 'Films', view.movies_dir], ['tv', 'TV', view.tv_dir]] as [kind, label, ours] (kind)}
-						{@const k = kind as 'movies' | 'tv'}
-						{@const lib = libraries.find((l) => l.id === f[`emby_${k}_library`])}
-						<label class="field">
-							{label} go into this Emby library
-							<select value={f[`emby_${k}_library`]} onchange={(e) => pickLibrary(k, e.currentTarget.value)}>
-								<option value="">None</option>
-								{#if f[`emby_${k}_library`] && !lib}
-									<option value={f[`emby_${k}_library`]}>{f[`emby_${k}_path`] || 'saved library'}</option>
-								{/if}
-								{#each libraries.filter((l) => fits(l, k)) as l (l.id)}
-									<option value={l.id}>{l.name}{l.type ? ` (${l.type})` : ''}</option>
-								{/each}
-							</select>
-						</label>
-						{#if lib && lib.locations.length > 1}
-							<label class="field">
-								Which of its folders is ripshelf's {label.toLowerCase()} folder?
-								<select bind:value={f[`emby_${k}_path`]}>
-									{#each lib.locations as loc (loc)}<option value={loc}>{loc}</option>{/each}
-								</select>
-							</label>
-						{/if}
-						{#if f[`emby_${k}_path`]}
-							<p class="small muted">
-								ripshelf's <span class="mono">{ours}</span> is Emby's <span class="mono">{f[`emby_${k}_path`]}</span>
-							</p>
-						{/if}
-					{/each}
-				{/if}
-				<TestButton check="emby" values={typedValues} label="Test the connection" />
+				<MediaServer {form} srv={{ id: 'emby', name: 'Emby', key: 'emby_api_key', port: 8096 }} />
 				<p class="small muted">Jellyfin and Plex can be set up the same way in Settings afterwards.</p>
 				<h3>Notifications (Pushover)</h3>
-				<label class="field">User key {view.pushover_user_key_set ? '(set)' : ''} <input class="mono" bind:value={f.pushover_user_key} autocomplete="off" /></label>
-				<label class="field">App token {view.pushover_app_token_set ? '(set)' : ''} <input class="mono" bind:value={f.pushover_app_token} autocomplete="off" /></label>
-				<TestButton check="pushover" values={typedValues} label="Send a test notification" />
+				<Field {form} name="pushover_user_key" />
+				<Field {form} name="pushover_app_token" />
+				<TestButton check="pushover" values={form.body} label="Send a test notification" />
 			{/if}
 
 			{#if act.error}<p class="small error-text">{act.error}</p>{/if}
@@ -564,33 +334,17 @@
 	.steps li.done button::after {
 		content: ' ✓';
 	}
-	.drive {
-		display: grid;
-		grid-template-columns: 1fr auto;
-		align-items: center;
-		gap: 6px 12px;
-		padding: 8px 0;
-		border-top: 1px solid var(--border);
-	}
-	.drive .tags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-		align-items: center;
-		justify-content: flex-end;
-	}
-	.drive .tags .chip {
-		white-space: nowrap;
-	}
-	.drive input:not([type='checkbox']) {
-		grid-column: 1 / -1;
-	}
 	.nav {
 		margin-top: 6px;
 	}
 	.choices {
 		display: grid;
 		gap: 4px;
+	}
+	.two {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 10px;
 	}
 	.notice {
 		border-left: 3px solid var(--warn);
@@ -608,12 +362,15 @@
 	}
 	.provider {
 		display: grid;
-		gap: 4px;
+		gap: 6px;
 		padding: 8px 0;
 		border-top: 1px solid var(--border);
 	}
 	.provider p {
 		margin: 0;
+	}
+	h3 {
+		margin: 8px 0 0;
 	}
 	.ok {
 		color: var(--ok);
@@ -625,5 +382,10 @@
 		color: var(--accent, inherit);
 		text-decoration: underline;
 		cursor: pointer;
+	}
+	@media (max-width: 480px) {
+		.two {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>
