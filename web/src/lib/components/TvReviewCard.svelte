@@ -174,6 +174,27 @@
 		if (runOrder.trim()) await act.run(() => api.tvMatchText(job.id, runOrder));
 	}
 
+	// The cover scan's picks: episodes it matched with high or medium confidence.
+	const scanPicks = $derived(
+		new Map(
+			(job.scan_match?.matches ?? [])
+				.filter((x) => x.kind === 'episode' && x.episodes.length && x.confidence !== 'low')
+				.map((x) => [x.title_index, x])
+		)
+	);
+	const scanDiffers = $derived(
+		[...scanPicks].some(([i, x]) => {
+			const r = rows.find((r) => r.title_index === i);
+			return !r || r.role !== 'episode' || JSON.stringify(r.episodes.map(epKey)) !== JSON.stringify(x.episodes.map(epKey));
+		})
+	);
+	function useScanPicks() {
+		rows = rows.map((r) => {
+			const x = scanPicks.get(r.title_index);
+			return x ? { ...r, role: 'episode', episodes: x.episodes.map((e) => ({ season: e.season, episode: e.episode })) } : r;
+		});
+	}
+
 	async function confirm() {
 		await act.run(() =>
 			api.tvConfirm(
@@ -372,6 +393,12 @@
 										: '+ next episode'})
 								</label>
 							{/if}
+							{#if scanPicks.get(row.title_index)}
+								{@const x = scanPicks.get(row.title_index)!}
+								<div class="small muted scanpick" title={x.reason}>
+									From the cover scan: {x.episodes.map(code).join(' & ')} “{x.name}” ({x.confidence}){x.agrees === false ? ', which differs' : ''}
+								</div>
+							{/if}
 							{#if row.note}<div class="small muted">{row.note}</div>{/if}
 							{#if clash}<div class="small error-text">This episode is on another title too</div>{/if}
 						{/if}
@@ -382,6 +409,13 @@
 			{/each}
 		</tbody>
 	</table>
+
+	{#if scanPicks.size && scanDiffers}
+		<div class="row scanpicks">
+			<button onclick={useScanPicks}>Use the cover scan's picks ({scanPicks.size})</button>
+			<span class="small muted">Fills in the episodes it matched; nothing is saved until you confirm.</span>
+		</div>
+	{/if}
 
 	<Snapshots {job} />
 	<CoverScans {job} />

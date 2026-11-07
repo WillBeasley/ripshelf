@@ -538,6 +538,7 @@ class TitleMatch(BaseModel):
     """A disc title, and the line of the box's listing it was matched to."""
 
     title_index: int
+    duration_s: int = 0
     kind: Literal["feature", "episode", "extra"]
     item: int | None = Field(None, description="the listing item (its index), none for the main feature")
     name: str = Field(description="the title as the box gives it")

@@ -94,6 +94,8 @@
 		scans_to_library: true,
 		scan_read_text: true,
 		ocr_languages: 'eng',
+		extras_emby_folders: true,
+		film_unnamed_extras: 'skip' as 'skip' | 'extras',
 		library_dir: '',
 		movies_dir: '',
 		tv_dir: '',
@@ -203,6 +205,8 @@
 			scans_to_library: v.scans_to_library ?? true,
 			scan_read_text: v.scan_read_text ?? true,
 			ocr_languages: v.ocr_languages ?? 'eng',
+			extras_emby_folders: v.extras_emby_folders ?? true,
+			film_unnamed_extras: v.film_unnamed_extras ?? 'skip',
 			library_dir: v.library_dir,
 			movies_dir: v.custom_movies_dir ?? '',
 			tv_dir: v.custom_tv_dir ?? '',
@@ -371,6 +375,8 @@
 			scans_to_library: f.scans_to_library,
 			scan_read_text: f.scan_read_text,
 			ocr_languages: f.ocr_languages.trim() || 'eng',
+			extras_emby_folders: f.extras_emby_folders,
+			film_unnamed_extras: f.film_unnamed_extras,
 			...changedFolders()
 		};
 	}
@@ -770,6 +776,22 @@
 					cover scans guide. Each language needs its data installed, such as tesseract-ocr-fra for <span class="mono">fra</span>.
 				</p>
 				<TestButton check="ocr" values={body} label="Test text reading" />
+				<h3>Extras the box names</h3>
+				<label class="check">
+					<input type="checkbox" bind:checked={f.extras_emby_folders} /> File named extras into Emby's folders
+				</label>
+				<p class="small muted">
+					An extra the cover scan matches to a title (with more than low confidence) is filed under its name in Emby's
+					folder for its type: featurettes, behind the scenes, deleted scenes, interviews, trailers, scenes, shorts
+					or extras, beside the film or in the show's folder. A film's are ripped with it.
+				</p>
+				<label class="field">
+					A film's other titles
+					<select bind:value={f.film_unnamed_extras}>
+						<option value="skip">Leave them out</option>
+						<option value="extras">Rip them into extras/ as "Title N"</option>
+					</select>
+				</label>
 				<h3>In the library</h3>
 				<label class="check">
 					<input type="checkbox" bind:checked={f.scans_to_library} /> Copy scans to the library

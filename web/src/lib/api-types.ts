@@ -127,6 +127,7 @@ export interface Api {
   RipProgressEvent?: RipProgressEvent;
   RipState?: RipState;
   ScanListing?: ScanListing;
+  ScanMatch?: ScanMatch;
   ScanSplit?: ScanSplit;
   ScanText?: ScanText;
   ScanUpdate?: ScanUpdate;
@@ -154,6 +155,7 @@ export interface Api {
   TitleInfo?: TitleInfo;
   TitleMap?: TitleMap;
   TitleMapUpdate?: TitleMapUpdate;
+  TitleMatch?: TitleMatch;
   TitleRole?: TitleRole;
   TitleSnapshots?: TitleSnapshots;
   TitleSplit?: TitleSplit;
@@ -1058,6 +1060,10 @@ export interface Job {
    * what's on the disc, read from the scans
    */
   listing: ScanListing | null;
+  /**
+   * the listing matched to the disc's titles
+   */
+  scan_match: ScanMatch | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1502,6 +1508,72 @@ export interface SubtitleTrack {
   note: string | null;
 }
 /**
+ * The listing read from the box, matched to the disc's titles.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScanMatch".
+ */
+export interface ScanMatch {
+  matches: TitleMatch[];
+  /**
+   * listing items no title fits
+   */
+  unmatched_items: number[];
+  /**
+   * titles (not play-alls or duplicates) no line fits
+   */
+  unmatched_titles: number[];
+  /**
+   * listing items other discs of the release took
+   */
+  claimed: number[];
+  /**
+   * for the disc as a whole
+   */
+  confidence: ("high" | "medium" | "low") | null;
+  notes: string[];
+  made_at: string | null;
+}
+/**
+ * A disc title, and the line of the box's listing it was matched to.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "TitleMatch".
+ */
+export interface TitleMatch {
+  title_index: number;
+  duration_s: number;
+  kind: "feature" | "episode" | "extra";
+  /**
+   * the listing item (its index), none for the main feature
+   */
+  item: number | null;
+  /**
+   * the title as the box gives it
+   */
+  name: string;
+  /**
+   * the episode it is, when its name was found in the season's episode list
+   */
+  episodes: EpisodeRef[];
+  extra_type:
+    ("Extra" | "Featurette" | "DeletedScene" | "Trailer" | "Interview" | "Scene" | "Music" | "Short" | "Other") | null;
+  score: number;
+  confidence: "high" | "medium" | "low";
+  /**
+   * why, for the user: runtimes, order, names
+   */
+  reason: string;
+  /**
+   * the existing mapping or main title says the same (none when there is nothing to compare)
+   */
+  agrees: boolean | null;
+  /**
+   * what the existing mapping says instead, when it disagrees
+   */
+  current: string | null;
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "JobDetail".
  */
@@ -1576,6 +1648,10 @@ export interface JobDetail {
    * what's on the disc, read from the scans
    */
   listing: ScanListing | null;
+  /**
+   * the listing matched to the disc's titles
+   */
+  scan_match: ScanMatch | null;
   events: JobEvent[];
   titles: TitleInfo[];
 }
@@ -2183,6 +2259,8 @@ export interface SettingsUpdate {
   scans_to_library?: boolean | null;
   scan_read_text?: boolean | null;
   ocr_languages?: string | null;
+  extras_emby_folders?: boolean | null;
+  film_unnamed_extras?: ("skip" | "extras") | null;
 }
 /**
  * What the transcode step may do to rips from one kind of disc.
@@ -2305,6 +2383,8 @@ export interface SettingsUpdate1 {
   scans_to_library?: boolean | null;
   scan_read_text?: boolean | null;
   ocr_languages?: string | null;
+  extras_emby_folders?: boolean | null;
+  film_unnamed_extras?: ("skip" | "extras") | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -2458,6 +2538,8 @@ export interface SettingsView {
   scans_to_library: boolean;
   scan_read_text: boolean;
   ocr_languages: string;
+  extras_emby_folders: boolean;
+  film_unnamed_extras: "skip" | "extras";
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
