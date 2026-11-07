@@ -112,6 +112,8 @@ export interface Api {
   MediaRequest?: MediaRequest;
   NewRemoteWorker?: NewRemoteWorker;
   NewRemoteWorkerRequest?: NewRemoteWorkerRequest;
+  PendingScan?: PendingScan;
+  PendingScans?: PendingScans;
   Preset?: Preset;
   Problem?: Problem;
   ProviderInfo?: ProviderInfo;
@@ -1403,6 +1405,14 @@ export interface ScanListing {
    * the reading the edits started from
    */
   edited_from: string | null;
+  /**
+   * the product UPCitemdb names for the box's barcode ("" when none; looked up once)
+   */
+  upc_title: string | null;
+  /**
+   * what the box said when the disc was last identified again from it
+   */
+  identified_from: string | null;
 }
 /**
  * What's on the disc, as the box tells it.
@@ -1820,6 +1830,71 @@ export interface NewRemoteWorkerRequest {
    * as the worker reaches the controller, or blank for the public URL setting, else the address this page was loaded from
    */
   controller_url?: string | null;
+}
+/**
+ * A picture of a box kept for the next disc a drive gets.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "PendingScan".
+ */
+export interface PendingScan {
+  id: string;
+  kind: "front" | "back" | "outside_full" | "inside_full" | "insert" | "other";
+  source: "scanner" | "upload" | "camera";
+  /**
+   * the page, for inserts scanned from the feeder
+   */
+  page: number | null;
+  created_at: string;
+  /**
+   * image/jpeg, image/png or image/webp
+   */
+  content_type: string;
+  width: number;
+  height: number;
+  sha256: string;
+  size_bytes: number;
+  /**
+   * turned clockwise by this much when shown or used
+   */
+  rotate: 0 | 90 | 180 | 270;
+  /**
+   * the picture within the scan, [left, top, right, bottom] in the original's pixels, when trimmed
+   */
+  crop: number[] | null;
+  /**
+   * the cut last used for the covers, for a whole sheet
+   */
+  split: ScanSplit | null;
+  /**
+   * reading it with the vision model
+   */
+  vision: ("queued" | "reading" | "done" | "failed") | null;
+  /**
+   * why the vision model's reading failed, or what it took
+   */
+  vision_message: string | null;
+  /**
+   * its copy in the library, once filed
+   */
+  library_path: string | null;
+  drive_id: string;
+  /**
+   * forgotten after this if no disc goes in
+   */
+  expires_at: string;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "PendingScans".
+ */
+export interface PendingScans {
+  drive_id: string;
+  scans: PendingScan[];
+  /**
+   * a scan for the next disc, under way or failed
+   */
+  scanner: ScannerRun | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

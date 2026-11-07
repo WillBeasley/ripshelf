@@ -70,7 +70,7 @@ class MatchMixin:
         old = job.scan_match.model_dump(exclude={"made_at"}) if job.scan_match else None
         if (m.model_dump(exclude={"made_at"}) if m else None) != old:
             job.scan_match = m
-            self._save(job)
+            self._save_scans(job)
         return job.scan_match
 
     # --- using it ---------------------------------------------------------------------
@@ -193,7 +193,7 @@ class MatchMixin:
         if d.barcode and job.listing:
             if job.listing.upc_title is None:
                 job.listing.upc_title = await self._upc_title(d.barcode)
-                self._save(job)
+                self._save_scans(job)
             if job.listing.upc_title:
                 name = product_name(job.listing.upc_title)
                 if name and all(title_similarity(name, n) < 0.9 for n in hints.names):
@@ -228,7 +228,7 @@ class MatchMixin:
         if not (d.title or d.barcode) or job.listing.identified_from == key:
             return
         job.listing.identified_from = key
-        self._save(job)
+        self._save_scans(job)
         self._event(job, "info", "Identifying again with what the cover scan says")
         d_rt = self.drives.get(job.drive_id)
         if d_rt:

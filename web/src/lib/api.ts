@@ -8,6 +8,8 @@ import type {
 	CoverScan,
 	Listing,
 	ListingView,
+	PendingScan,
+	PendingScans,
 	ScanMatch,
 	ScanText,
 	DeleteJobsResult,
@@ -129,6 +131,21 @@ export const api = {
 		call<ContributionView>('DELETE', `/jobs/${id}/thediscdb/cover/${side}`),
 	scanner: () => call<ScannerInfo>('GET', '/scanner'),
 	listing: (id: number) => call<ListingView>('GET', `/jobs/${id}/listing`),
+	pendingScans: (driveId: string) => call<PendingScans>('GET', `/drives/${encodeURIComponent(driveId)}/pending-scans`),
+	addPendingScan: (driveId: string, file: File, kind: ScanKind, source: 'upload' | 'camera') => {
+		const form = new FormData();
+		form.append('file', file);
+		form.append('kind', kind);
+		form.append('source', source);
+		return call<PendingScan>('POST', `/drives/${encodeURIComponent(driveId)}/pending-scans`, form);
+	},
+	scanPending: (driveId: string, body: ScannerScanRequest) =>
+		call<ScannerRun>('POST', `/drives/${encodeURIComponent(driveId)}/pending-scans/scanner`, body),
+	clearPendingScanner: (driveId: string) =>
+		call<void>('DELETE', `/drives/${encodeURIComponent(driveId)}/pending-scans/scanner`),
+	deletePendingScan: (driveId: string, scan: string) =>
+		call<void>('DELETE', `/drives/${encodeURIComponent(driveId)}/pending-scans/${scan}`),
+	pendingScanUrl: (scan: string, thumb = false) => `/api/pending-scans/${scan}${thumb ? '?thumb=true' : ''}`,
 	scanMatch: (id: number) => call<ScanMatch | null>('GET', `/jobs/${id}/scan-match`),
 	ripExtras: (id: number) => call<Job>('POST', `/jobs/${id}/extras/rip`),
 	readWithVision: (id: number, scan: string) => call<{ queued: boolean }>('POST', `/jobs/${id}/scans/${scan}/vision`),

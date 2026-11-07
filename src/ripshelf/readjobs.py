@@ -85,7 +85,7 @@ class ReadingMixin:
         sl.edited = edited
         sl.edited_from = sl.read_at or now()
         job.listing = sl
-        self._save(job)
+        self._save_scans(job)
         self.rematch(job_id)
         return self.listing_view(job_id)
 
@@ -94,7 +94,7 @@ class ReadingMixin:
         job = self._job(job_id)
         if job.listing:
             job.listing.edited = job.listing.edited_from = None
-            self._save(job)
+            self._save_scans(job)
             self.rematch(job_id)
         return self.listing_view(job_id)
 
@@ -123,7 +123,7 @@ class ReadingMixin:
         for k, v in kw.items():
             setattr(sl, k, v)
         job.listing = sl
-        self._save(job)
+        self._save_scans(job)
 
     async def _read_job(self, job_id: int) -> None:
         try:
@@ -186,7 +186,7 @@ class ReadingMixin:
             sc.rotate = (sc.rotate + reading.turned) % 360
             sc.split = None
             self._forget_thumbs(job, sc)
-            self._save(job)
+            self._save_scans(job)
         text = ScanText(scan_id=scan_id, key=self._read_key(sc), read_at=now(), engine=engine,
                         seconds=round(time.monotonic() - started, 1), turned=reading.turned,
                         lines=reading.lines, more=reading.more, barcodes=reading.barcodes)
@@ -211,7 +211,7 @@ class ReadingMixin:
         if changed:
             sl.read_at = now()
         job.listing = sl
-        self._save(job)
+        self._save_scans(job)
         self.rematch(job_id)
         self.identify_from_scan(job_id)
         if texts and engine:  # a Tesseract reading: the vision model's turn, if Settings say

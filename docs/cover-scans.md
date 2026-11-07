@@ -2,7 +2,11 @@
 
 A disc's box often says more than the disc does. The back lists the extras, the inside of the sleeve lists the episodes or chapters, and the front shows which edition it is. ripshelf keeps pictures of the box with each job. They come from a network scanner, an uploaded picture, or a phone's camera.
 
-Open a job (on Drives, Review or Finished) and expand **Cover scans**. Each picture is labelled with what it shows:
+**Where to add them:**
+- **Overview:** each drive with a disc in has **Add a cover scan**, which opens the job straight at its scans. That works while the disc is still being scanned, so the box can help identify it.
+- **Any job:** in the job's panel, **Cover scans** is near the top, and it's there for every job, from the moment a disc is detected.
+- **Review cards:** at the bottom.
+- **Before the disc goes in:** a drive with no disc has **Add a scan for the next disc**. The pictures wait there, for up to a day, and the next disc put in that drive takes them as soon as it's detected. They're read while MakeMKV scans the disc, in time to help identify it. Pictures can be removed before then, and are forgotten after a day if no disc comes. Each picture is labelled with what it shows:
 
 | Kind | What it is |
 |---|---|
@@ -129,6 +133,20 @@ If Ollama already runs elsewhere (another compose stack, another machine), use i
 - On Intel integrated graphics (a UHD 770), Ollama's Vulkan backend found the GPU, but requests failed or ran far slower than on the CPU. Plan on the CPU.
 - A cloud model takes seconds and leaves the CPU alone.
 
+### The box helps identify the disc
+
+What a scan reads is used to identify the disc as well as to list what's on it:
+- **Film title:** the title read off the box (usually from the spine) is searched for first, ahead of the disc's label, and the year printed on it counts.
+- **Barcode:** looked up once with UPCitemdb (about 100 free lookups a day), and the product's name is searched for too.
+- **Evidence:** a candidate found this way says so ("From the cover scan: the cover scan reads “…”").
+- **TV:** a disc whose label says nothing searches for the show the spine names.
+
+A disc TheDiscDB recognises still goes by TheDiscDB. A box never overrides a confident match.
+
+If a scan is read after identification, while the job waits for review with nothing confirmed, the disc is identified again with what the box says. That happens once for each new reading of the title or barcode.
+
+A film's extras the box names are ripped with the film when the scan was read before the rip started. Those named by a scan read during the rip are ripped straight after the film, before the disc is ejected.
+
 ## Matching the listing to the disc
 
 ripshelf matches each line of the listing to one of the disc's titles. **Matched from the cover scan** shows each title with the line it was matched to, a confidence (high, medium or low) and, when you tap it, why: "runs 22:06 against 22 min printed", or "“Brolly Bus” is S03E34; listed 1st, title 1 is 1st".
@@ -254,6 +272,10 @@ TV/Pippa & Goose (2013)/scans/PIPPA_&_GOOSE_KITE_TRAM - front.jpg
 | `DELETE /api/jobs/{id}/scans/{scan}` | remove the picture |
 | `POST /api/jobs/{id}/scans/{scan}/covers` | use it as the TheDiscDB covers, with `{"position": 0.5, "spine": 0.05, "swap": false}` for a whole sheet |
 | `GET /api/scanner` | the scanner's model and state |
+| `GET /api/drives/{drive}/pending-scans` | the pictures waiting for the drive's next disc (and a scan under way for it) |
+| `POST /api/drives/{drive}/pending-scans` | add one: a form with `file`, `kind` and `source` |
+| `POST /api/drives/{drive}/pending-scans/scanner` | scan one from the network scanner |
+| `DELETE /api/drives/{drive}/pending-scans/{scan}` | remove one |
 | `GET /api/jobs/{id}/listing` | what's on the disc: the reading (`listing.found`), your version (`listing.edited`), which one counts (`current`), and whether a newer reading differs from your version |
 | `PUT /api/jobs/{id}/listing` | save your version |
 | `DELETE /api/jobs/{id}/listing/edits` | drop your version and go back to the reading |

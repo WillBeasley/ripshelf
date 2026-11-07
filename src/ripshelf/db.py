@@ -106,6 +106,11 @@ def now() -> datetime:
     return datetime.now(UTC)
 
 
+# The fields the box's scans own: the pipeline doesn't change them, and must not undo them
+# when it saves a copy of the job it read before a scan arrived.
+SCAN_FIELDS = ("scans", "scanner", "listing", "scan_match", "scans_rev")
+
+
 class JobRecord(Job):
     """Job plus internal bookkeeping that the API does not expose."""
 
@@ -119,6 +124,8 @@ class JobRecord(Job):
     notified: list[str] = []
     disc_index: int | None = None  # MakeMKV's number for the drive ("backup" takes disc:N only)
     filed_extras: dict[int, str] = {}  # a film's extras copied to the library: title -> file
+    # Bumped by every save of SCAN_FIELDS, so a save from a copy read before them can't undo them.
+    scans_rev: int = 0
 
     def art_url(self) -> tuple[str | None, bool]:
         """(poster URL, proposed?) for the disc, from the confirmed identity first, then the best guess."""
