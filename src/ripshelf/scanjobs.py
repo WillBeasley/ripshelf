@@ -16,6 +16,7 @@ import hashlib
 import logging
 import shutil
 import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -379,20 +380,32 @@ class ScansMixin:
         job.scanner = run
         self._save(job)
         self._scanner_job = job_id
-        self._scanner_task = asyncio.create_task(self._run_scanner(job_id, client, run, body.dpi or self.s.scanner_dpi))
+
+        def show(r: ScannerRun | None) -> None:
+            job = self.db.get_job(job_id)
+            if job:
+                job.scanner = r
+                self._save(job)
+
+        async def keep(data: bytes) -> None:
+            await self.add_scan(job_id, data, run.kind, "scanner")
+
+        self._scanner_task = asyncio.create_task(
+            self._run_scanner(f"job {job_id}", client, run, body.dpi or self.s.scanner_dpi, keep, show))
         return run
 
-    async def _run_scanner(self, job_id: int, client: Escl, run: ScannerRun, dpi: int) -> None:
+    async def _run_scanner(self, owner: str, client: Escl, run: ScannerRun, dpi: int,
+                           keep: Callable[[bytes], Awaitable[None]],
+                           show: Callable[[ScannerRun | None], None]) -> None:
+        """Scan, giving each page to ``keep`` and the run's progress to ``show`` (None when
+        it's over and the pages are in)."""
         def update(done: bool = False, **kw) -> None:
             for k, v in kw.items():
                 setattr(run, k, v)
-            job = self.db.get_job(job_id)
-            if job:
-                job.scanner = None if done else run.model_copy()
-                self._save(job)
+            show(None if done else run.model_copy())
 
         async def got_page(n: int, data: bytes) -> None:
-            await self.add_scan(job_id, data, run.kind, "scanner")
+            await keep(data)
             update(pages=n)
 
         def got_job(url: str) -> None:
@@ -406,10 +419,10 @@ class ScansMixin:
             update(done=True)
             raise
         except (ScannerError, ValueError, KeyError) as e:
-            log.info("scan for job %s failed: %s", job_id, e)
+            log.info("scan for %s failed: %s", owner, e)
             update(state="failed", message=str(e))
         except Exception as e:  # never leave the job saying it's scanning
-            log.exception("scan for job %s failed", job_id)
+            log.exception("scan for %s failed", owner)
             update(state="failed", message=f"The scan failed: {e}")
         finally:
             self._scanner_job = self._scanner_url = None

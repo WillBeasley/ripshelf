@@ -525,6 +525,10 @@ class ScanListing(BaseModel):
     found: Listing | None = Field(None, description="what reading found, replaced by each reading")
     edited: Listing | None = Field(None, description="the user's listing, kept until they drop it")
     edited_from: datetime | None = Field(None, description="the reading the edits started from")
+    upc_title: str | None = Field(None, description="the product UPCitemdb names for the box's barcode (\"\" when "
+                                                    "none; looked up once)")
+    identified_from: str | None = Field(None, description="what the box said when the disc was last identified "
+                                                          "again from it")
 
     @property
     def stale_edits(self) -> bool:
@@ -571,6 +575,19 @@ class ScanMatch(BaseModel):
     confidence: Confidence | None = Field(None, description="for the disc as a whole")
     notes: list[str] = []
     made_at: datetime | None = None
+
+
+class PendingScan(CoverScan):
+    """A picture of a box kept for the next disc a drive gets."""
+
+    drive_id: str
+    expires_at: datetime = Field(description="forgotten after this if no disc goes in")
+
+
+class PendingScans(BaseModel):
+    drive_id: str
+    scans: list[PendingScan] = []
+    scanner: ScannerRun | None = Field(None, description="a scan for the next disc, under way or failed")
 
 
 ScannerSource = Literal["platen", "feeder"]
@@ -1400,3 +1417,6 @@ class JobsDeleted(BaseModel):
 
 
 ServerEvent = JobUpdated | DriveUpdated | RipProgressEvent | JobEventAdded | StatusChanged | JobsDeleted
+
+
+PendingScans.model_rebuild()

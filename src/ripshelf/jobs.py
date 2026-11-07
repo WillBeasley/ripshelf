@@ -82,6 +82,7 @@ from .models import (
     TitleInfo,
     TitleRole,
 )
+from .pendingscans import PendingMixin
 from .proc import WINDOWS
 from .providers import films, thediscdb
 from .readjobs import ReadingMixin
@@ -152,7 +153,7 @@ class DriveRuntime:
     tasks: set[asyncio.Task] = field(default_factory=set)
 
 
-class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin, MatchMixin, VisionMixin):
+class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin, MatchMixin, VisionMixin, PendingMixin):
     def __init__(self, settings: Settings, db: Database, backend: DriveBackend, bus: EventBus):
         self.s = settings
         self.db = db
@@ -174,6 +175,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         self._init_scans()
         self._init_reading()
         self._init_vision()
+        self._init_pending()
         self.support = SupportFiles(settings.makemkv_files_dir)
         self.hub = WorkerHub(on_drives_changed=self._remote_drives,
                              local_ids=lambda: {i for i, d in self.drives.items() if not d.remote})
@@ -600,6 +602,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         self._event(job, "state", f"Disc detected in {d.hw.device}: {ident.label or 'no label'}")
         self._save(job)
         self._spawn_notify(job, "disc")
+        self._spawn_bg(self.attach_pending(job.id), job.id)  # pictures of the box added before it went in
         self._spawn(d, self._pipeline(job.id), job.id)
         self.publish_status()
         return job
@@ -859,6 +862,13 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             return
         candidates: list[Candidate] = []
         queries = facts.names + [q for q in parse_label(job.disc.label).queries if q not in facts.names]
+        # What the box says, read off a scan: its title first, as it's printed rather than guessed.
+        hints = await self.scan_hints(job)
+        if hints.names:
+            facts.names = hints.names + [n for n in facts.names if n not in hints.names]
+            queries = hints.names[:2] + [q for q in queries if q not in hints.names][:1]
+            if facts.label_year is None:
+                facts.label_year = hints.year
         searches = [n for n in providers.enabled(self.s, "movie") if n != "thediscdb"]
         found = await self._catalogue_lookup(job) if searches else None
         if found and found.names:
@@ -887,6 +897,11 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         films.cross_check(candidates)
         if found and found.names:
             candidates = catalogue.weigh(candidates, found)
+        for c in candidates:
+            for n, why in zip(hints.names, hints.evidence, strict=False):
+                if max(scoring.title_similarity(n, c.title), scoring.title_similarity(n, c.original_title or "")) >= 0.9:
+                    c.evidence.append(Evidence(ok=True, text=f"From the cover scan: {why[0].lower()}{why[1:]}"))
+                    break
         job = self.db.get_job(job_id)  # the rip task may have saved meanwhile
         job.candidates = candidates[:8]
         best = candidates[0] if candidates else None
@@ -1208,6 +1223,16 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                     break
                 if not backup:
                     saved_ok = saved_ok and any(m.code == MSG_COPY_COMPLETE for m in rip_log.messages)
+            if res.returncode == 0 and resume is None and not backup and title_arg != "all":
+                # A box scanned while the film ripped may name extras: rip them before the eject.
+                late = [i for i in self.film_extra_titles(self.db.get_job(job_id)) if i not in extras]
+                for i in late:
+                    self._event(job, "rip", f"Ripping title {i}, an extra the cover scan names")
+                    late_res = await d.rip.run([*args[:4], str(i), str(out_dir)], home,
+                                               self.work_dir(job) / "rip-extras.log")
+                    if late_res.cancelled:
+                        return
+                extras = [*extras, *late]
         finally:
             d.rip = None
         job = self.db.get_job(job_id)
