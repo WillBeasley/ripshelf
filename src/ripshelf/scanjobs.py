@@ -109,6 +109,7 @@ class ScansMixin:
         out.write_bytes(images.thumbnail(img, images.VIEW_PX if large else images.THUMB_PX))
 
     def _forget_thumbs(self, job: JobRecord, sc: CoverScan) -> None:
+        """The thumbnails made from the scan as it was trimmed and turned."""
         for size in ("thumb", "view"):
             (self._scans_dir(job) / f"{sc.id}.{size}.jpg").unlink(missing_ok=True)
 
@@ -125,7 +126,8 @@ class ScansMixin:
         job = self._job(job_id)
         if len(job.scans) >= MAX_SCANS:
             raise ValueError(f"a job keeps at most {MAX_SCANS} pictures; remove some first")
-        trim = source == "scanner" and self.s.scanner_trim
+        # Scans have the empty glass around them; a photo is all picture.
+        trim = source != "camera" and self.s.scanner_trim
 
         def measure() -> tuple[int, int, list[int] | None]:
             img = images.open_image(data)
@@ -148,6 +150,7 @@ class ScansMixin:
         if kind in COVER_KINDS:
             await self._scan_cover_quietly(job_id, sc.id)
         await self._file_scans_if_done(job_id)
+        self.read_scans(job_id)
         return self._find(self._job(job_id), sc.id)
 
     @staticmethod
@@ -180,6 +183,7 @@ class ScansMixin:
                 sc.crop = None
         self._forget_thumbs(job, sc)
         self._save(job)
+        self.read_scans(job_id)  # read again if what the reading depends on changed
         return sc
 
     async def delete_scan(self, job_id: int, scan_id: str) -> None:
@@ -189,8 +193,11 @@ class ScansMixin:
         d = self._scans_dir(job)
         (d / f"{sc.id}.{EXTS[sc.content_type]}").unlink(missing_ok=True)
         self._forget_thumbs(job, sc)
+        self._text_path(job, sc.id).unlink(missing_ok=True)
         job.scans = [x for x in job.scans if x.id != scan_id]
         self._save(job)
+        if job.listing:
+            self._rebuild_listing(job_id)
 
     # --- covers ---------------------------------------------------------------------
 
@@ -216,6 +223,7 @@ class ScansMixin:
         job = self._job(job_id)
         self._find(job, scan_id).split = split
         self._save(job)
+        self.read_scans(job_id)  # the parts are read where the sheet is cut
         return view
 
     def _covers_from_scans(self, job: JobRecord) -> bool:
@@ -266,6 +274,7 @@ class ScansMixin:
                 dest.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(p, dest / p.name)
                 job.scans.append(sc.model_copy(update={"library_path": None}))
+        self._inherit_reading(job, other)
         return bool(job.scans)
 
     # --- the library ------------------------------------------------------------------

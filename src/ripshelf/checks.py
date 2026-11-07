@@ -23,6 +23,7 @@ from .providers.omdb import Omdb, OmdbError
 from .providers.thediscdb import DiscDbError, TheDiscDb
 from .providers.tvmaze import Tvmaze, TvmazeError
 from .scanner.escl import Escl, ScannerError, base_url
+from .scanner.ocr import OcrUnavailable, Tesseract, barcodes_available
 from .tv.tvdb import Tvdb, TvdbError
 
 
@@ -261,6 +262,27 @@ async def scanner(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
                               details=details)
 
 
+async def ocr(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
+    """Whether Tesseract runs, has the languages asked for and the orientation data, and
+    whether zbar is there for barcodes."""
+    langs = (v.ocr_languages or s.ocr_languages or "eng").strip()
+    reader = Tesseract(s.tesseract, langs)
+    try:
+        version = await reader.version()
+        listed = await reader._run([*reader._args(), "--list-langs"], b"")
+    except OcrUnavailable as e:
+        return _fail(str(e), "See docs/cover-scans.md for installing it")
+    have = {ln.strip() for ln in listed.splitlines()[1:] if ln.strip()}
+    missing = [x for x in langs.split("+") if x not in have]
+    details = [f"Languages installed: {', '.join(sorted(have)) or 'none'}",
+               "Orientation (osd): " + ("installed" if "osd" in have else "missing, so sideways scans aren't turned"),
+               "Barcodes (zbar): " + ("installed" if barcodes_available() else "missing, so barcodes are read from "
+                                                                                "their printed digits")]
+    if missing:
+        return _fail(f"{version} has no {', '.join(missing)} language data", *details)
+    return SettingsTestResult(ok=True, message=f"{version} is ready", details=details)
+
+
 def _escl_base(url: str) -> str:
     try:
         return base_url(url)
@@ -282,6 +304,7 @@ CHECKS = {
     "makemkv": makemkv,
     "paths": paths,
     "scanner": scanner,
+    "ocr": ocr,
 }
 
 # The secrets each check uses. A box left empty means "the saved one", so a pass

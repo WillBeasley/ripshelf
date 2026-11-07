@@ -333,6 +333,11 @@ def merge(best: list[TextLine], others: list[TextLine]) -> list[TextLine]:
     for j, o in enumerate(others):
         if j in used or o.conf < 70 or quality(o) < 6 or any(overlap(o.box, x.box) > 0.5 for x in out):
             continue
+        # A piece of a line already there, read again on its own.
+        squashed = re.sub(r"[^a-z0-9]", "", o.text.lower())
+        if any(squashed in re.sub(r"[^a-z0-9]", "", x.text.lower()) and x.box[1] < o.box[3] and o.box[1] < x.box[3]
+               for x in out):
+            continue
         above = [i for i, x in enumerate(out) if x.box[1] <= o.box[1]
                  and min(x.box[2], o.box[2]) > max(x.box[0], o.box[0])]
         at = max(above, key=lambda i: out[i].box[1]) + 1 if above else len(out)

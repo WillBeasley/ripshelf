@@ -83,6 +83,7 @@ from .models import (
 )
 from .proc import WINDOWS
 from .providers import films, thediscdb
+from .readjobs import ReadingMixin
 from .scanjobs import ScansMixin
 from .transcodejobs import TranscodeMixin
 from .tv import verify
@@ -149,7 +150,7 @@ class DriveRuntime:
     tasks: set[asyncio.Task] = field(default_factory=set)
 
 
-class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin):
+class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin):
     def __init__(self, settings: Settings, db: Database, backend: DriveBackend, bus: EventBus):
         self.s = settings
         self.db = db
@@ -169,6 +170,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin):
         self._init_transcode()
         self._init_contribute()
         self._init_scans()
+        self._init_reading()
         self.support = SupportFiles(settings.makemkv_files_dir)
         self.hub = WorkerHub(on_drives_changed=self._remote_drives,
                              local_ids=lambda: {i for i, d in self.drives.items() if not d.remote})
@@ -208,6 +210,9 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin):
         if self._scanner_task:
             self._scanner_task.cancel()
             tasks.append(self._scanner_task)
+        for t in self._read_tasks.values():
+            t.cancel()
+            tasks.append(t)
         for d in self.drives.values():
             for proc in (d.scan, d.rip):
                 if proc:
