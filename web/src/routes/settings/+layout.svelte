@@ -2,6 +2,7 @@
 	// Settings: a sidebar of sections with search (on a phone, the section list on /settings),
 	// and the section's page. One form for every section, so typing in one and moving to
 	// another keeps what's typed (the sidebar marks it).
+	import { beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { live } from '#lib/live.svelte.ts';
 	import { SettingsForm } from '#lib/settings/form.svelte.ts';
@@ -15,6 +16,16 @@
 	setForm(form);
 	$effect(() => {
 		form.load();
+	});
+
+	// Leaving Settings (within ripshelf, or closing the tab) with changes not saved asks
+	// first; moving between sections keeps them.
+	beforeNavigate((nav) => {
+		if (!form.ready || nav.to?.url.pathname.startsWith('/settings')) return;
+		const n = form.changed().length;
+		if (!n) return;
+		if (nav.type === 'leave') nav.cancel(); // the browser asks
+		else if (!confirm(`Leave Settings? ${n} change${n === 1 ? ' isn\'t' : 's aren\'t'} saved.`)) nav.cancel();
 	});
 
 	const current = $derived(page.params.section);
