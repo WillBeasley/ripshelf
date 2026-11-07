@@ -77,6 +77,11 @@ class ReadingMixin:
         """Keep the user's listing. Readings never replace it."""
         job = self._job(job_id)
         sl = job.listing or ScanListing()
+        # What the user changed or added is theirs; what they kept keeps its reader.
+        kept = {(i.kind, i.title, i.number, i.runtime_min, i.extra_type, i.disc): i.source
+                for i in (sl.found.items if sl.found else [])}
+        for i in edited.items:
+            i.source = kept.get((i.kind, i.title, i.number, i.runtime_min, i.extra_type, i.disc), "you")
         sl.edited = edited
         sl.edited_from = sl.read_at or now()
         job.listing = sl
@@ -194,10 +199,13 @@ class ReadingMixin:
             return
         texts = [t for sc in job.scans if (t := self.scan_text(job_id, sc.id))]
         found = parse.build(texts) if texts else None
+        seen = [(sc.id, r.listing) for sc in job.scans if (r := self.vision_reading(job, sc))]
+        if seen:
+            found = parse.merge(found or Listing(), seen, texts)
         sl = job.listing or ScanListing()
         changed = (found.model_dump() if found else None) != (sl.found.model_dump() if sl.found else None)
         sl.found = found
-        sl.state = "done" if texts else "idle"
+        sl.state = "done" if texts or seen else "idle"
         sl.progress = sl.message = None
         sl.engine = engine or sl.engine
         if changed:
@@ -205,6 +213,8 @@ class ReadingMixin:
         job.listing = sl
         self._save(job)
         self.rematch(job_id)
+        if texts and engine:  # a Tesseract reading: the vision model's turn, if Settings say
+            self.queue_vision(job_id)
 
     def _inherit_reading(self, job: JobRecord, other: JobRecord) -> None:
         """With the scans of another disc in the release, its readings and listing."""
@@ -212,6 +222,8 @@ class ReadingMixin:
             src = self._text_path(other, sc.id)
             if src.is_file():
                 shutil.copyfile(src, self._text_path(job, sc.id))
+            if (vsrc := self._vision_path(other, sc.id)).is_file():
+                shutil.copyfile(vsrc, self._vision_path(job, sc.id))
         if other.listing and not job.listing:
             job.listing = other.listing.model_copy(deep=True)
             if job.listing.state == "reading":

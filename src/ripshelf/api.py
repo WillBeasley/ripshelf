@@ -89,7 +89,7 @@ from .scanner import escl
 from .tv import split as tvsplit
 
 SSE_HEARTBEAT_S = 15
-SECRETS = {"tmdb_api_key", "tvdb_api_key", "tvdb_pin", "omdb_api_key", "thediscdb_api_key", "emby_api_key", "jellyfin_api_key", "plex_token", "makemkv_key", "pushover_user_key",
+SECRETS = {"tmdb_api_key", "tvdb_api_key", "tvdb_pin", "omdb_api_key", "thediscdb_api_key", "emby_api_key", "jellyfin_api_key", "plex_token", "makemkv_key", "pushover_user_key", "vision_api_key",
            "pushover_app_token"}
 
 
@@ -484,6 +484,14 @@ async def scan_covers(job_id: int, scan_id: str, request: Request, body: ScanSpl
     return await _contribution_call(lambda: manager(request).scan_covers(job_id, scan_id, body))
 
 
+@api.post("/jobs/{job_id}/scans/{scan_id}/vision", status_code=202)
+async def scan_vision(job_id: int, scan_id: str, request: Request):
+    """Read the scan with the vision model now, in the background (the scan's ``vision``
+    says how it goes)."""
+    _sync_call(lambda: manager(request).ask_vision(job_id, scan_id))
+    return {"queued": True}
+
+
 @api.get("/jobs/{job_id}/scans/{scan_id}/text", response_model=ScanText)
 async def scan_text(job_id: int, scan_id: str, request: Request):
     """What was read on the scan: its lines of text, with their boxes, and its barcodes."""
@@ -715,6 +723,8 @@ def settings_view(s: Settings) -> SettingsView:
         scanner_source=s.scanner_source, scanner_trim=s.scanner_trim, scans_to_library=s.scans_to_library,
         scan_read_text=s.scan_read_text, ocr_languages=s.ocr_languages,
         extras_emby_folders=s.extras_emby_folders, film_unnamed_extras=s.film_unnamed_extras,
+        vision_mode=s.vision_mode, vision_provider=s.vision_provider, vision_url=s.vision_url,
+        vision_model=s.vision_model, vision_api_key_set=bool(s.vision_api_key),
         pushover_user_key_set=bool(s.pushover_user_key), pushover_app_token_set=bool(s.pushover_app_token),
         pushover_device=s.pushover_device,
         notify_events={e: integrations.Notifier(s).priority(e) for e in integrations.EVENTS},

@@ -86,6 +86,9 @@ def create_app(settings: Settings | None = None, backend=None) -> FastAPI:
         from .dev.fake_escl import FakeScanner
 
         app.include_router(FakeScanner().router(), prefix="/fake-escl")
+        from .dev.fake_vision import FakeVision
+
+        app.include_router(FakeVision(delay_s=float(os.environ.get("RIPSHELF_FAKE_VISION_SECONDS", "4"))).router())
     mount_ui(app, s.static_dir or default_static_dir())
     return app
 

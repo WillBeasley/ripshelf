@@ -194,6 +194,7 @@ class ScansMixin:
         (d / f"{sc.id}.{EXTS[sc.content_type]}").unlink(missing_ok=True)
         self._forget_thumbs(job, sc)
         self._text_path(job, sc.id).unlink(missing_ok=True)
+        self._vision_path(job, sc.id).unlink(missing_ok=True)
         job.scans = [x for x in job.scans if x.id != scan_id]
         self._save(job)
         if job.listing:
