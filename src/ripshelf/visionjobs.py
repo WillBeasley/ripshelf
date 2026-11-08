@@ -83,7 +83,11 @@ class VisionMixin:
         s = self.s
         if s.vision_mode == "off" or not s.vision_model or (s.vision_provider != "anthropic" and not s.vision_url):
             return None
-        return vision.Provider(kind=s.vision_provider, url=s.vision_url, model=s.vision_model,
+        # Anthropic's API has its own address: an address left from a local model (the
+        # Settings page hides it for Anthropic) would send the request there, as the Test
+        # button doesn't.
+        url = None if s.vision_provider == "anthropic" else s.vision_url
+        return vision.Provider(kind=s.vision_provider, url=url, model=s.vision_model,
                                key=s.secret("vision_api_key"), transport=self.vision_transport)
 
     def _vision_path(self, job: JobRecord, scan_id: str) -> Path:
