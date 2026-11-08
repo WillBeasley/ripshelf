@@ -227,8 +227,8 @@ class Database:
     # --- events -------------------------------------------------------------
 
     def delete_jobs(self, ids: list[int]) -> None:
-        """Jobs and their events. The disc cache (fingerprints) and collections stay:
-        they describe what is in the library, not the job history."""
+        """Jobs and their events. The disc cache (fingerprints) stays, so the same disc is
+        still recognised; the jobs' discs are taken out of the collections by the manager."""
         marks = ",".join("?" * len(ids))
         self.conn.execute("BEGIN")
         try:
@@ -449,6 +449,9 @@ class Database:
     def collections(self) -> list[Collection]:
         rows = self.conn.execute("SELECT id, data FROM collections ORDER BY updated_at DESC").fetchall()
         return [self._collection(r) for r in rows]
+
+    def delete_collection(self, collection_id: int) -> None:
+        self.conn.execute("DELETE FROM collections WHERE id=?", (collection_id,))
 
     def save_collection(self, c: Collection) -> Collection:
         c.updated_at = now()

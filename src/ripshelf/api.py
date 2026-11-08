@@ -198,9 +198,11 @@ async def list_jobs(request: Request, state: Annotated[list[JobState] | None, Qu
 
 @api.post("/jobs/delete", response_model=DeleteJobsResult)
 async def delete_jobs(body: DeleteJobsRequest, request: Request):
-    """Remove finished, failed or cancelled jobs from the history (never library files)."""
+    """Remove finished, failed or cancelled jobs from the history, and their discs from the
+    TV collections; their library files too only with ``delete_files``."""
     try:
-        return DeleteJobsResult(deleted=manager(request).delete_jobs(body.ids))
+        deleted, files = manager(request).delete_jobs(body.ids, body.delete_files)
+        return DeleteJobsResult(deleted=deleted, files_deleted=files)
     except KeyError as e:
         raise HTTPException(404, e.args[0]) from None
     except ValueError as e:
@@ -733,6 +735,13 @@ async def job_art(job_id: int, request: Request):
 @api.get("/collections", response_model=list[Collection])
 async def list_collections(request: Request):
     return manager(request).db.collections()
+
+
+@api.delete("/collections/{collection_id}/discs/{job_id}", response_model=CollectionDetail | None)
+async def remove_collection_disc(collection_id: int, job_id: int, request: Request):
+    """Take a disc out of the collection (its files in the library are kept). None when it
+    was the last, so the collection is gone."""
+    return _sync_call(lambda: manager(request).remove_disc(collection_id, job_id))
 
 
 @api.get("/collections/{collection_id}", response_model=CollectionDetail)

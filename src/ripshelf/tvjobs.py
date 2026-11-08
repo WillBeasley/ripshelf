@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import bisect
 import logging
+import re
 import shutil
 import statistics
 from pathlib import Path
@@ -249,6 +250,12 @@ class TvMixin:
         c = self.db.collection_for_show(show.tmdb_id)
         if not c:
             return season, None, None
+        # Only what's still in the library counts: files deleted by hand don't carry on.
+        here = self._episodes_on_disk(show)
+        if here is not None:
+            c.discs = [d.model_copy(update={"episodes": [e for e in d.episodes if (e.season, e.episode) in here]})
+                       for d in c.discs]
+            c.discs = [d for d in c.discs if d.episodes]
         discs = [d for d in c.discs if not d.compilation and d.job_id != job_id
                  and (season is None or d.season == season)]
         if not discs:
@@ -1334,14 +1341,61 @@ class TvMixin:
         c = self.db.save_collection(c)
         plan.collection_id = c.id
 
+    def _episodes_on_disk(self, show: Show) -> set[tuple[int, int]] | None:
+        """The episodes whose files are in the show's folder (by their SxxEyy), or None when
+        the TV folder itself can't be seen (a library that's offline isn't empty)."""
+        if not self.s.tv.is_dir():
+            return None
+        folder = naming.show_folder(self.s.tv, show)
+        out: set[tuple[int, int]] = set()
+        if not folder.is_dir():
+            return out
+        for p in folder.rglob("*"):
+            if p.suffix.lower() not in VIDEO_EXTS or ".disc" in p.parts:
+                continue
+            for m in EPISODE_CODE.finditer(p.name):
+                first, last = int(m.group(2)), int(m.group(3) or m.group(2))
+                out |= {(int(m.group(1)), n) for n in range(first, max(first, last) + 1)}
+        return out
+
+    def forget_discs(self, job_ids: list[int]) -> None:
+        """Take these jobs' discs out of the collections (a collection left with none goes)."""
+        ids = set(job_ids)
+        for c in self.db.collections():
+            keep = [d for d in c.discs if d.job_id not in ids]
+            if len(keep) == len(c.discs):
+                continue
+            if keep:
+                c.discs = keep
+                self.db.save_collection(c)
+            else:
+                self.db.delete_collection(c.id)
+
+    def remove_disc(self, collection_id: int, job_id: int) -> CollectionDetail | None:
+        """The user's "Remove from the collection" for one disc. None when that was the last."""
+        c = self.db.collection(collection_id)
+        if not c:
+            raise KeyError(collection_id)
+        if not any(d.job_id == job_id for d in c.discs):
+            raise KeyError(job_id)
+        self.forget_discs([job_id])
+        return self.collection_detail(collection_id)
+
     def collection_detail(self, collection_id: int) -> CollectionDetail | None:
         c = self.db.collection(collection_id)
         if not c:
             return None
+        here = self._episodes_on_disk(c.show)
         where: dict[tuple[int, int], list[int]] = {}
+        gone: set[tuple[int, int]] = set()
         for d in c.discs:
             for e in d.episodes:
+                if here is not None and (e.season, e.episode) not in here:
+                    gone.add(episode_key(e))
+                    continue
                 where.setdefault(episode_key(e), []).append(d.job_id)
+        for k in gone:
+            where.setdefault(k, [])
         seasons: dict[int, list[Episode]] = {}
         for e in c.known_episodes:
             seasons.setdefault(e.season, []).append(e)
@@ -1353,11 +1407,16 @@ class TvMixin:
             cells = []
             for e in sorted(seasons[s], key=lambda e: e.episode):
                 jobs = where.get(episode_key(e), [])
-                status = "missing" if not jobs else ("duplicate" if len(jobs) > 1 else "present")
+                status = ("gone" if episode_key(e) in gone else "missing") if not jobs else \
+                    ("duplicate" if len(jobs) > 1 else "present")
                 cells.append(SeasonCell(episode=e, status=status, jobs=jobs))
             grids.append(SeasonGrid(season=s, cells=cells, present=sum(1 for x in cells if x.jobs),
                                     total=len(cells)))
         return CollectionDetail(**c.model_dump(), seasons=grids)
+
+
+VIDEO_EXTS = {".mkv", ".mp4", ".m4v", ".avi", ".ts", ".m2ts"}
+EPISODE_CODE = re.compile(r"S(\d{1,3})E(\d{1,4})(?:-?E(\d{1,4}))?", re.I)
 
 
 def _label_remainder(label_show: str, show_name: str) -> str | None:
