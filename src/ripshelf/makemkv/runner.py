@@ -15,7 +15,9 @@ make one itself for a drive without LibreDrive support and can hang doing it
 Timeouts and cancellation kill makemkvcon with everything it started (``proc.Tree``):
 ``timeout`` around a container run left makemkvcon running.
 ``idle_timeout`` kills it only once its output has stopped for that long, because a damaged
-disc can keep a scan busy (read retries, slow AACS) well past any fixed limit.
+disc can keep a scan busy (read retries, slow AACS) well past any fixed limit. A DVD with a
+complex multiplex is the exception: MakeMKV says so, then writes nothing at all while it
+works through the VOBUs, so that silence may last up to ``COMPLEX_IDLE_S``.
 
 Every makemkvcon probes *every* drive it can see when it starts, and that probe
 blocks while another instance is opening its disc (the AACS / LibreDrive
@@ -298,13 +300,28 @@ class OpenGate:
         return release
 
 
+def msg_code(line: str) -> int | None:
+    """The code of a robot-mode MSG line, else None."""
+    if not line.startswith("MSG:"):
+        return None
+    code = line[4:].split(",", 1)[0]
+    return int(code) if code.isdigit() else None
+
+
 def opened(line: str) -> bool:
-    if line.startswith(OPENED_PREFIXES):
-        return True
-    if line.startswith("MSG:"):
-        code = line[4:].split(",", 1)[0]
-        return code.isdigit() and int(code) in OPENED_MSGS
-    return False
+    return line.startswith(OPENED_PREFIXES) or msg_code(line) in OPENED_MSGS
+
+
+# "Complex multiplex encountered - N cells and M VOBUs have to be scanned". MakeMKV is quiet
+# until that scan is done: 4759 VOBUs took over 5 min on an LG GGC-H20N in direct disc access
+# mode, so the silence after it may last this long (the run's overall timeout still applies).
+COMPLEX_MSG = 3024
+COMPLEX_IDLE_S = 3600
+
+
+def idle_limit(line: str, idle_timeout: float) -> float:
+    """How long makemkvcon may stay quiet after writing ``line``."""
+    return max(idle_timeout, COMPLEX_IDLE_S) if msg_code(line) == COMPLEX_MSG else idle_timeout
 
 
 # Once makemkvcon has exited, how long to wait for the rest of its output.
@@ -378,14 +395,17 @@ class MakeMKV:
         proc = self._proc
         loop = asyncio.get_running_loop()
         last_output = loop.time()
+        quiet_s = idle_timeout  # how long it may stay quiet now
 
         async def read() -> None:
-            nonlocal last_output
+            nonlocal last_output, quiet_s
             assert proc.stdout
             with log_path.open("w", encoding="utf-8") as fh:
                 while line := await proc.stdout.readline():
                     last_output = loop.time()
                     text = line.decode("utf-8", "replace").replace("\r\n", "\n")  # Windows makemkvcon writes CRLF
+                    if idle_timeout:
+                        quiet_s = idle_limit(text, idle_timeout)
                     fh.write(text)
                     fh.flush()
                     if opened(text):
@@ -401,7 +421,7 @@ class MakeMKV:
                 # proc.wait() itself waits for the pipe to close, so watch the return code.
                 while proc.returncode is None and not reader.done():
                     await asyncio.wait({reader}, timeout=0.5)
-                    if idle_timeout and loop.time() - last_output > idle_timeout:
+                    if quiet_s and loop.time() - last_output > quiet_s:
                         raise _Stalled
                 await asyncio.wait_for(asyncio.shield(reader), EXIT_DRAIN_S)
                 if proc.returncode is None:  # output ended first, and the exit follows

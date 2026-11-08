@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from ripshelf.db import JobRecord, now
+from ripshelf.makemkv import runner
 from ripshelf.models import TRANSITIONS, Candidate, JobState, Problem, RipState
 
 from .conftest import needs_unix_permissions, until
@@ -92,6 +93,34 @@ async def test_no_output_then_timeout(harness, settings, mkv_script):
         assert job.problem.code == "scan_timeout"
         assert "no output for 1 s" in job.problem.message
         assert h.m.drives[job.drive_id].scan is None
+
+
+COMPLEX = ('MSG:3024,4096,2,"Complex multiplex encountered - 19 cells and 4759 VOBUs have to be scanned.",'
+           '"Complex multiplex encountered - %1 cells and %2 VOBUs have to be scanned.","19","4759"')
+
+
+async def test_a_quiet_complex_multiplex_scan_completes(harness, settings, mkv_script, monkeypatch):
+    # MakeMKV says nothing for longer than scan_timeout_s while it scans a complex multiplex.
+    monkeypatch.setattr(runner, "COMPLEX_IDLE_S", 10)
+    settings.scan_timeout_s = 1
+    settings.makemkvcon = mkv_script(info=f"out({COMPLEX!r}); time.sleep(2.5); replay('scan-dvd-moonlit-orchard.log')")
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.state not in (JobState.detected, JobState.scanning), timeout=20)
+        assert job.problem is None or job.problem.code != "scan_timeout"
+        assert job.titles
+        told = [e.message for e in h.db.events(job.id) if "complex disc structure" in e.message]
+        assert told == ["Scanning a complex disc structure (19 cells, 4759 VOBUs). MakeMKV says nothing "
+                        "until it's done, which can take a while"]
+
+
+async def test_a_complex_multiplex_scan_that_never_ends_says_so(harness, settings, mkv_script, monkeypatch):
+    monkeypatch.setattr(runner, "COMPLEX_IDLE_S", 2)
+    settings.scan_timeout_s = 1
+    settings.makemkvcon = mkv_script(info=f"out({COMPLEX!r}); time.sleep(60)")
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.state == JobState.failed, timeout=20)
+        assert job.problem.code == "scan_timeout"
+        assert "complex structure after 2 s" in job.problem.message
 
 
 async def test_makemkv_missing(harness, settings):
