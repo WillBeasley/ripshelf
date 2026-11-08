@@ -19,6 +19,7 @@ the identified film, in the disc backups folder. It is never transcoded.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -88,7 +89,7 @@ from .providers import films, thediscdb
 from .readjobs import ReadingMixin
 from .scanjobs import ScansMixin
 from .transcodejobs import TranscodeMixin
-from .tv import verify
+from .tv import naming, verify
 from .tvjobs import TvMixin
 from .visionjobs import VisionMixin
 from .workers.hub import RemoteBackend, RemoteMakeMKV, Worker, WorkerHub
@@ -1576,11 +1577,12 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
 
     # --- user actions -------------------------------------------------------------
 
-    def delete_jobs(self, ids: list[int]) -> list[int]:
-        """Remove finished, failed or cancelled jobs from the history.
+    def delete_jobs(self, ids: list[int], delete_files: bool = False) -> tuple[list[int], list[str]]:
+        """Remove finished, failed or cancelled jobs from the history: (deleted, files deleted).
 
-        Their logs and leftover scratch files go too. Library files are never touched,
-        and the disc cache keeps the identity, so the same disc is still recognised.
+        Their logs and leftover scratch files go too, and their discs leave the TV
+        collections. Library files are kept unless ``delete_files``; the disc cache keeps
+        the identity, so the same disc is still recognised.
         """
         jobs = [self.db.get_job(i) for i in dict.fromkeys(ids)]
         missing = [i for i, j in zip(dict.fromkeys(ids), jobs, strict=True) if j is None]
@@ -1591,6 +1593,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         if busy:
             raise ValueError(f"job {busy[0]} is still running; cancel it first")
         gone = [j.id for j in jobs]
+        files = [f for j in jobs for f in self._delete_library_files(j)] if delete_files else []
+        self.forget_discs(gone)
         self.db.delete_jobs(gone)
         for j in jobs:
             shutil.rmtree(self.work_dir(j), ignore_errors=True)
@@ -1602,7 +1606,42 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 self.publish_drive(d)
         self.bus.publish(JobsDeleted(ids=gone))
         self.publish_status()
-        return gone
+        return gone, files
+
+    def _delete_library_files(self, job: JobRecord) -> list[str]:
+        """Delete what the job put in the library: a TV disc's titles (as its .disc record
+        lists them) and that record, or a film and its extras. Only files inside the TV or
+        films folder; a full disc backup is kept. Folders left empty go too."""
+        paths: list[Path] = []
+        if job.media == MediaKind.tv and job.tv and job.tv.show:
+            folder = naming.show_folder(self.s.tv, job.tv.show)
+            meta = naming.disc_meta_folder(self.s.tv, job.tv.show, job.disc.label, job.id)
+            try:
+                titles = json.loads((meta / "disc.json").read_text(encoding="utf-8")).get("titles", {})
+            except (OSError, ValueError):
+                titles = {}
+            paths += [folder / t["file"] for t in titles.values() if isinstance(t, dict) and t.get("file")]
+            paths += [p for p in meta.rglob("*") if p.is_file()] if meta.is_dir() else []
+        elif job.media == MediaKind.movie and job.mode != "backup" and job.destination:
+            paths += [Path(job.destination), *(Path(p) for p in job.filed_extras.values())]
+        roots = [self.s.tv.resolve(), self.s.movies.resolve()]
+        done: list[str] = []
+        for p in paths:
+            try:
+                rp = p.resolve()
+                if not any(rp.is_relative_to(r) and rp != r for r in roots) or not rp.is_file():
+                    continue
+                rp.unlink()
+                done.append(str(p))
+                parent = rp.parent
+                while parent not in roots and not any(parent.iterdir()):
+                    parent.rmdir()
+                    parent = parent.parent
+            except OSError as e:
+                log.warning("could not delete %s: %s", p, e)
+        if done:
+            self._event(job, "info", f"Deleted {len(done)} file{'s' if len(done) != 1 else ''} from the library")
+        return done
 
     def redetect(self) -> None:
         """Look for drives again (one plugged in since start-up), without touching running jobs."""

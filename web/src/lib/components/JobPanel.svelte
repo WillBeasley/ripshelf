@@ -101,8 +101,10 @@
 	});
 
 	async function remove() {
-		if (!confirm('Delete this job from the history? Its log goes too. Files in the library are kept.')) return;
-		const r = await act.run(() => api.deleteJobs([jobId]));
+		if (!confirm('Delete this job from the history? Its log goes too, and its disc leaves the Shows page.')) return;
+		// Keeping the library's files is the default (Cancel).
+		const files = confirm('Also delete the files it put in the library? OK deletes them; Cancel keeps them.');
+		const r = await act.run(() => api.deleteJobs([jobId], files));
 		if (r) {
 			live.removeJobs(r.deleted);
 			closeJob();

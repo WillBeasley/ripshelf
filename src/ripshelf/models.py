@@ -1174,7 +1174,8 @@ class MediaRequest(BaseModel):
 
 class SeasonCell(BaseModel):
     episode: Episode
-    status: Literal["present", "missing", "duplicate"]
+    status: Literal["present", "missing", "duplicate", "gone"] = Field(
+        description="gone: a disc in the collection has it, but its file isn't in the show's folder any more")
     jobs: list[int] = []
 
 
@@ -1405,10 +1406,13 @@ class LogPage(BaseModel):
 
 class DeleteJobsRequest(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=1000)
+    delete_files: bool = Field(False, description="also delete the files the jobs put in the library (a "
+                                                  "full disc backup's are kept)")
 
 
 class DeleteJobsResult(BaseModel):
     deleted: list[int]
+    files_deleted: list[str] = Field(default=[], description="library files deleted with them")
 
 
 # Server-sent events. ``type`` discriminates.

@@ -415,7 +415,10 @@ export interface SeasonGrid {
  */
 export interface SeasonCell {
   episode: Episode;
-  status: "present" | "missing" | "duplicate";
+  /**
+   * gone: a disc in the collection has it, but its file isn't in the show's folder any more
+   */
+  status: "present" | "missing" | "duplicate" | "gone";
   jobs: number[];
 }
 /**
@@ -691,6 +694,10 @@ export interface DeleteJobsRequest {
    * @maxItems 1000
    */
   ids: [number, ...number[]];
+  /**
+   * also delete the files the jobs put in the library (a full disc backup's are kept)
+   */
+  delete_files: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -698,6 +705,10 @@ export interface DeleteJobsRequest {
  */
 export interface DeleteJobsResult {
   deleted: number[];
+  /**
+   * library files deleted with them
+   */
+  files_deleted: string[];
 }
 /**
  * What identification works from.

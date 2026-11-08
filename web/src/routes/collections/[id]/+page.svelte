@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import type { CollectionDetail, SeasonCell } from '#lib/api-types.ts';
 	import { api } from '#lib/api.ts';
+	import { goto } from '$app/navigation';
 	import { openJob } from '#lib/nav.ts';
 	import Poster from '#lib/components/Poster.svelte';
 
@@ -12,6 +13,21 @@
 	$effect(() => {
 		api.collection(id).then((d) => (c = d)).catch((e) => (error = String(e.message ?? e)));
 	});
+	let busy = $state(false);
+
+	async function removeDisc(jobId: number, label: string) {
+		if (!confirm(`Take ${label} out of this collection? Its files in the library are kept.`)) return;
+		busy = true;
+		try {
+			const d = await api.removeCollectionDisc(id, jobId);
+			if (d) c = d;
+			else goto('/collections');
+		} catch (e) {
+			error = String((e as Error).message ?? e);
+		} finally {
+			busy = false;
+		}
+	}
 	const code = (s: number, e: number) => `S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
 </script>
 
@@ -31,7 +47,7 @@
 
 		<div class="legend small">
 			<span class="sq present"></span> ripped <span class="sq missing"></span> missing
-			<span class="sq duplicate"></span> on two discs
+			<span class="sq duplicate"></span> on two discs <span class="sq gone"></span> file gone from the library
 		</div>
 
 		{#each c.seasons as g (g.season)}
@@ -55,7 +71,13 @@
 			<section class="card small">
 				<strong>{code(picked.episode.season, picked.episode.episode)} · {picked.episode.name || 'untitled'}</strong>
 				<div class="muted">
-					{picked.status === 'missing' ? 'Not ripped yet' : picked.status === 'duplicate' ? 'On more than one disc' : 'Ripped'}
+					{picked.status === 'missing'
+						? 'Not ripped yet'
+						: picked.status === 'gone'
+							? "Ripped, but its file isn't in the show's folder any more"
+							: picked.status === 'duplicate'
+								? 'On more than one disc'
+								: 'Ripped'}
 					{#each picked.jobs as j (j)}
 						· <button class="link small" onclick={() => openJob(j)}>job {j}</button>
 					{/each}
@@ -73,6 +95,8 @@
 							{d.compilation ? 'compilation' : `season ${d.season ?? '?'}${d.disc_number ? `, disc ${d.disc_number}` : ''}`}
 							· {d.episodes.length} episodes</span
 						>
+						<button class="link small danger" disabled={busy}
+							onclick={() => removeDisc(d.job_id, d.label ?? `job ${d.job_id}`)}>Remove from collection</button>
 					</li>
 				{/each}
 			</ul>
@@ -117,6 +141,13 @@
 		background: var(--warn-bg);
 		color: var(--warn);
 		border-color: var(--warn);
+	}
+	.cell.gone,
+	.sq.gone {
+		background: var(--surface-2);
+		color: var(--muted);
+		border-style: dashed;
+		text-decoration: line-through;
 	}
 	.legend {
 		display: flex;

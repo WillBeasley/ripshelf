@@ -189,13 +189,16 @@ export const api = {
 		`/api/jobs/${id}/split-thumbs/${title}/${mark}.jpg?t=${Math.round(at * 1000)}`,
 	collections: () => call<Collection[]>('GET', '/collections'),
 	collection: (id: number) => call<CollectionDetail>('GET', `/collections/${id}`),
+	removeCollectionDisc: (id: number, jobId: number) =>
+		call<CollectionDetail | null>('DELETE', `/collections/${id}/discs/${jobId}`),
 	eject: (driveId: string) => call<void>('POST', `/drives/${driveId}/eject`),
 	closeTray: (driveId: string) => call<void>('POST', `/drives/${driveId}/close`),
 	redetect: () => call<Drive[]>('POST', '/drives/redetect'),
 	renameDrive: (driveId: string, name: string) =>
 		call<Drive | null>('PUT', `/drives/${encodeURIComponent(driveId)}/name`, { name }),
 	driveStats: () => call<DriveStats[]>('GET', '/drives/stats'),
-	deleteJobs: (ids: number[]) => call<DeleteJobsResult>('POST', '/jobs/delete', { ids }),
+	deleteJobs: (ids: number[], deleteFiles = false) =>
+		call<DeleteJobsResult>('POST', '/jobs/delete', { ids, delete_files: deleteFiles }),
 	logs: (after: number, level: string) =>
 		call<LogPage>('GET', `/logs?after=${after}&level=${encodeURIComponent(level)}`),
 	rescan: (driveId: string) => call<Job>('POST', `/drives/${driveId}/scan`),

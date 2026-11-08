@@ -30,8 +30,10 @@
 		const ids = [...picked];
 		if (!ids.length) return;
 		const what = ids.length === 1 ? 'this job' : `these ${ids.length} jobs`;
-		if (!confirm(`Delete ${what} from the history? Their logs go too. Files in the library are kept.`)) return;
-		const r = await act.run(() => api.deleteJobs(ids));
+		if (!confirm(`Delete ${what} from the history? Their logs go too, and their discs leave the Shows page.`)) return;
+		// Keeping the library's files is the default (Cancel).
+		const files = confirm(`Also delete the files ${ids.length === 1 ? 'it' : 'they'} put in the library? OK deletes them; Cancel keeps them.`);
+		const r = await act.run(() => api.deleteJobs(ids, files));
 		if (r) {
 			live.removeJobs(r.deleted);
 			stopSelecting();

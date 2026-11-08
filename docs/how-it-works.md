@@ -44,6 +44,13 @@ Files are copied into the library, checked by SHA-256, and never overwritten. Th
 
 Titles on a TV disc that aren't episodes go to extras, Season 00, or are skipped (Settings). Afterwards Emby, Jellyfin and Plex (whichever are set up) are told about the new files, Pushover notifies you, and the disc is ejected.
 
+### Shows and old jobs
+
+The **Shows** page lists each show's discs and which episodes they hold, and a new disc of the show carries on from them (its first episode follows the last disc's). It goes by the library: an episode whose file isn't in the show's folder any more (deleted or moved by hand) is shown as gone, and doesn't count. When the TV folder can't be seen at all, as with a library that's offline, nothing is taken as gone.
+
+- **Remove from collection** takes a disc off the page. Its files are kept.
+- **Deleting a job** (its panel, or the Finished page) takes its disc off the Shows page too. You're then asked whether to delete the files it put in the library as well; Cancel keeps them. Only the files it filed are deleted (as the disc's `.disc` record lists them, or the film and its extras), never anything outside the films and TV folders, and never a full disc backup.
+
 ## Notifications
 
 Pushover tells you about each job as it goes. Under Settings → Notifications each event can be off or have its own priority:

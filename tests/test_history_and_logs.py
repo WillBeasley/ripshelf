@@ -27,7 +27,7 @@ async def test_delete_finished_job_keeps_library_and_disc_cache(harness, setting
         assert work.exists()
         seen = []
         with h.bus.subscribe() as q:
-            assert h.m.delete_jobs([done.id, done.id]) == [done.id]
+            assert h.m.delete_jobs([done.id, done.id]) == ([done.id], [])
             while not q.empty():
                 seen.append(q.get_nowait())
         assert h.db.get_job(done.id) is None and h.db.events(done.id) == []
@@ -71,7 +71,7 @@ def test_delete_api(settings):
         assert c.post("/api/jobs/delete", json={"ids": [a.id, live.id]}).status_code == 409
         assert m.db.get_job(a.id), "all or nothing"
         r = c.post("/api/jobs/delete", json={"ids": [a.id, b.id]})
-        assert r.status_code == 200 and r.json() == {"deleted": [a.id, b.id]}
+        assert r.status_code == 200 and r.json() == {"deleted": [a.id, b.id], "files_deleted": []}
         assert c.delete(f"/api/jobs/{live.id}").status_code == 409
         assert c.delete("/api/jobs/12345").status_code == 404
         assert c.post("/api/jobs/delete", json={"ids": []}).status_code == 422
