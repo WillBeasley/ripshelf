@@ -321,3 +321,37 @@ async def test_a_box_read_short_of_its_episodes_leaves_the_rest(harness, setting
         assert len(rest) == 1 and rest[0].role == TitleRole.episode  # not read on the box: still an episode
         used = [(e.season, e.episode) for r in rows.values() for e in r.episodes]
         assert len(used) == len(set(used))  # no episode on two titles
+
+
+def test_what_the_model_copies_onto_every_item_is_dropped():
+    """The model put the whole disc's "61 mins" and "disc 1" against each episode of a
+    one-disc box: no title is 61 minutes, and the box isn't split by disc."""
+    names = ["Muddy Morning", "Windy Kite", "Lost Bell", "Big Parcel"]
+    theirs = Listing(details=ListingDetails(feature_runtime_min=61),
+                     items=[ListingItem(kind="episode", title=n, runtime_min=61, disc=1, source="vision") for n in names])
+    merged = listing.merge(Listing(), [("s1", theirs)], [])
+    assert [(i.runtime_min, i.disc) for i in merged.items] == [(None, None)] * 4
+    # A box that is split by disc keeps its numbers, and printed runtimes that differ stay.
+    theirs.items[0].disc, theirs.items[0].runtime_min = 2, 11
+    merged = listing.merge(Listing(), [("s1", theirs)], [])
+    assert [i.disc for i in merged.items] == [2, 1, 1, 1] and merged.items[0].runtime_min == 11
+
+
+def test_an_apostrophe_is_not_a_quote_in_a_models_title():
+    raw = {"items": [{"kind": "extra", "title": "Pippa's Kite Day", "number": None, "runtime_min": None,
+                      "extra_type": "Other", "disc": None, "show": None}],
+           "details": {"title": None, "year": None, "feature_runtime_min": None, "episode_count": None,
+                       "barcode": None, "catalogue_number": None, "region": None, "video_system": None,
+                       "aspect_ratio": None, "audio": [], "subtitles": []}}
+    assert vision.tidy(raw).items[0].title == "Pippa's Kite Day"
+
+
+def test_scraps_misread_off_a_picture_are_not_extras():
+    from .test_scan_text import lines
+
+    reading = lines("Special features", ("back", "ae"), "Making the Kite Tram")
+    reading.lines[1].conf = 94
+    got = [it.title for it in listing.build([reading]).items]
+    assert "ae" not in got and "Making the Kite Tram" in got
+    low = lines("Special features", "Making the Kite Tram", "GE woth", conf=49)
+    assert listing.build([low]).items == []

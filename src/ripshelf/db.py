@@ -233,6 +233,8 @@ class Database:
         self.conn.execute("BEGIN")
         try:
             self.conn.execute(f"DELETE FROM events WHERE job_id IN ({marks})", ids)
+            # Out of their TheDiscDB releases, so a later disc isn't numbered after them.
+            self.conn.execute(f"DELETE FROM contributions WHERE job_id IN ({marks})", ids)
             self.conn.execute(f"DELETE FROM jobs WHERE id IN ({marks})", ids)
         except BaseException:
             self.conn.execute("ROLLBACK")

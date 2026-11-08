@@ -85,7 +85,8 @@ PROMPT = (
     "Scene, Music, Short, Other, Extra. runtime_min only when a running time is printed beside it. show is "
     "null, except for a bonus episode of a different show (\"Includes bonus episode\", \"Plus meet ... in an "
     "all new series\"): then kind is extra, extra_type Other, title is that episode's own title (often in "
-    "quotes) and show is the other show's name.\n"
+    "quotes) and show is the other show's name. A bonus episode of this disc's own show is an episode. A "
+    "running time for the whole disc goes in details, not on each item.\n"
     "- details: the title, the copyright year, the feature's running time in minutes (2hrs 45mins is 165), "
     "the number of episodes if stated, the barcode digits, the catalogue number, the region (the number "
     "in the globe logo, or as printed, such as 2 or 2 & 4 or B), PAL or NTSC, the aspect ratio such as "
@@ -194,7 +195,8 @@ def tidy(raw: dict) -> Listing:
         if it.kind == "extra":
             # "In-depth documentary on the making of the film 'Return to the Orchard'" is
             # called what it quotes, as in Tesseract's reading (a model may drop the last quote).
-            quoted = QUOTED.findall(title) or re.findall(r"[\"“‘']([^\"“”‘’']{3,})$", title)
+            # (An apostrophe in a word, "Peppa's Christmas", opens no quote.)
+            quoted = QUOTED.findall(title) or re.findall(r"(?:[\"“]|(?<![A-Za-z])[‘'])([^\"“”‘’']{3,})$", title)
             if quoted and re.search(r"[A-Za-z]{3}", quoted[-1]):
                 title = quoted[-1]
         title = title.strip("\"'“”‘’ ")
