@@ -258,3 +258,66 @@ async def test_a_bonus_episode_is_ripped_and_filed(harness, settings, monkeypatc
             assert targets[5] == settings.tv / "Marigold Mole (2010)" / "Season 01" / \
                 "Marigold Mole - S01E24 - Where's My Hat Gone.mkv"
         assert not await h.m.fix_show_from_scan(job.id)  # looked up once
+
+
+# --- the box read again: what a second reading of it got wrong ---------------------------
+
+
+def test_a_symbol_misread_before_a_title_keeps_the_column():
+    from .test_scan_text import lines
+
+    reading = lines("Join Pippa and Goose on 4 new Kite Post adventures. Watch them",
+                    "deliver parcels across the valley and find out what happens!",
+                    "Kite Post: A Big Parcel", "©& Kite Post: A Lost Kite", "Kite Post: Silver Bell",
+                    "Kite Post: A Muddy Lane", "© 2011 Mole Pictures Limited")
+    got = [it.title for it in listing.build([reading]).items if it.kind == "episode"]
+    assert got == ["Kite Post: A Big Parcel", "Kite Post: A Lost Kite", "Kite Post: Silver Bell",
+                   "Kite Post: A Muddy Lane"]
+
+
+def test_episodes_alike_but_for_their_ends_are_all_kept():
+    """The model's four episodes, each starting with the same long words, are four, not two."""
+    p = "Pippa's Kite Post Special Delivery: "
+    names = [p + "A Big Parcel", p + "A Lost Kite", p + "Silver Bells", p + "A Muddy Lane"]
+    own = Listing(items=[ListingItem(kind="episode", title=n, source="tesseract") for n in names[:2]])
+    theirs = Listing(items=[ListingItem(kind="episode", title=n, source="vision") for n in names])
+    merged = listing.merge(own, [("s1", theirs)], [])
+    assert [(i.title, i.source) for i in merged.items] == [
+        (names[0], "both"), (names[1], "both"), (names[2], "vision"), (names[3], "vision")]
+
+
+def test_the_model_naming_the_discs_own_show_as_the_bonus_show():
+    raw = {"items": [{"kind": "extra", "title": "Marigold Mole", "number": None, "runtime_min": None,
+                      "extra_type": "Other", "disc": None, "show": "Pippa & Goose"}],
+           "details": {"title": "Pippa & Goose: Kite Post", "year": None, "feature_runtime_min": None,
+                       "episode_count": 4, "barcode": None, "catalogue_number": None, "region": None,
+                       "video_system": None, "aspect_ratio": None, "audio": [], "subtitles": []}}
+    assert vision.tidy(raw).items[0].show is None
+    # A reading kept from before still folds into Tesseract's bonus item.
+    own = Listing(items=[ListingItem(kind="extra", title="Where's My Hat Gone?", show="Marigold Mole",
+                                     extra_type="Other", source="tesseract")])
+    theirs = Listing(items=[ListingItem(kind="extra", title="Marigold Mole", show="Pippa & Goose", source="vision")])
+    merged = listing.merge(own, [("s1", theirs)], [])
+    assert [(i.title, i.show) for i in merged.items] == [("Where's My Hat Gone?", "Marigold Mole")]
+
+
+async def test_a_box_read_short_of_its_episodes_leaves_the_rest(harness, settings, monkeypatch):
+    """The box says it has four episodes and two were read: those two are set, and the
+    titles mapped as the other episodes stay episodes, not extras."""
+    async with harness() as h:
+        fake_tmdb(monkeypatch, h)
+        job = disc_job(BOX[:2])
+        job.tv = job.tv.model_copy(update={"show": KITE, "episodes": EPISODES[KITE.tmdb_id], "candidates": [KITE]})
+        job.listing.found.details.episode_count = 3
+        job = put(h, job)
+        h.m.rematch(job.id)  # as reading the box does
+        await h.m.fix_show_from_scan(job.id)
+        job = h.db.get_job(job.id)
+        placed = {x.title_index: x.episodes for x in job.scan_match.matches if x.episodes}
+        rows = {r.title_index: r for r in job.tv.mapping}
+        assert sorted(e.episode for eps in placed.values() for e in eps) == [1, 4]
+        assert all(rows[i].episodes == eps for i, eps in placed.items())
+        rest = [r for i, r in rows.items() if i not in placed and i < 3]
+        assert len(rest) == 1 and rest[0].role == TitleRole.episode  # not read on the box: still an episode
+        used = [(e.season, e.episode) for r in rows.values() for e in r.episodes]
+        assert len(used) == len(set(used))  # no episode on two titles

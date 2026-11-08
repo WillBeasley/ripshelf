@@ -406,16 +406,26 @@ class ShowFromScanMixin:
         picks = {x.title_index: x for x in matches if x.kind == "episode" and x.episodes and x.confidence != "low"}
         if not names or len(picks) < len(names):
             picks = {}  # not every episode found: the mapping's own guess stands
-        # A bonus episode of another show is ripped and filed, as an extra or in its show.
-        bonus = {x.title_index: x for x in matches if x.bonus and x.confidence != "low" and x.title_index not in picks}
+        # A bonus episode of another show is ripped and filed, as an extra or in its show,
+        # when its runtime agrees (high: an episode-length title isn't the 10-minute bonus).
+        bonus = {x.title_index: x for x in matches if x.bonus and x.confidence == "high" and x.title_index not in picks}
         plan = job.tv
-        # The box lists every episode, so another title mapped as one is something else.
-        stray = [r for r in plan.mapping if picks and r.role == TitleRole.episode
+        # When the box lists every episode (as many as it says it has), another title mapped
+        # as one is something else; a listing that missed some leaves the rest alone.
+        listing = self._listing_for(job)
+        count = listing.details.episode_count if listing else None
+        complete = not count or len(names) >= count
+        stray = [r for r in plan.mapping if picks and complete and r.role == TitleRole.episode
                  and r.title_index not in picks and r.title_index not in bonus]
+        # Short of some, a title the box didn't place keeps its guess, unless a title the
+        # box did place has that episode now: then it waits for one to be picked.
+        claimed = {(e.season, e.episode) for x in picks.values() for e in x.episodes}
+        taken = [r for r in plan.mapping if picks and not complete and r.role == TitleRole.episode
+                 and r.title_index not in picks and {(e.season, e.episode) for e in r.episodes} & claimed]
         todo = [r for r in plan.mapping if (r.title_index in picks and (r.role != TitleRole.episode
                 or r.episodes != picks[r.title_index].episodes))
                 or (r.title_index in bonus and (r.role != TitleRole.extra or r.episodes))]
-        if not stray and not todo:
+        if not stray and not todo and not taken:
             return False
         for r in plan.mapping:
             if (x := picks.get(r.title_index)):
@@ -427,6 +437,8 @@ class ShowFromScanMixin:
                 r.note = f"bonus episode: {b.show.name} S{b.episode.season:02}E{b.episode.episode:02} “{b.episode.name}”"
             elif r in stray:
                 r.role, r.episodes, r.note = TitleRole.extra, [], "not one of the episodes the box lists"
+            elif r in taken:
+                r.episodes, r.note = [], "its episode is on a title the box placed; pick which this is"
         plan.from_scan = True
         self._save(job)
         what = [f"{len(picks)} episodes"] if picks else []

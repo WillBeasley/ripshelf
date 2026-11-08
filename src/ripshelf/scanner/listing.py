@@ -298,6 +298,9 @@ def _columns(srcs: list[Src], taken: set[int]) -> list[ListingItem]:
             end()
             continue
         t = _strip_bullet(clean(s.text)).rstrip(".,;")
+        # A symbol misread before a title ("©& Pat's Special Delivery: A Giant Cake"), not
+        # a copyright line ("© 1998 Moonlit Pictures").
+        t = re.sub(r"^[©®@&%#*]+\s*(?=[A-Z])", "", t)
         if run and t[:1].islower():
             t = t[:1].upper() + t[1:]  # "castle Scribbling." in a column of titles
         if run:
@@ -559,6 +562,18 @@ def _sim(a: str, b: str) -> float:
     return fuzz.ratio(na, nb) / 100 if na and nb else 0.0
 
 
+def _sim_item(a: str, b: str) -> float:
+    """How alike two listed titles are, past the words they start with in common: "Pat's
+    Special Delivery: Ice Skates" isn't "Pat's Special Delivery: A Treehouse"."""
+    wa, wb = re.sub(r"[^a-z0-9 ]", "", a.lower()).split(), re.sub(r"[^a-z0-9 ]", "", b.lower()).split()
+    n = 0
+    while n < min(len(wa), len(wb)) and wa[n] == wb[n]:
+        n += 1
+    if n == len(wa) == len(wb):
+        return 1.0 if wa else 0.0
+    return _sim(" ".join(wa[n:]), " ".join(wb[n:])) if n else _sim(a, b)
+
+
 def _in_line(title: str, text: str) -> float:
     """How well a title appears within a line of text read on the scan: each of its
     words (of three letters or more) found among the line's, allowing a misread letter."""
@@ -592,11 +607,12 @@ def merge(own: Listing, readings: list[tuple[str, Listing]], texts: list[ScanTex
         for vi in theirs.items:
             # The other show's name, listed by the model as an extra of its own, is the
             # bonus episode Tesseract found.
-            if not vi.show and (bonus := next((x for x in out.items if x.show and _sim(x.show, vi.title) >= 0.8), None)):
+            if bonus := next((x for x in out.items if x.show and _sim(x.show, vi.title) >= 0.8), None):
                 bonus.source = "both" if bonus.source in ("tesseract", "both") else bonus.source
                 continue
-            same = max((x for x in out.items if x.kind == vi.kind), key=lambda x: _sim(x.title, vi.title), default=None)
-            if same and _sim(same.title, vi.title) >= 0.8:
+            same = max((x for x in out.items if x.kind == vi.kind), key=lambda x: _sim_item(x.title, vi.title),
+                       default=None)
+            if same and _sim_item(same.title, vi.title) >= 0.8:
                 same.source = "both" if same.source in ("tesseract", "both") else same.source
                 if vi.show and not same.show:
                     same.show, same.extra_type = vi.show, "Other"
