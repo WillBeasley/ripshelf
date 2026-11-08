@@ -202,7 +202,9 @@ def tidy(raw: dict) -> Listing:
             continue  # the film listed as one of its own extras
         kind = "extra" if it.kind == "extra" else "episode"
         show = (it.show or "").strip("\"'“”‘’ ") or None
-        if show and (kind != "extra" or _same_name(show, title) or _same_name(show, d.title or "")):
+        own = re.sub(r"[^a-z0-9]", "", (d.title or "").lower())
+        if show and (kind != "extra" or _same_name(show, title)
+                     or (own and re.sub(r"[^a-z0-9]", "", show.lower()) in own)):  # the disc's own show
             show = None  # not another show's episode, whatever the model says
         items.append(ListingItem(kind=kind, title=title[:300], number=it.number, show=show[:200] if show else None,
                                  runtime_min=it.runtime_min if it.runtime_min and it.runtime_min > 0 else None,
