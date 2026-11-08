@@ -108,6 +108,56 @@ async def test_overall_timeout_still_applies_to_a_chatty_run(tmp_path):
     assert res.timed_out and not res.stalled
 
 
+COMPLEX = ('MSG:3024,4096,2,"Complex multiplex encountered - 7 cells and 1234 VOBUs have to be scanned.",'
+           '"Complex multiplex encountered - %1 cells and %2 VOBUs have to be scanned.","7","1234"')
+
+
+async def test_complex_multiplex_may_stay_quiet_longer(tmp_path, monkeypatch):
+    # MakeMKV writes nothing while it works through a complex multiplex's VOBUs.
+    monkeypatch.setattr(runner, "COMPLEX_IDLE_S", 5)
+    cmd = script(tmp_path, f"""
+        import time
+        print({COMPLEX!r}, flush=True); time.sleep(2)
+        print("TCOUNT:3", flush=True)
+    """)
+    res = await runner.MakeMKV(cmd).run([], tmp_path, tmp_path / "log", timeout=30, idle_timeout=1.0)
+    assert res.returncode == 0 and not res.timed_out and not res.stalled
+
+
+async def test_the_usual_idle_timeout_is_back_once_output_resumes(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "COMPLEX_IDLE_S", 30)
+    cmd = script(tmp_path, f"""
+        import time
+        print({COMPLEX!r}, flush=True); time.sleep(1.5)
+        print('MSG:3025,0,1,"Title #1 has length of 12 seconds"', flush=True); time.sleep(60)
+    """)
+    started = asyncio.get_running_loop().time()
+    res = await runner.MakeMKV(cmd).run([], tmp_path, tmp_path / "log", timeout=30, idle_timeout=1.0)
+    assert res.stalled and asyncio.get_running_loop().time() - started < 10
+
+
+async def test_a_complex_multiplex_that_never_ends_still_stalls(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "COMPLEX_IDLE_S", 2)
+    cmd = script(tmp_path, f"import time\nprint({COMPLEX!r}, flush=True)\ntime.sleep(60)")
+    res = await runner.MakeMKV(cmd).run([], tmp_path, tmp_path / "log", timeout=30, idle_timeout=1.0)
+    assert res.timed_out and res.stalled
+
+
+async def test_the_overall_timeout_cuts_a_complex_multiplex_short(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "COMPLEX_IDLE_S", 30)
+    cmd = script(tmp_path, f"import time\nprint({COMPLEX!r}, flush=True)\ntime.sleep(60)")
+    res = await runner.MakeMKV(cmd).run([], tmp_path, tmp_path / "log", timeout=1.5, idle_timeout=1.0)
+    assert res.timed_out and not res.stalled
+
+
+def test_idle_limit():
+    assert runner.msg_code(COMPLEX) == 3024
+    assert runner.msg_code("PRGV:1,2,3") is None and runner.msg_code("MSG:x") is None
+    assert runner.idle_limit(COMPLEX, 300) == runner.COMPLEX_IDLE_S
+    assert runner.idle_limit(COMPLEX, 7200) == 7200  # a longer setting wins
+    assert runner.idle_limit('MSG:3007,0,0,"Using direct disc access mode"', 300) == 300
+
+
 async def test_cancel_mid_run(tmp_path):
     cmd = script(tmp_path, "import time\nprint('PRGV:0,1,2', flush=True)\ntime.sleep(60)")
     m = runner.MakeMKV(cmd)

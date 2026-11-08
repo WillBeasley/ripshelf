@@ -28,6 +28,8 @@ The job says "MakeMKV stopped responding while scanning" or "was still scanning 
 
 The limits are in Settings → Drives and MakeMKV.
 
+A DVD with a complex multiplex is the one slow scan that goes silent: MakeMKV logs "Complex multiplex encountered - N cells and M VOBUs have to be scanned" and then writes nothing until it's done, which took over 5 minutes for 4759 VOBUs on an LG GGC-H20N. The job notes it, and the scan is allowed up to an hour of silence after that message (or the timeout in Settings, if longer), within the overall limit.
+
 ## An older drive hangs in MakeMKV (LG GGC-H20N and others)
 
 MakeMKV after 1.17.7 tries to make a firmware dump for a drive without LibreDrive support, and on some drives (the LG GGC-H20N is one) it never finishes. MakeMKV 1.17.6 makes the dump fine, and once a `dump_*.tgz` is in the drive's MakeMKV folder, current MakeMKV uses it and scans normally.

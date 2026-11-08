@@ -48,6 +48,7 @@ from .makemkv.parse import (
     ScanResult,
     choose_main_feature,
     parse_info,
+    split_line,
 )
 from .matchjobs import MatchMixin, ShowFromScanMixin
 from .models import (
@@ -721,9 +722,23 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                                      f"{int(self.open_gate.max_hold_s)} s each, then the scans run side by side")
         d.scan = self._runner(d)
         log_path = self.work_dir(job) / "scan.log"
+        told = False
+
+        def on_line(line: str) -> None:
+            # MakeMKV goes quiet after this, so say why the scan seems stuck (once a scan).
+            nonlocal told
+            if told or runner.msg_code(line) != runner.COMPLEX_MSG:
+                return
+            told = True
+            f = (split_line(line) or ("", []))[1]
+            size = f" ({f[-2]} cells, {f[-1]} VOBUs)" if len(f) >= 6 else ""
+            self._event(job, "info", f"Scanning a complex disc structure{size}. MakeMKV says nothing until "
+                                     f"it's done, which can take a while")
+
         try:
             res = await d.scan.run(["-r", "--progress=-same", "--cache=1", "info", f"dev:{d.hw.device}"],
-                                   home, log_path, timeout=self.s.scan_max_s, idle_timeout=self.s.scan_timeout_s)
+                                   home, log_path, on_line=on_line, timeout=self.s.scan_max_s,
+                                   idle_timeout=self.s.scan_timeout_s)
         finally:
             d.scan = None
         # Progress lines are asked for only to tell a slow scan from a hung one.
@@ -744,7 +759,11 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             raise JobError(Problem(code="makemkv_missing", message=f"MakeMKV {res.error}",
                                    actions=["setup", "retry_scan"]))
         if res.timed_out:
-            if res.stalled:
+            if res.stalled and scan.messages and scan.messages[-1].code == runner.COMPLEX_MSG:
+                quiet = max(self.s.scan_timeout_s, runner.COMPLEX_IDLE_S)
+                what = (f"MakeMKV was still scanning the disc's complex structure after {_span(quiet)} "
+                        f"without a word")
+            elif res.stalled:
                 what = f"MakeMKV stopped responding while scanning (no output for {_span(self.s.scan_timeout_s)})"
             else:
                 what = f"MakeMKV was still scanning after {_span(self.s.scan_max_s)}"

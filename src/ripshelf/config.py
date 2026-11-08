@@ -232,6 +232,7 @@ class Settings(BaseSettings):
     # A scan is stopped once MakeMKV has written nothing for scan_timeout_s, and in any
     # case after scan_max_s. A damaged disc keeps MakeMKV busy (read retries, slow
     # AACS) for far longer than a healthy one, but it keeps reporting while it does.
+    # After a complex multiplex message it may stay quiet longer (runner.COMPLEX_IDLE_S).
     scan_timeout_s: int = 300
     scan_max_s: int = 7200
     poll_interval_s: float = 3.0
