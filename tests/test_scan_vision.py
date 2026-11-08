@@ -357,3 +357,17 @@ def test_api_test_button(settings):
         r = client.post("/api/settings/test", json={"check": "vision", "values": {
             "vision_provider": "anthropic", "vision_model": "vm"}}).json()
         assert not r["ok"] and "key" in r["message"]
+
+
+async def test_anthropic_ignores_an_address_left_from_a_local_model(harness, settings):
+    """Switched from Ollama to Anthropic, the saved address is Ollama's: the scans must
+    still go to Anthropic, as the Test button's request does."""
+    from pydantic import SecretStr
+
+    settings.vision_mode, settings.vision_provider, settings.vision_model = "every", "anthropic", "a-vision-model"
+    settings.vision_url, settings.vision_api_key = "http://ollama:11434", SecretStr("k")
+    async with harness() as h:
+        p = h.m.vision_provider()
+        assert p.kind == "anthropic" and p.url is None and p.model == "a-vision-model"
+        settings.vision_provider = "local"
+        assert h.m.vision_provider().url == "http://ollama:11434"
