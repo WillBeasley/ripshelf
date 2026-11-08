@@ -100,3 +100,12 @@ def test_a_disc_can_be_taken_out_of_the_collection(settings):
 @pytest.fixture(autouse=True)
 def _tv_in_library(settings):
     settings.tv.mkdir(parents=True, exist_ok=True)
+
+
+async def test_a_deleted_job_leaves_its_release(harness, settings):
+    """The same disc ripped again after its first job was deleted is disc 1 again, not 2."""
+    async with harness() as h:
+        first, _ = filed(h, settings)
+        h.db.assign_release(first.id, "release-1", "pippa", 1)
+        h.m.delete_jobs([first.id])
+        assert h.db.release_jobs("release-1") == []

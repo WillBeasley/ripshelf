@@ -202,7 +202,8 @@ def _item(kind: str, srcs: list[Src], disc: int | None) -> ListingItem | None:
         text = _strip_bullet(text)[m.end():]
     quoted = [q for q in QUOTED.findall(text) if len(q.split()) >= 1 and re.search(r"[A-Za-z]{3}", q)]
     title = _tidy_title(quoted[-1] if quoted and kind == "extra" else text)
-    if not re.search(r"[A-Za-z]{2}", title):
+    # A scrap misread off a picture ("ae", "GE\\ woth" at 49%) isn't a title.
+    if not re.search(r"[A-Za-z]{3}", title) or max(s.line.conf for s in srcs) < 55:
         return None
     same_scan = [s for s in srcs if s.scan_id == srcs[0].scan_id]
     return ListingItem(kind=kind, title=title, number=num, runtime_min=runtime_min(raw),
@@ -562,6 +563,26 @@ def _sim(a: str, b: str) -> float:
     return fuzz.ratio(na, nb) / 100 if na and nb else 0.0
 
 
+def _plausible(reading: Listing) -> Listing:
+    """A model's reading without what it copied onto every item: the box's total running
+    time ("61 mins" against each of eleven 5-minute episodes), or a disc number on a box
+    that isn't split by disc (every item "disc 1")."""
+    times = [i.runtime_min for i in reading.items if i.runtime_min]
+    total = reading.details.feature_runtime_min
+    same_time = len(times) >= 3 and len(set(times)) == 1
+    discs = [i.disc for i in reading.items]
+    one_disc = len(discs) >= 2 and None not in discs and len(set(discs)) == 1
+    if not any(t == total for t in times) and not same_time and not one_disc:
+        return reading
+    out = reading.model_copy(deep=True)
+    for i in out.items:
+        if i.runtime_min and (i.runtime_min == total or same_time):
+            i.runtime_min = None
+        if one_disc:
+            i.disc = None
+    return out
+
+
 def _sim_item(a: str, b: str) -> float:
     """How alike two listed titles are, past the words they start with in common: "Pat's
     Special Delivery: Ice Skates" isn't "Pat's Special Delivery: A Treehouse"."""
@@ -604,6 +625,7 @@ def merge(own: Listing, readings: list[tuple[str, Listing]], texts: list[ScanTex
             d.sources[f] = "barcode" if f == "barcode" and d.barcode_source == "barcode" else "tesseract"
     lines = {t.scan_id: t.lines for t in texts}
     for scan_id, theirs in readings:
+        theirs = _plausible(theirs)
         for vi in theirs.items:
             # The other show's name, listed by the model as an extra of its own, is the
             # bonus episode Tesseract found.
