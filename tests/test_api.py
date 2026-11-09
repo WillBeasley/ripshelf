@@ -334,6 +334,9 @@ def test_installs_from_before_the_setup_page_count_as_set_up(settings, monkeypat
     monkeypatch.setenv("RIPSHELF_SCRATCH_DIR", str(settings.scratch_dir))
     monkeypatch.setenv("RIPSHELF_LIBRARY_DIR", str(settings.library_dir))
     assert not config.load_settings().setup_complete  # nothing saved yet, so a fresh install
+    # A virtual drive found on the first start is disabled by ripshelf itself: still a fresh install.
+    (settings.data_dir / "settings.json").write_text('{"disabled_drives": ["qemu-dvd-rom-9269"]}', encoding="utf-8")
+    assert not config.load_settings().setup_complete
     (settings.data_dir / "settings.json").write_text('{"auto_eject": false}', encoding="utf-8")
     assert config.load_settings().setup_complete
 
