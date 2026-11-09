@@ -542,6 +542,12 @@ SECRETS = frozenset(n for n in EDITABLE if is_secret(Settings.model_fields[n]))
 LEGACY = frozenset({"tv_episode_order"})
 
 
+# Settings ripshelf saves by itself, before anyone has seen the setup page: a virtual
+# drive starts disabled. A settings.json with only these is a new install, not one set
+# up before there was a setup page.
+AUTO_WRITTEN = {"disabled_drives"}
+
+
 def load_settings() -> Settings:
     s = Settings()
     overrides = s._read_overrides()
@@ -552,7 +558,7 @@ def load_settings() -> Settings:
             except ValidationError as e:
                 # Saved by an older version with looser limits, say. The default is used.
                 log.warning("settings.json: ignoring %s=%r (%s)", k, v, e.errors()[0]["msg"])
-    if overrides and "setup_complete" not in overrides:
+    if set(overrides) - AUTO_WRITTEN and "setup_complete" not in overrides:
         s.setup_complete = True  # set up before there was a setup page
     if "tvdb_episode_order" not in overrides and s.tv_episode_order == "tvdb_dvd":
         s.tvdb_episode_order = "dvd"
