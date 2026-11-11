@@ -59,7 +59,7 @@ Use the drive's own `srN`/`sgM` pair. The dump belongs to the drive and its firm
 
 ## A disc goes to Review instead of being identified
 
-- **No TMDB key.** Every disc TheDiscDB doesn't know needs one ([providers.md](providers.md)).
+- **No TMDB key.** A film TheDiscDB doesn't know needs one, or an OMDb key, to get candidates. TV shows are still found through TVmaze or TheTVDB without it ([providers.md](providers.md)).
 - **A cryptic label** (`BTTF2`, `DISC_1`). Search on the review card. Labels that are a catalogue number (`EO51710`) can be [looked up on the web](catalogue.md).
 - **A close call.** The score is under the auto-confirm line (0.90 by default, Settings → Identify). The card shows the evidence for each candidate.
 
