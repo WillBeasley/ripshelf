@@ -2527,6 +2527,12 @@ export interface SettingsUpdate {
   } | null;
   disabled_drives?: string[] | null;
   auto_eject?: boolean | null;
+  track_selection?: boolean | null;
+  track_languages?: string[] | null;
+  track_audio?: ("languages" | "all") | null;
+  track_commentary?: boolean | null;
+  track_subtitles?: ("none" | "forced" | "languages" | "all") | null;
+  track_rule?: string | null;
   scan_timeout_s?: number | null;
   scan_max_s?: number | null;
   poll_interval_s?: number | null;
@@ -2650,6 +2656,12 @@ export interface SettingsUpdate1 {
   } | null;
   disabled_drives?: string[] | null;
   auto_eject?: boolean | null;
+  track_selection?: boolean | null;
+  track_languages?: string[] | null;
+  track_audio?: ("languages" | "all") | null;
+  track_commentary?: boolean | null;
+  track_subtitles?: ("none" | "forced" | "languages" | "all") | null;
+  track_rule?: string | null;
   scan_timeout_s?: number | null;
   scan_max_s?: number | null;
   poll_interval_s?: number | null;
@@ -2792,6 +2804,12 @@ export interface SettingsView {
     [k: string]: string;
   };
   auto_eject: boolean;
+  track_selection: boolean;
+  track_languages: string[];
+  track_audio: "languages" | "all";
+  track_commentary: boolean;
+  track_subtitles: "none" | "forced" | "languages" | "all";
+  track_rule: string | null;
   scan_timeout_s: number;
   scan_max_s: number;
   poll_interval_s: number;

@@ -266,7 +266,8 @@ class RemoteMakeMKV:
 
     async def run(self, args: list[str], home: Path, log_path: Path,
                   on_line: Callable[[str], None] | None = None, timeout: float | None = None,
-                  idle_timeout: float | None = None) -> RunResult:
+                  idle_timeout: float | None = None,
+                  conf: dict[str, str | None] | None = None) -> RunResult:
         self._cancelled = False
         w = self.hub.workers.get(self.worker_id)
         if not w or not w.online:
@@ -278,7 +279,7 @@ class RemoteMakeMKV:
         # A backup is only sent to a worker that shares scratch (it is a folder tree).
         out_dir = Path(args[-1]) if "mkv" in args or "backup" in args else None
         cmd = {"type": "makemkv", "drive": self.local_drive, "args": args, "timeout": timeout,
-               "idle_timeout": idle_timeout,
+               "idle_timeout": idle_timeout, "conf": conf,
                "out_dir": str(out_dir) if out_dir else None}
         self._run = self.hub.start_run(self.worker_id, cmd, log_path, out_dir, on_line)
         try:

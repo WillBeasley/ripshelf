@@ -413,7 +413,7 @@ class Agent:
                 try:
                     res = await m.run(args, home, Path(self.s.data_dir) / "worker-logs" / f"run-{run_id}.log",
                                       on_line=pending.append, timeout=cmd.get("timeout"),
-                                      idle_timeout=cmd.get("idle_timeout"))
+                                      idle_timeout=cmd.get("idle_timeout"), conf=cmd.get("conf"))
                 finally:
                     self.runs.pop(run_id, None)
                     flush_task.cancel()

@@ -1,6 +1,6 @@
 <script lang="ts">
-	// Settings → Drives and ripping: MakeMKV's key, what's ripped, each drive (grouped by the
-	// machine it's on), and MakeMKV's private data.
+	// Settings → Drives and ripping: MakeMKV's key, what's ripped (and which audio and subtitle
+	// tracks), each drive (grouped by the machine it's on), and MakeMKV's private data.
 	import TestButton from '#lib/components/TestButton.svelte';
 	import Advanced from '../Advanced.svelte';
 	import Field from '../Field.svelte';
@@ -28,6 +28,15 @@
 		{/snippet}
 	</Field>
 	<Field {form} name="auto_eject" />
+	<Field {form} name="track_selection" />
+	{#if form.f.track_selection}
+		<Field {form} name="track_languages" disabled={!!form.f.track_rule} />
+		<div class="two">
+			<Field {form} name="track_audio" disabled={!!form.f.track_rule} />
+			<Field {form} name="track_subtitles" disabled={!!form.f.track_rule} />
+		</div>
+		<Field {form} name="track_commentary" disabled={!!form.f.track_rule} />
+	{/if}
 	<Advanced>
 		<div class="two">
 			<Field {form} name="scan_timeout_s" />
@@ -35,6 +44,13 @@
 		</div>
 		<Field {form} name="poll_interval_s" />
 		<Field {form} name="uhd_models" multiline />
+		<Field {form} name="track_rule" disabled={!form.f.track_selection}>
+			{#snippet more()}
+				MakeMKV's "Default selection rule", such as
+				<span class="mono">-sel:all,+sel:(favlang|nolang),-sel:mvcvideo,=100:all,-10:favlang</span> (its own).
+				It applies once track choice is on above.
+			{/snippet}
+		</Field>
 	</Advanced>
 </section>
 
