@@ -159,6 +159,7 @@ export const api = {
 	scanUrl: (id: number, scan: string) => `/api/jobs/${id}/scans/${scan}`,
 	scanThumbUrl: (id: number, sc: CoverScan, large = false) =>
 		`/api/jobs/${id}/scans/${sc.id}/thumb?v=${sc.rotate}-${(sc.crop ?? []).join('.')}${large ? '&large=true' : ''}`,
+	scanWholeUrl: (id: number, sc: CoverScan) => `/api/jobs/${id}/scans/${sc.id}/thumb?whole=true&v=${sc.rotate}`,
 	uploadScan: (id: number, file: File, kind: ScanKind, source: 'upload' | 'camera') => {
 		const form = new FormData();
 		form.append('file', file);
