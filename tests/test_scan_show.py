@@ -519,3 +519,80 @@ async def test_a_title_set_by_hand_can_hold_episodes_from_anywhere(harness, sett
         assert not any("title 0" in p for p in job.tv.problems)
         with pytest.raises(ValueError, match="not on this disc"):
             await h.m.tv_set_mapping(job.id, [TitleMapUpdate(title_index=9, role=TitleRole.skip)])
+
+
+# --- a box's thirteen in two long titles and one on its own ---------------------------
+
+
+def complete_series_job() -> JobRecord:
+    """The whole series on one disc: nine episodes in title 0, one in title 1 and three in
+    title 2. The episode list says each runs 12 minutes (the broadcast slot); they run 10,
+    as the box's 130 minutes for 13 says."""
+    slot = [e.model_copy(update={"runtime": 12}) for e in TUGBOAT]
+    titles = [TitleInfo(index=i, duration_s=s, size_bytes=1, chapters=c, framerate="25")
+              for i, s, c in [(0, 5497, 10), (1, 611, 2), (2, 1833, 4)]]
+    mapping = [TitleMap(title_index=0, duration_s=5497, role=TitleRole.episode),
+               TitleMap(title_index=1, duration_s=611, role=TitleRole.episode),
+               TitleMap(title_index=2, duration_s=1833, role=TitleRole.skip, note="not episode length")]
+    job = JobRecord(id=7, drive_id="fake-ihas122", state=JobState.review, created_at=now(), updated_at=now(),
+                    titles=titles, media=MediaKind.tv,
+                    tv=TvPlan(show=TUG, season=1, start_episode=1, mapping=mapping, candidates=[TUG], episodes=slot))
+    job.disc.label, job.disc.kind = "TILLY_SERIES_1", DiscKind.dvd
+    box = tugboat_box()
+    box.details.feature_runtime_min = 130
+    job.listing = ScanListing(state="done", found=box)
+    return job
+
+
+async def test_a_box_of_thirteen_in_two_long_titles(harness, settings, monkeypatch):
+    """Before the rip, the box says both long titles hold episodes (9 and 3, with the one
+    on its own that's its 13), and no line is put on a long title itself. Once they're
+    ripped and cut, the parts take the box's names in its order."""
+    async with harness() as h:
+        fake_tmdb(monkeypatch, h)
+        job = complete_series_job()
+        box, job.listing = job.listing, None
+        job = put(h, job)
+        h.m._plan_split(job, job.tv, TUG, [])  # as proposing the show does, before the box is read
+        job.listing = box
+        h.db.save_job(job)
+        assert [(sp.title_index, sp.expected) for sp in h.db.get_job(job.id).tv.splits] == [(0, 8)]
+
+        await h.m.fix_show_from_scan(job.id)  # the box read
+        job = h.db.get_job(job.id)
+        assert [(sp.title_index, sp.expected, sp.base) for sp in job.tv.splits] == [(0, 9, 1000), (2, 3, 1100)]
+        rows = {m.title_index: m for m in job.tv.mapping}
+        assert rows[0].role == rows[2].role == TitleRole.skip and not rows[0].episodes
+        assert {x.title_index for x in job.scan_match.matches} <= {1}  # nothing on the long titles
+        with pytest.raises(ValueError, match="split into parts"):
+            await h.m.tv_set_mapping(job.id, [TitleMapUpdate(title_index=0, role=TitleRole.episode,
+                                                             episodes=[EpisodeRef(season=1, episode=4)])])
+
+        title_marks = {"t0": [0.0, *CHAPTERS[1:], 5490.0], "t2": [0.0, 611.0, 1222.0, 1830.0]}
+
+        async def chapters(ffprobe, path):
+            return title_marks["t0" if "t00" in str(path) else "t2"]
+
+        async def duration(ffprobe, path):
+            return 5497.5 if "t00" in str(path) else 1833.0
+
+        async def break_score(ffmpeg, path, at):
+            return 1.0
+
+        async def grab(*a):
+            return None
+
+        monkeypatch.setattr(tvsplit, "read_chapters", chapters)
+        monkeypatch.setattr(tvsplit, "break_score", break_score)
+        monkeypatch.setattr("ripshelf.tvjobs.verify.duration", duration)
+        monkeypatch.setattr(h.m, "_grab_mark", grab)
+        job.rip.files = {0: "/nowhere/title_t00.mkv", 1: "/nowhere/title_t01.mkv", 2: "/nowhere/title_t02.mkv"}
+        h.db.save_job(job)
+        await h.m._analyse_split(job.id)
+        job = h.db.get_job(job.id)
+        assert [(sp.state, len(sp.cuts) + 1) for sp in job.tv.splits] == [("ready", 9), ("ready", 3)]
+        rows = {m.title_index: m for m in job.tv.mapping}
+        order = [*range(1000, 1009), 1, *range(1100, 1103)]
+        assert [rows[i].episodes[0].episode for i in order] == [*DISC_ORDER, 11, 12, 13]
+        assert {rows[i].part_of for i in range(1100, 1103)} == {2}
+        assert job.tv.order_from == "box" and not job.tv.problems

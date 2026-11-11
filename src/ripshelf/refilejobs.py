@@ -87,8 +87,8 @@ class RefileMixin:
         job.candidates = sorted(job.candidates, key=lambda c: _same(c, wrong))
         if job.tv:
             job.tv.user_edited = True  # never confirmed again without a review
-            if job.tv.split:
-                job.tv.split.edited = True  # its parts are the files in the library, so the cuts stay
+            for sp in job.tv.splits:
+                sp.edited = True  # its parts are the files in the library, so the cuts stay
         if "review" not in job.notified:
             job.notified.append("review")  # asked for, so no "needs review" notification
         n = len(files) or 1

@@ -723,7 +723,7 @@ async def tv_set_mapping(job_id: int, body: TvConfirmRequest, request: Request):
 async def tv_split(job_id: int, body: TvSplitRequest, request: Request):
     """Where the long title holding the episodes is cut (chapters), or keep it whole."""
     m = manager(request)
-    return await _job_action(request, job_id, lambda i: m.tv_split(i, body.cuts, body.off, body.cut_at))
+    return await _job_action(request, job_id, lambda i: m.tv_split(i, body.cuts, body.off, body.cut_at, body.title_index))
 
 
 @api.get("/jobs/{job_id}/split-thumbs/{title_index}/{chapter}.jpg", include_in_schema=False)
