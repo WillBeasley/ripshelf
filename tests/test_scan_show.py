@@ -441,8 +441,8 @@ async def test_split_parts_without_a_box_are_a_guess(harness, settings, monkeypa
 
 
 async def test_the_box_read_after_the_split(harness, settings, monkeypatch):
-    """The box scanned once the parts are mapped: its order is taken then, and Use this
-    takes it again after the cuts were changed by hand."""
+    """The box scanned once the parts are mapped: its order is taken then, and again
+    after the cuts were changed by hand."""
     async with harness() as h:
         fake_chapters(monkeypatch, h)
         proposed = fake_tmdb(monkeypatch, h)
@@ -455,11 +455,8 @@ async def test_the_box_read_after_the_split(harness, settings, monkeypatch):
         assert proposed == [] and episodes_in_disc_order(h.db.get_job(job.id)) == DISC_ORDER
 
         job = await h.m.tv_split(job.id, list(range(1, 9)), None)  # the same cuts, by hand
-        assert job.tv.user_edited and job.tv.order_from == "season"
-        assert episodes_in_disc_order(job) == list(range(1, 11))
-        assert any(x.agrees is False for x in job.scan_match.matches)  # the box says otherwise
-        job = await h.m.use_scan(job.id)
-        assert episodes_in_disc_order(job) == DISC_ORDER and job.tv.order_from == "box"
+        assert job.tv.user_edited and job.tv.order_from == "box"
+        assert episodes_in_disc_order(job) == DISC_ORDER
 
 
 # --- some of the box placed, the rest picked by hand ----------------------------------

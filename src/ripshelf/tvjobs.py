@@ -652,7 +652,9 @@ class TvMixin:
         self._remap(job, plan)
         self._check_plan(job)
         self._save(job)
-        self.rematch(job_id)  # the box against the parts as they are now
+        # New cuts give the parts the season's order; the box's list says which is which.
+        if not self.apply_scan_picks(job_id):
+            self.rematch(job_id)
         return self.db.get_job(job_id)
 
     async def _split_title(self, job_id: int) -> bool:
