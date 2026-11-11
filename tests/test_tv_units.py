@@ -241,10 +241,6 @@ def ref(s, e):
     ([TitleMap(title_index=1, duration_s=1, role=TitleRole.extra, episodes=[ref(1, 1)])], "marked extra"),
     ([TitleMap(title_index=1, duration_s=1, role=TitleRole.episode, episodes=[ref(1, 1)]),
       TitleMap(title_index=2, duration_s=1, role=TitleRole.episode, episodes=[ref(1, 1)])], "on both"),
-    ([TitleMap(title_index=1, duration_s=1, role=TitleRole.episode, episodes=[ref(1, 1), ref(1, 3)])],
-     "consecutive"),
-    ([TitleMap(title_index=1, duration_s=1, role=TitleRole.episode, episodes=[ref(1, 1), ref(1, 2), ref(1, 3)])],
-     "at most two"),
     ([TitleMap(title_index=1, duration_s=1, role=TitleRole.episode, episodes=[ref(7, 1)])], "not an episode"),
     ([TitleMap(title_index=1, duration_s=1, role=TitleRole.skip)], "no title is mapped"),
 ])
@@ -257,6 +253,14 @@ def test_no_problems_for_a_good_mapping():
     rows = [TitleMap(title_index=1, duration_s=1, role=TitleRole.episode, episodes=[ref(1, 1), ref(1, 2)]),
             TitleMap(title_index=2, duration_s=1, role=TitleRole.play_all)]
     assert tvmap.problems(rows, None) == []
+
+
+def test_any_episodes_on_one_title():
+    # A compilation's title may hold episodes from anywhere, three or more of them.
+    rows = [TitleMap(title_index=1, duration_s=1, role=TitleRole.episode, episodes=[ref(1, 1), ref(1, 3)]),
+            TitleMap(title_index=2, duration_s=1, role=TitleRole.episode, episodes=[ref(1, 2), ref(2, 1), ref(2, 4)])]
+    known = {(s, n): Episode(season=s, episode=n) for s in (1, 2) for n in range(1, 5)}
+    assert tvmap.problems(rows, known) == []
 
 
 # --- shows --------------------------------------------------------------------------------
@@ -325,6 +329,12 @@ def test_episode_naming(tmp_path):
     assert p == tmp_path / "TV/Captain Comet (2005)/Season 01/Captain Comet - S01E04 - Strangers of Lowport (1).mkv"
     p2 = naming.episode_path(tmp_path, show, e)
     assert p2.name == "Captain Comet - S01E04-E05 - Strangers of Lowport (1) & Planet Feud Three (2).mkv"
+    # Not a run: the first episode's code, and the others named with theirs.
+    p4 = naming.episode_path(tmp_path, show, [Episode(season=3, episode=7, name="Gull Patrol"), e[1]])
+    assert p4.parent.name == "Season 01"
+    assert p4.name == "Captain Comet - S01E05 - Planet Feud Three (2) & S03E07 Gull Patrol.mkv"
+    p5 = naming.episode_path(tmp_path, show, [Episode(season=1, episode=2), Episode(season=1, episode=6)])
+    assert p5.name == "Captain Comet - S01E02 - S01E06.mkv"
     p3 = naming.episode_path(tmp_path, Show(tmdb_id=2, name="Who? What: Where/"), [Episode(season=0, episode=1)])
     assert p3.parent.name == "Season 00" and p3.name == "Who What - Where - S00E01.mkv"
     long = naming.episode_path(tmp_path, show, [Episode(season=1, episode=1, name="x" * 400)])

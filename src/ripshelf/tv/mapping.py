@@ -171,12 +171,6 @@ def problems(mapping: list[TitleMap], known: dict[tuple[int, int], Episode] | No
                 seen[key] = m.title_index
             if known is not None and key not in known:
                 out.append(f"title {m.title_index}: S{e.season:02d}E{e.episode:02d} is not an episode of this show")
-        if len(m.episodes) == 2:
-            a, b = m.episodes
-            if a.season != b.season or b.episode != a.episode + 1:
-                out.append(f"title {m.title_index}: a two-part title needs two consecutive episodes")
-        if len(m.episodes) > 2:
-            out.append(f"title {m.title_index}: at most two episodes per title")
     if not any(m.role == TitleRole.episode for m in mapping):
         out.append("no title is mapped to an episode")
     return out
