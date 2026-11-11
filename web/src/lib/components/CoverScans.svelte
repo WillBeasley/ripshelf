@@ -5,6 +5,7 @@
 	import type { CoverScan, Job, ScannerInfo, ScanSplit } from '../api-types';
 	import { api, type ScanKind } from '../api';
 	import { Action } from '../actions.svelte';
+	import ScanCrop from './ScanCrop.svelte';
 	import ScanListing from './ScanListing.svelte';
 	import ScanMatchView from './ScanMatchView.svelte';
 
@@ -29,6 +30,7 @@
 	let duplex = $state(false);
 	let uploadKind = $state<ScanKind>('front');
 	let splitting = $state<string | null>(null);
+	let cropping = $state<string | null>(null);
 	let split = $state<ScanSplit>({ position: 0.5, spine: 0.05, swap: false, auto: false });
 	let note = $state<string | null>(null);
 	let big = $state<CoverScan | null>(null);
@@ -184,13 +186,13 @@
 		{#if scans.length}
 			<ul class="scans">
 				{#each scans as sc (sc.id)}
-					<li class="scan" class:wide={splitting === sc.id}>
+					<li class="scan" class:wide={splitting === sc.id || cropping === sc.id}>
 						<button class="thumb" title="Show it larger" onclick={() => zoom(sc)}>
 							<img src={api.scanThumbUrl(job.id, sc)} alt={kindName[sc.kind]} loading="lazy" />
 						</button>
 						<div class="what small">
 							<strong>{kindName[sc.kind]}{sc.page && (sc.kind === 'insert' || sc.kind === 'other') ? ` ${sc.page}` : ''}</strong>
-							<span class="muted">{SOURCE[sc.source]}{sc.library_path ? ' · in the library' : ''}</span>
+							<span class="muted">{SOURCE[sc.source]}{sc.crop_by_hand ? ' · cropped' : ''}{sc.library_path ? ' · in the library' : ''}</span>
 						</div>
 						<div class="tools">
 							<select aria-label="What it is of" value={sc.kind} disabled={act.busy}
@@ -198,13 +200,14 @@
 								{#each KINDS as [k, label] (k)}<option value={k}>{label}</option>{/each}
 							</select>
 							<button class="icon" title="Turn a quarter clockwise" aria-label="Turn" disabled={act.busy} onclick={() => turn(sc)}>⟳</button>
-							{#if sc.source !== 'camera'}
-								<button class="link small" disabled={act.busy}
-									onclick={() => act.run(() => api.updateScan(job.id, sc.id, { trim: !sc.crop }))}>{sc.crop ? 'Untrim' : 'Trim'}</button>
-							{/if}
+							<button class="link small" disabled={act.busy} title="Cut the scan to the picture"
+								onclick={() => (cropping = cropping === sc.id ? null : sc.id)}>Crop…</button>
 							<button class="link small danger" disabled={act.busy}
 								onclick={() => act.run(() => api.deleteScan(job.id, sc.id))}>Remove</button>
 						</div>
+						{#if cropping === sc.id}
+							<ScanCrop {job} {sc} {act} onclose={() => (cropping = null)} />
+						{/if}
 						{#if sc.vision === 'queued' || sc.vision === 'reading'}
 							<div class="small vision busy" role="status"><span class="spinner" aria-hidden="true"></span>{sc.vision_message}</div>
 						{:else if sc.vision === 'failed'}

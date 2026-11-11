@@ -373,7 +373,7 @@ class TvMixin:
         job.tv = plan
         self._check_plan(job)
         self._save(job)
-        if job.rip.state == RipState.done and job.rip.all_titles:
+        if job.rip.state == RipState.done and job.rip.all_titles and not job.refile:
             self._spawn(self.drives.get(job.drive_id), self._after_tv_rip(job.id), job.id)
 
     def _disc_match_mapping(self, job: JobRecord, plan: TvPlan, show: Show) -> str | None:
@@ -622,6 +622,7 @@ class TvMixin:
         """Change where the long title is cut, add a cut anywhere (``cut_at``), keep it whole
         (``off``), or split it after all."""
         job = self._tv_job(job_id)
+        self._refiling(job, "be split differently, as its parts are already in the library")
         plan = job.tv
         if not plan or not plan.show:
             raise ValueError("pick the show first")
@@ -943,7 +944,7 @@ class TvMixin:
 
     async def _maybe_auto_confirm(self, job_id: int) -> None:
         job = self.db.get_job(job_id)
-        if not job or job.media != MediaKind.tv or not job.tv or job.identity or job.tv.auto_confirmed:
+        if not job or job.media != MediaKind.tv or not job.tv or job.identity or job.tv.auto_confirmed or job.refile:
             return
         if job.state not in (JobState.review, JobState.ripping, JobState.identifying):
             return
@@ -1009,6 +1010,8 @@ class TvMixin:
         plan.auto_confirmed = source == "auto"
         job.problem = None
         job.destination = str(naming.show_folder(self.s.tv, show))
+        if job.refile:  # finished already, so its files move to the new names
+            return await self._refile(job)
         n = sum(len(m.episodes) for m in plan.mapping)
         how = "Auto-confirmed" if source == "auto" else "Confirmed"
         self._event(job, "identity", f"{how}: {show.name}, {n} episodes"
@@ -1041,6 +1044,7 @@ class TvMixin:
         job = self._tv_job(job_id)
         if job.media == media:
             return job
+        self._refiling(job, f"become {'a TV disc' if media == MediaKind.tv else 'a film'}")
         if job.mode == "backup":
             raise ValueError("a full disc backup keeps the whole disc, so it has no episodes to map")
         d = self.drives[job.drive_id]
@@ -1302,7 +1306,7 @@ class TvMixin:
                                         actions=["retry"]))
                 return
             done_before += src.stat().st_size
-            copied[idx] = {"file": str(dest.relative_to(naming.show_folder(self.s.tv, plan.show))),
+            copied[idx] = {"file": dest.relative_to(naming.show_folder(self.s.tv, plan.show)).as_posix(),
                            "sha256": sha,
                            "episodes": [f"S{e.season:02d}E{e.episode:02d}" for e in eps] if eps else [],
                            "names": [e.name for e in eps] if eps else []}

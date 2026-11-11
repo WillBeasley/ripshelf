@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from . import library
 from .models import TitleInfo, TitleSnapshots
 from .tv import verify
 
@@ -75,5 +76,5 @@ class Grabber:
             if not ok:
                 tmp.unlink(missing_ok=True)
                 return None
-            tmp.replace(out)
+            library.replace(tmp, out)
             return out

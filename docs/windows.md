@@ -17,6 +17,7 @@ winget install -e --id Gyan.FFmpeg            # optional, for transcoding and ep
 winget install -e --id Microsoft.OpenJDK.21   # optional, for Blu-ray menus (BD-J), which some discs need
 winget install -e --id MoritzBunkus.MKVToolNix # optional, to split TV discs with every episode in one title
 winget install -e --id UB-Mannheim.TesseractOCR # optional, to read the text on scans of the box
+winget install -e --id Microsoft.VCRedist.2013.x64 # optional, for zbar to read barcodes on scans of the box
 ```
 
 Then open a new terminal, so the new programs are on the PATH.
@@ -27,10 +28,10 @@ Then open a new terminal, so the new programs are on the PATH.
 | **MakeMKV** | ripshelf finds it in Program Files. Register it once, in the MakeMKV app or with your key in ripshelf's Settings. |
 | **Git** | to clone the source and `git pull` updates. You can download a zip from the repository instead. |
 | **Node.js** | only needed once, to build the web UI (and again after updates that change it). |
-| **ffmpeg** (optional) | transcoding, and checking the episode order of TV discs. On Windows, transcoding uses x265 on the CPU. |
+| **ffmpeg** (optional) | transcoding, and checking the episode order of TV discs. The automatic encoder tries Intel Quick Sync, then NVIDIA NVENC, and otherwise uses x265 on the CPU. VAAPI is Linux only. GPU encoding on Windows hasn't been tried on real hardware yet. |
 | **Java** (optional) | some Blu-rays need their menus (BD-J) read to find the right playlist. |
 | **MKVToolNix** (optional) | splits a TV disc's one long title into episodes. ripshelf finds `mkvmerge` in Program Files. |
-| **Tesseract** (optional) | reads the text on [cover scans](cover-scans.md) to list what's on the disc. ripshelf finds it in Program Files. Without it the scans are still kept, and the job says text reading isn't available. Barcodes are read by zbar, which comes with ripshelf's Python packages on Windows. |
+| **Tesseract** (optional) | reads the text on [cover scans](cover-scans.md) to list what's on the disc. ripshelf finds it in Program Files. Without it the scans are still kept, and the job says text reading isn't available. Barcodes are read by zbar, which comes with ripshelf's Python packages but needs the Visual C++ 2013 runtime (`Microsoft.VCRedist.2013.x64`). Without it, barcodes are read from their printed digits. |
 
 ## Installation
 

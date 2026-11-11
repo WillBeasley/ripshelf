@@ -9,6 +9,7 @@
 	import CoverScans from './CoverScans.svelte';
 	import EpisodePicker from './EpisodePicker.svelte';
 	import Poster from './Poster.svelte';
+	import RefileBanner from './RefileBanner.svelte';
 	import Snapshots from './Snapshots.svelte';
 	import SplitTimeline from './SplitTimeline.svelte';
 	import WebSearch from './WebSearch.svelte';
@@ -223,7 +224,7 @@
 		plan?.order_from === 'season' && plan.order_verified == null && episodeRows.length >= 2
 	);
 	// Splitting needs a look before the episodes do.
-	const splitWaits = $derived(!!plan?.split && plan.split.state === 'ready' && !plan.split.edited);
+	const splitWaits = $derived(!job.refile && !!plan?.split && plan.split.state === 'ready' && !plan.split.edited);
 
 	const roleLabel: Record<string, string> = {
 		episode: 'Episode',
@@ -252,6 +253,8 @@
 		<button class="link small" onclick={() => openJob(job.id)}>Details</button>
 	</header>
 
+	<RefileBanner {job} />
+
 	{#if plan?.show && !changingShow}
 		<section class="show box">
 			<Poster url={plan.show.poster_url} alt={plan.show.name} width={44} />
@@ -277,7 +280,7 @@
 				<p class="small muted">No show picked yet. Search TMDB, search the web for the label, or eject the disc to look at it.</p>
 				<WebSearch {job} onUse={useName} useLabel="Search TMDB shows for" />
 			{/if}
-			{#if job.media_evidence.length}<p class="small muted">{job.media_evidence.slice(0, 3).join(' · ')}</p>{/if}
+			{#if job.media_evidence.length && !job.refile}<p class="small muted">{job.media_evidence.slice(0, 3).join(' · ')}</p>{/if}
 			{#if plan?.candidates?.length && plan.candidates.length > 1}
 				<p class="small muted">Other shows ({plan.candidates.length - 1})</p>
 				<ul class="shows">
@@ -457,17 +460,21 @@
 					</div>
 				</div>
 			{/if}
-			<SplitTimeline {job} />
+			{#if !job.refile}
+				<SplitTimeline {job} />
+			{/if}
 			<Snapshots {job} />
-			<div class="row">
-				{#if !checking}
-					<button disabled={act.busy} title="Open the tray to read the disc (episode numbers are often printed on it)"
-						onclick={ejectToCheck}>Eject to check</button>
-				{/if}
-				<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.setMedia(job.id, 'movie'))}>
-					This is a film, not TV
-				</button>
-			</div>
+			{#if !job.refile}
+				<div class="row">
+					{#if !checking}
+						<button disabled={act.busy} title="Open the tray to read the disc (episode numbers are often printed on it)"
+							onclick={ejectToCheck}>Eject to check</button>
+					{/if}
+					<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.setMedia(job.id, 'movie'))}>
+						This is a film, not TV
+					</button>
+				</div>
+			{/if}
 		</div>
 	</details>
 
@@ -503,7 +510,7 @@
 				{episodeRows.reduce((n, r) => n + r.episodes.length, 0)} episodes of {plan.show.name}
 			{/if}
 		</div>
-		<button class="primary confirm" disabled={!canConfirm} onclick={confirm}>Confirm</button>
+		<button class="primary confirm" disabled={!canConfirm} onclick={confirm}>{job.refile && canConfirm ? 'Move the files' : 'Confirm'}</button>
 	</div>
 </article>
 

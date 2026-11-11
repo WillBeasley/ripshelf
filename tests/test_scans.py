@@ -13,7 +13,7 @@ import pytest
 import respx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from ripshelf import scanjobs
 from ripshelf.dev.fake import FakeDrives
@@ -191,6 +191,82 @@ def test_render_turns_after_trimming():
     assert img.size == (50, 100)
 
 
+def flatbed(w: int = 1200, h: int = 1720, *, edge_lines: bool = True, askew: float = 0.0,
+            pale_foot: bool = False, specks: bool = False) -> tuple[bytes, tuple[int, int]]:
+    """A made-up sleeve in the top-left corner of an off-white glass, the way a flatbed
+    scans it: the sleeve fills 90% of the width and 93% of the height, the empty glass
+    is to its right and below it, saved as a JPEG. With ``edge_lines`` the glass's far
+    edges have the thin grey shadow a scanner's lid often leaves. Returns the scan and
+    the sleeve's size."""
+    glass = Image.new("RGB", (w, h), (247, 246, 243))
+    cw, ch = round(w * 0.9), round(h * 0.93)
+    sleeve = Image.new("RGB", (cw, ch), (40, 70, 140))
+    d = ImageDraw.Draw(sleeve)
+    d.rectangle((cw * 0.1, ch * 0.5, cw * 0.9, ch * 0.8), fill=(220, 200, 60))
+    if pale_foot:  # a white foot to the sleeve with only small grey print on it
+        d.rectangle((0, ch * 0.85, cw, ch), fill=(246, 245, 242))
+        for i in range(3):
+            d.text((cw * 0.1, ch * (0.9 + 0.025 * i)), "Lanternfish Pictures presents a made-up film",
+                   fill=(90, 90, 90), font=ImageFont.load_default(ch // 70))
+    if askew:
+        sleeve = sleeve.convert("RGBA").rotate(askew, expand=True, resample=Image.Resampling.BICUBIC)
+        glass.paste(sleeve, (0, 0), sleeve)
+    else:
+        glass.paste(sleeve, (0, 0))
+    d = ImageDraw.Draw(glass)
+    if edge_lines:
+        d.line([(w - 3, 0), (w - 3, h)], fill=(150, 150, 150), width=2)
+        d.line([(0, h - 3), (w, h - 3)], fill=(160, 160, 160), width=2)
+    if specks:
+        for x, y in ((0.95, 0.3), (0.5, 0.97), (0.98, 0.6)):
+            d.ellipse((w * x, h * y, w * x + 4, h * y + 4), fill=(60, 60, 60))
+    out = io.BytesIO()
+    glass.save(out, "JPEG", quality=80)
+    return out.getvalue(), (cw, ch)
+
+
+@pytest.mark.parametrize("kw", [{}, {"edge_lines": False}, {"specks": True}])
+def test_trim_cuts_each_side_to_the_sleeve(kw):
+    data, (cw, ch) = flatbed(**kw)
+    left, top, right, bottom = images.trim_box(images.open_image(data))
+    # The sleeve is flush with the top and left; right and bottom are cut to within a
+    # small margin of it, past the shadow along the glass's edges and any dust.
+    assert (left, top) == (0, 0)
+    assert cw <= right <= cw + 20 and ch <= bottom <= ch + 20
+
+
+def test_trim_keeps_a_pale_sleeves_small_print():
+    data, (cw, ch) = flatbed(pale_foot=True)
+    _, _, right, bottom = images.trim_box(images.open_image(data))
+    assert cw <= right <= cw + 20
+    assert bottom >= ch * (0.9 + 0.05) + ch // 70  # below the last line of print
+
+
+def test_trim_keeps_the_corners_of_a_sleeve_laid_askew():
+    data, (cw, ch) = flatbed(askew=1.0)
+    _, _, right, bottom = images.trim_box(images.open_image(data))
+    # Turned by a degree, its corners reach out past its sides by sin(1°) of them.
+    assert right >= cw + 0.017 * ch and bottom >= ch + 0.017 * cw - 2
+    assert right <= cw + 0.0175 * ch + 20 and bottom <= ch + 0.0175 * cw + 20
+
+
+@pytest.mark.parametrize("rotate, shown, original", [
+    (0, [0.1, 0.2, 0.6, 0.9], [30, 40, 180, 180]),
+    (90, [0.1, 0.2, 0.6, 0.9], [60, 80, 270, 180]),  # the top of the turned picture is its left
+    (180, [0.1, 0.2, 0.6, 0.9], [120, 20, 270, 160]),
+    (270, [0.1, 0.2, 0.6, 0.9], [30, 20, 240, 120]),
+])
+def test_a_crop_drawn_on_the_turned_scan_is_kept_in_the_originals_pixels(rotate, shown, original):
+    assert images.crop_from_shown(shown, 300, 200, rotate) == original
+    # Cropping then turning gives the part that was drawn on.
+    img = Image.new("RGB", (300, 200), (255, 255, 255))
+    img.paste((255, 0, 0), tuple(original))
+    turned = img.rotate(-rotate, expand=True)
+    w, h = turned.size
+    box = (round(shown[0] * w), round(shown[1] * h), round(shown[2] * w) - 1, round(shown[3] * h) - 1)
+    assert turned.getpixel(box[:2]) == turned.getpixel(box[2:]) == (255, 0, 0)
+
+
 def test_halves_of_a_sheet():
     img = images.render(sheet(), None, 0)
     front, back = images.halves(img, ScanSplit())
@@ -227,6 +303,36 @@ async def test_uploads_are_kept_numbered_and_checked(harness, settings):
         assert [s.id for s in h.db.get_job(job.id).scans] == [b.id] and not path.exists()
         with pytest.raises(KeyError):
             await h.m.delete_scan(job.id, a.id)
+
+
+async def test_a_scan_is_cropped_by_hand_and_trimmed_again(harness, settings):
+    async with harness() as h:
+        job = put(h, heron_job())
+        data, (cw, ch) = flatbed(600, 860)
+        sc = await h.m.add_scan(job.id, data, "front", "upload")
+        auto = sc.crop
+        assert auto and not sc.crop_by_hand
+        await h.m.update_scan(job.id, sc.id, ScanUpdate(rotate=90))
+        # Drawn on the scan as shown, turned: its left half, all the way down.
+        sc = await h.m.update_scan(job.id, sc.id, ScanUpdate(crop=[0, 0, 0.5, 1]))
+        assert sc.crop == [0, 430, 600, 860] and sc.crop_by_hand  # the original's bottom half
+        thumb = Image.open(await h.m.scan_thumb(job.id, sc.id, large=True))
+        assert thumb.size == (430, 600)
+        whole = Image.open(await h.m.scan_thumb(job.id, sc.id, whole=True))
+        assert whole.size == (860, 600)  # turned, not cropped
+        sc = await h.m.update_scan(job.id, sc.id, ScanUpdate(rotate=0))
+        assert sc.crop == [0, 430, 600, 860]  # turning keeps the crop
+        assert not (h.m._scans_dir(h.db.get_job(job.id)) / f"{sc.id}.whole.jpg").exists()
+        sc = await h.m.update_scan(job.id, sc.id, ScanUpdate(trim=True))
+        assert sc.crop == auto and not sc.crop_by_hand
+        sc = await h.m.update_scan(job.id, sc.id, ScanUpdate(trim=False))
+        assert sc.crop is None
+
+
+@pytest.mark.parametrize("crop", [[0.5, 0, 0.4, 1], [0, 0, 1.2, 1], [0, 0, 0.02, 1], [0, 0, 1]])
+def test_a_crop_by_hand_must_leave_some_of_the_scan(crop):
+    with pytest.raises(ValueError):
+        ScanUpdate(crop=crop)
 
 
 async def test_front_and_back_scans_become_the_covers(harness, settings):
@@ -419,6 +525,10 @@ def test_api(client):
     assert thumb.headers["content-type"] == "image/jpeg"
     r = client.patch(f"{url}/{sc['id']}", json={"rotate": 90})
     assert r.json()["rotate"] == 90
+    r = client.patch(f"{url}/{sc['id']}", json={"crop": [0, 0.1, 1, 0.9]})
+    assert r.json()["crop"] == [60, 0, 540, 300] and r.json()["crop_by_hand"]  # turned: its top is the left
+    assert client.patch(f"{url}/{sc['id']}", json={"crop": [0, 0, 2, 1]}).status_code == 422
+    assert client.get(f"{url}/{sc['id']}/thumb", params={"whole": True}).status_code == 200
     assert client.post(f"{url}/{sc['id']}/covers", json={}).status_code == 409  # contributing is off
     client.put("/api/settings", json={"thediscdb_contribute": "ask", "thediscdb_contribute_url": BASE})
     view = client.post(f"{url}/{sc['id']}/covers", json={"position": 0.5, "spine": 0.04, "swap": False}).json()

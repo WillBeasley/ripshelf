@@ -19,7 +19,12 @@ VIEW_PX = 1600
 COVER_QUALITY = 92
 TRIM_SAMPLE_PX = 600  # trimming looks at a copy this wide
 TRIM_DIFF = 40  # how far from the glass's colour a pixel must be to count as the picture
-TRIM_MARGIN = 0.01
+TRIM_EDGE = (0.01, 0.04)  # the glass's colour is taken this far in from a side, past its very edge (where
+# there's often a line or shadow, which is never taken as the picture)
+TRIM_FILL = 0.02  # a row or column this much picture is the picture's...
+TRIM_RUN = 0.01  # ...when this many (of the scan's width or height) are together; a thinner line is a shadow
+TRIM_FAINT = 0.005  # less than this of a row or column is a speck, not the picture's small print
+TRIM_MARGIN = 0.004
 
 
 class ImageError(ValueError):
@@ -43,40 +48,105 @@ def size(data: bytes) -> tuple[int, int]:
 def trim_box(img: Image.Image) -> list[int] | None:
     """Where the picture is on the glass, as [left, top, right, bottom], or None when it
     fills the scan (or nothing stands out). The glass is a side of the scan in one even
-    near-white or near-black colour, so a white lid and an open one both work."""
+    near-white or near-black colour, so a white lid and an open one both work.
+
+    Each side is cut on its own, to where solid rows or columns of the picture start:
+    specks of dust, and the thin shadow along the glass's edge, aren't the picture. From
+    there it goes out again over anything fainter short of the glass's very edge, so a
+    pale cover's small print, or a corner of a sheet laid a little askew, isn't cut."""
     w, h = img.size
     scale = min(1.0, TRIM_SAMPLE_PX / max(w, h))
     small = img.convert("RGB").resize((max(1, round(w * scale)), max(1, round(h * scale))))
     sw, sh = small.size
-    px = small.load()
-    sides = [[px[x, 0] for x in range(sw)], [px[x, sh - 1] for x in range(sw)],
-             [px[0, y] for y in range(sh)], [px[sw - 1, y] for y in range(sh)]]
-    glass = None
-    # The glass shows along at least one side: one even colour there, near white (the
-    # lid) or near black (the lid left open). A picture to its edges has neither.
-    for side in sides:
-        median = tuple(sorted(p[c] for p in side)[len(side) // 2] for c in range(3))
-        even = sum(max(abs(p[c] - median[c]) for c in range(3)) <= TRIM_DIFF for p in side) >= 0.9 * len(side)
-        neutral = max(median) - min(median) <= 30 and (min(median) >= 190 or max(median) <= 50)
-        if even and neutral:
-            glass = median
-            break
+    glass = _glass(small)
     if glass is None:
         return None
     # How far each pixel is from the glass's colour, in whichever channel differs most.
     r, g, b = ImageChops.difference(small, Image.new("RGB", small.size, glass)).split()
     diff = ImageChops.lighter(ImageChops.lighter(r, g), b)
-    mask = diff.point(lambda v: 255 if v > TRIM_DIFF else 0).filter(ImageFilter.MedianFilter(5))
-    box = mask.getbbox()
-    if not box:
+    faint = diff.point(lambda v: 255 if v > TRIM_DIFF else 0)
+    mask = faint.filter(ImageFilter.MedianFilter(5))  # without the specks and lines
+    cols, rows = _fills(mask, 0), _fills(mask, 1)
+    left, right, top, bottom = _core(cols), _core(cols[::-1]), _core(rows), _core(rows[::-1])
+    if None in (left, right, top, bottom):
         return None
-    bw, bh = box[2] - box[0], box[3] - box[1]
+    right, bottom = sw - right, sh - bottom
+    # Out again over the picture's faint parts (its small print went with the specks),
+    # looking only across the picture, so a shadow down one side doesn't count along
+    # the other.
+    cols = _fills(faint.crop((0, top, sw, bottom)), 0)
+    rows = _fills(faint.crop((left, 0, right, sh)), 1)
+    left, right = _out(cols, left), sw - _out(cols[::-1], sw - right)
+    top, bottom = _out(rows, top), sh - _out(rows[::-1], sh - bottom)
+    bw, bh = right - left, bottom - top
     if bw * bh < 0.05 * sw * sh or (bw > 0.97 * sw and bh > 0.97 * sh):
         return None
     m = round(TRIM_MARGIN * max(sw, sh))
-    left, top = max(0, box[0] - m), max(0, box[1] - m)
-    right, bottom = min(sw, box[2] + m), min(sh, box[3] + m)
+    left, top = max(0, left - m), max(0, top - m)
+    right, bottom = min(sw, right + m), min(sh, bottom + m)
     return [round(left / scale), round(top / scale), min(w, round(right / scale)), min(h, round(bottom / scale))]
+
+
+def _glass(small: Image.Image) -> tuple[int, ...] | None:
+    """The glass's colour, from a side where it shows: one even colour, near white (the
+    lid) or near black (the lid left open). A picture to its edges has neither. It's
+    looked for a little way in, past the line or shadow often at the glass's very edge."""
+    sw, sh = small.size
+    a, b = TRIM_EDGE
+    x0, x1 = min(sw - 1, round(sw * a)), max(round(sw * a) + 1, round(sw * b))
+    y0, y1 = min(sh - 1, round(sh * a)), max(round(sh * a) + 1, round(sh * b))
+    strips = [(0, y0, sw, y1), (0, sh - y1, sw, sh - y0), (x0, 0, x1, sh), (sw - x1, 0, sw - x0, sh)]
+    for box in strips:
+        bands = [c.tobytes() for c in small.crop(box).split()]
+        median = tuple(sorted(c)[len(c) // 2] for c in bands)
+        side = list(zip(*bands, strict=True))
+        even = sum(max(abs(p[c] - median[c]) for c in range(3)) <= TRIM_DIFF for p in side) >= 0.9 * len(side)
+        neutral = max(median) - min(median) <= 30 and (min(median) >= 190 or max(median) <= 50)
+        if even and neutral:
+            return median
+    return None
+
+
+def _fills(mask: Image.Image, axis: int) -> list[float]:
+    """How much of each column (axis 0) or row (axis 1) is the picture's."""
+    size = (mask.width, 1) if axis == 0 else (1, mask.height)
+    return [v / 255 for v in mask.resize(size, Image.Resampling.BOX).tobytes()]
+
+
+def _core(fills: list[float]) -> int | None:
+    """How far in from a side (the start of ``fills``) the picture's solid part starts;
+    None when it doesn't."""
+    run, need = 0, max(3, round(TRIM_RUN * len(fills)))
+    for i, f in enumerate(fills):
+        run = run + 1 if f >= TRIM_FILL else 0
+        if run >= need:
+            return i - need + 1
+    return None
+
+
+def _out(fills: list[float], core: int) -> int:
+    """From the solid part's start back towards the side, to the last of the picture
+    there (short of the glass's very edge): its small print, or a corner of a sheet
+    laid a little askew."""
+    edge = core
+    for i in range(core - 1, round(TRIM_EDGE[0] * len(fills)) - 1, -1):
+        if fills[i] >= TRIM_FAINT:
+            edge = i
+    return edge
+
+
+def crop_from_shown(box: list[float], width: int, height: int, rotate: int) -> list[int]:
+    """A crop drawn on the whole scan as shown (turned clockwise by ``rotate``), as
+    fractions [left, top, right, bottom], in the original's pixels (``width`` by
+    ``height``, before the turn)."""
+    left, top, right, bottom = box
+    left, top, right, bottom = {
+        0: (left, top, right, bottom),
+        90: (top, 1 - right, bottom, 1 - left),
+        180: (1 - right, 1 - bottom, 1 - left, 1 - top),
+        270: (1 - bottom, left, 1 - top, right),
+    }[rotate]
+    return [round(left * width), round(top * height), round(right * width), round(bottom * height)]
 
 
 def render(data: bytes, crop: list[int] | None, rotate: int) -> Image.Image:

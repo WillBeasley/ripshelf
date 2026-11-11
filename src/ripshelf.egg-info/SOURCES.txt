@@ -20,6 +20,7 @@ src/ripshelf/models.py
 src/ripshelf/pendingscans.py
 src/ripshelf/proc.py
 src/ripshelf/readjobs.py
+src/ripshelf/refilejobs.py
 src/ripshelf/scanjobs.py
 src/ripshelf/snapshots.py
 src/ripshelf/system.py
@@ -110,6 +111,7 @@ tests/test_preset.py
 tests/test_proc.py
 tests/test_providers.py
 tests/test_pushover.py
+tests/test_reidentify.py
 tests/test_release_details.py
 tests/test_remote_setup.py
 tests/test_review_gaps.py

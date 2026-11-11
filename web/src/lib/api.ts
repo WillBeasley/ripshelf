@@ -108,6 +108,8 @@ export const api = {
 	checkDisc: (id: number, pauseRip = false) =>
 		call<Job>('POST', `/jobs/${id}/check-disc${pauseRip ? '?pause_rip=true' : ''}`),
 	identifyAgain: (id: number) => call<Job>('POST', `/jobs/${id}/identify-again`),
+	reidentify: (id: number) => call<Job>('POST', `/jobs/${id}/reidentify`),
+	keepIdentity: (id: number) => call<Job>('POST', `/jobs/${id}/reidentify/keep`),
 	cancel: (id: number) => call<Job>('POST', `/jobs/${id}/cancel`),
 	setMedia: (id: number, media: MediaKind) => call<Job>('POST', `/jobs/${id}/media`, { media }),
 	contribution: (id: number) => call<ContributionView>('GET', `/jobs/${id}/thediscdb`),
@@ -159,6 +161,7 @@ export const api = {
 	scanUrl: (id: number, scan: string) => `/api/jobs/${id}/scans/${scan}`,
 	scanThumbUrl: (id: number, sc: CoverScan, large = false) =>
 		`/api/jobs/${id}/scans/${sc.id}/thumb?v=${sc.rotate}-${(sc.crop ?? []).join('.')}${large ? '&large=true' : ''}`,
+	scanWholeUrl: (id: number, sc: CoverScan) => `/api/jobs/${id}/scans/${sc.id}/thumb?whole=true&v=${sc.rotate}`,
 	uploadScan: (id: number, file: File, kind: ScanKind, source: 'upload' | 'camera') => {
 		const form = new FormData();
 		form.append('file', file);

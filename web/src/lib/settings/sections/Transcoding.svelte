@@ -56,7 +56,9 @@
 				jobs still waiting.
 			{/snippet}
 		</Field>
-		{#if renderNodes.length > 1}
+		{#if !form.fields.vaapi_device}
+			<!-- Windows: Quick Sync finds the GPU itself, so there is no render node to choose. -->
+		{:else if renderNodes.length > 1}
 			<div class="setting" id="setting-vaapi_device">
 				<label class="field">
 					<span>{form.fields.vaapi_device.title} <span class="chip">This machine only</span></span>

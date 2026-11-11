@@ -288,6 +288,22 @@
 						{#if tools.windows}<Command text="winget install -e --id Microsoft.OpenJDK.21" />{/if}
 					</div>
 				{/if}
+				{#if tools?.tesseract && !tools.tesseract.found}
+					<div class="notice">
+						<p>Tesseract isn't installed, so the text on cover scans isn't read (the scans are still kept).{tools.windows ? ' Install it:' : ''}</p>
+						{#if tools.windows}<Command text="winget install -e --id UB-Mannheim.TesseractOCR" />{/if}
+					</div>
+				{/if}
+				{#if tools?.zbar && !tools.zbar.found}
+					<div class="notice">
+						{#if tools.windows}
+							<p>zbar can't read barcodes on cover scans until the Visual C++ 2013 runtime it needs is installed:</p>
+							<Command text="winget install -e --id Microsoft.VCRedist.2013.x64" />
+						{:else}
+							<p>zbar isn't installed, so barcodes on cover scans are read from their printed digits only.</p>
+						{/if}
+					</div>
+				{/if}
 				<h3>Emby</h3>
 				<MediaServer {form} srv={{ id: 'emby', name: 'Emby', key: 'emby_api_key', port: 8096 }} />
 				<p class="small muted">Jellyfin and Plex can be set up the same way in Settings afterwards.</p>

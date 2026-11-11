@@ -12,7 +12,7 @@ from typing import Annotated, Any, get_args
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from . import applog, art, checks, integrations, proc, providers, scanjobs, system
+from . import applog, art, checks, integrations, proc, providers, scanjobs, system, transcode
 from .bus import next_item
 from .config import EDITABLE, FOLDERS, REQUIRED_FOLDERS, SECRETS, Settings
 from .identify import catalogue
@@ -88,7 +88,7 @@ from .models import (
 )
 from .providers import contribute as contribute_provider
 from .providers import release_info
-from .scanner import escl, images
+from .scanner import escl, images, ocr
 from .tv import split as tvsplit
 
 SSE_HEARTBEAT_S = 15
@@ -301,6 +301,20 @@ async def identify_again(job_id: int, request: Request):
     return await _job_action(request, job_id, manager(request).identify_again)
 
 
+@api.post("/jobs/{job_id}/reidentify", response_model=Job)
+async def reidentify(job_id: int, request: Request):
+    """A finished job was given the wrong title: back to Review. Its files stay where they
+    are in the library until the right one is confirmed, then move to its names."""
+    return await _job_action(request, job_id, manager(request).reidentify)
+
+
+@api.post("/jobs/{job_id}/reidentify/keep", response_model=Job)
+async def keep_identity(job_id: int, request: Request):
+    """Not identified again after all: the job is done as it was, and any files already
+    moved go back."""
+    return await _job_action(request, job_id, manager(request).keep_identity)
+
+
 @api.post("/jobs/{job_id}/cancel", response_model=Job)
 async def cancel(job_id: int, request: Request):
     return await _job_action(request, job_id, manager(request).cancel)
@@ -467,9 +481,10 @@ async def scan_image(job_id: int, scan_id: str, request: Request):
 
 
 @api.get("/jobs/{job_id}/scans/{scan_id}/thumb")
-async def scan_thumb(job_id: int, scan_id: str, request: Request, large: bool = False):
-    """A JPEG trimmed and turned as the scan says: small, or up to 1600 pixels with ``large``."""
-    p = await manager(request).scan_thumb(job_id, scan_id, large)
+async def scan_thumb(job_id: int, scan_id: str, request: Request, large: bool = False, whole: bool = False):
+    """A JPEG trimmed and turned as the scan says: small, or up to 1600 pixels with ``large``.
+    With ``whole``, a large one turned but not trimmed, to crop by hand."""
+    p = await manager(request).scan_thumb(job_id, scan_id, large, whole)
     if not p:
         raise HTTPException(404)
     return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
@@ -477,7 +492,7 @@ async def scan_thumb(job_id: int, scan_id: str, request: Request, large: bool = 
 
 @api.patch("/jobs/{job_id}/scans/{scan_id}", response_model=CoverScan)
 async def scan_update(job_id: int, scan_id: str, body: ScanUpdate, request: Request):
-    """Change what the picture is of, its page, its turn or its trim."""
+    """Change what the picture is of, its page, its turn, or its trim or crop."""
     return await _contribution_call(lambda: manager(request).update_scan(job_id, scan_id, body))
 
 
@@ -808,6 +823,8 @@ async def put_settings(body: SettingsUpdate, request: Request):
     plain = _plain_update(body)
     if "metadata_providers" in plain:
         plain["metadata_providers"] = providers.normalise(plain["metadata_providers"], s.tv_episode_order)
+    if "transcode_encoder" in plain and not transcode.available(plain["transcode_encoder"]):
+        raise HTTPException(400, f"{transcode.ENCODER_NAMES[plain['transcode_encoder']]} is Linux only")
     if "transcode_codecs" in plain:
         plain["transcode_codecs"] = [c.lower() for c in plain["transcode_codecs"]]
     if "thediscdb_contribute_url" in plain:
@@ -949,7 +966,7 @@ async def import_private_data(
 
 @api.get("/setup/tools", response_model=SetupTools)
 async def setup_tools(request: Request):
-    """Whether MakeMKV, ffmpeg, mkvmerge and Java are where ripshelf will look for them."""
+    """Whether MakeMKV, ffmpeg, mkvmerge, Java, Tesseract and zbar are where ripshelf will look for them."""
     s = settings(request)
 
     def tool(command: str) -> Tool:
@@ -959,7 +976,9 @@ async def setup_tools(request: Request):
 
     registered = bool(s.makemkv_key) or (proc.WINDOWS and runner.registry_key() is not None)
     return SetupTools(makemkv=tool(s.makemkvcon), makemkv_registered=registered or s.fake_hardware,
-                      ffmpeg=tool(s.ffmpeg), ffprobe=tool(s.ffprobe), mkvmerge=tool(tvsplit.default_mkvmerge(s.mkvmerge)), java=tool("java"), windows=proc.WINDOWS,
+                      ffmpeg=tool(s.ffmpeg), ffprobe=tool(s.ffprobe), mkvmerge=tool(tvsplit.default_mkvmerge(s.mkvmerge)), java=tool("java"),
+                      tesseract=tool(ocr.default_command(s.tesseract)), zbar=Tool(found=ocr.barcodes_available()),
+                      windows=proc.WINDOWS,
                       makemkv_eula_pending=s.makemkv_eula_pending())
 
 

@@ -120,6 +120,8 @@ export interface Api {
   Problem?: Problem;
   ProviderInfo?: ProviderInfo;
   ProviderSlot?: ProviderSlot;
+  Refile?: Refile;
+  RefileMove?: RefileMove;
   ReleaseDetails?: ReleaseDetails1;
   ReleaseLookup?: ReleaseLookup;
   ReleaseLookupRequest?: ReleaseLookupRequest;
@@ -648,6 +650,10 @@ export interface CoverScan {
    */
   crop: number[] | null;
   /**
+   * the crop was set by hand, not found by trimming
+   */
+  crop_by_hand: boolean;
+  /**
    * the cut last used for the covers, for a whole sheet
    */
   split: ScanSplit | null;
@@ -1006,6 +1012,10 @@ export interface Hardware {
   encoder: "qsv" | "vaapi" | "nvenc" | "x265";
   encoder_note: string;
   checked_at: number;
+  /**
+   * GPUs aren't listed on Windows; the encoders' test encodes tell
+   */
+  windows: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1136,6 +1146,10 @@ export interface Job {
    * the listing matched to the disc's titles
    */
   scan_match: ScanMatch | null;
+  /**
+   * finished, and being identified again
+   */
+  refile: Refile | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1692,6 +1706,47 @@ export interface TitleMatch {
   guesses: EpisodeGuess[];
 }
 /**
+ * A finished job being identified again. Its files stay where they are in the library
+ * until the new identity is confirmed, and are then moved (not ripped again) to its names.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "Refile".
+ */
+export interface Refile {
+  /**
+   * what it was filed as, "Moonlit Orchard (2004)"
+   */
+  title: string;
+  /**
+   * the identity it had, put back if kept as it was
+   */
+  identity: Candidate | null;
+  identity_source: ("auto" | "user" | "cache") | null;
+  destination: string | null;
+  tv: TvPlan | null;
+  candidates: Candidate[];
+  finished_at: string | null;
+  /**
+   * title index -> its file in the library
+   */
+  files: {
+    [k: string]: string;
+  };
+  /**
+   * planned once confirmed, each marked done once moved, so a move that failed half way can be retried
+   */
+  moves: RefileMove[];
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "RefileMove".
+ */
+export interface RefileMove {
+  src: string;
+  dst: string;
+  done: boolean;
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "JobDetail".
  */
@@ -1770,6 +1825,10 @@ export interface JobDetail {
    * the listing matched to the disc's titles
    */
   scan_match: ScanMatch | null;
+  /**
+   * finished, and being identified again
+   */
+  refile: Refile | null;
   events: JobEvent[];
   titles: TitleInfo[];
 }
@@ -1952,6 +2011,10 @@ export interface PendingScan {
    * the picture within the scan, [left, top, right, bottom] in the original's pixels, when trimmed
    */
   crop: number[] | null;
+  /**
+   * the crop was set by hand, not found by trimming
+   */
+  crop_by_hand: boolean;
   /**
    * the cut last used for the covers, for a whole sheet
    */
@@ -2232,9 +2295,13 @@ export interface ScanUpdate {
   page?: number | null;
   rotate?: (0 | 90 | 180 | 270) | null;
   /**
-   * cut away the scanner's empty glass around the picture
+   * cut away the scanner's empty glass around the picture (found again), or with false keep the whole scan
    */
   trim?: boolean | null;
+  /**
+   * crop by hand: [left, top, right, bottom] as fractions of the whole scan as shown (turned, not trimmed)
+   */
+  crop?: [number, number, number, number] | null;
 }
 /**
  * The network scanner, as it describes itself.
@@ -2853,6 +2920,14 @@ export interface SetupTools {
    */
   mkvmerge: Tool | null;
   java: Tool1;
+  /**
+   * Tesseract, which reads the text on cover scans
+   */
+  tesseract: Tool | null;
+  /**
+   * zbar, which reads the barcode on cover scans (the pyzbar package; on Windows it needs the Visual C++ 2013 runtime)
+   */
+  zbar: Tool | null;
   /**
    * MakeMKV came with ripshelf and its licence isn't accepted yet
    */

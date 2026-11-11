@@ -153,3 +153,26 @@ def test_api(settings, tmp_path):
         assert first["ffmpeg_found"]
         assert c.get("/api/system/hardware").json()["checked_at"] == first["checked_at"]  # cached
         assert c.get("/api/system/hardware?refresh=true").json()["checked_at"] > first["checked_at"]
+
+
+def test_hardware_on_windows_tests_the_gpu_encoders_without_dev(settings, tmp_path, monkeypatch):
+    from ripshelf import proc
+
+    monkeypatch.setattr(proc, "WINDOWS", True)
+    tried = []
+
+    async def fake_run(cmd, timeout=0):
+        if "-encoders" in cmd:
+            return 0, ENCODERS.encode(), b""
+        enc = cmd[next(i for i, a in enumerate(cmd) if a.startswith("-c:v")) + 1]
+        tried.append((enc, cmd))
+        return (0 if enc == "hevc_qsv" else 1), b"", b"[x @ 0x1] Cannot open"
+
+    monkeypatch.setattr(system.transcode, "_run", fake_run)
+    hw = asyncio.run(system.hardware(settings, tmp_path / "dev", tmp_path / "sys"))
+    by_name = {e.name: e for e in hw.encoders}
+    assert hw.devices == [] and hw.windows and hw.encoder == "qsv" and by_name["hevc_qsv"].works
+    assert by_name["hevc_qsv"].used_by_ripshelf and "/dev" not in hw.encoder_note
+    assert by_name["hevc_nvenc"].tested and not by_name["hevc_nvenc"].works  # tried, not "No NVIDIA GPU"
+    assert not by_name["hevc_vaapi"].tested and by_name["hevc_vaapi"].error == "Linux only"
+    assert not any(enc.endswith("_vaapi") or "vaapi" in " ".join(cmd) for enc, cmd in tried)

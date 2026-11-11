@@ -66,6 +66,18 @@ async def test_deleting_a_job_can_delete_its_files(harness, settings):
         assert sorted(p.name for p in folder.rglob("*")) == ["Season 03", "something else.mkv"]
 
 
+async def test_files_listed_by_a_windows_install_can_be_deleted(harness, settings):
+    async with harness() as h:
+        job, folder = filed(h, settings)
+        meta = naming.disc_meta_folder(settings.tv, job.tv.show, job.disc.label, job.id)
+        record = json.loads((meta / "disc.json").read_text())
+        for t in record["titles"].values():
+            t["file"] = t["file"].replace("/", "\\")  # "Season 03\\Pippa & Goose - S03E01.mkv"
+        (meta / "disc.json").write_text(json.dumps(record))
+        _, files = h.m.delete_jobs([job.id], delete_files=True)
+        assert len([f for f in files if f.endswith(".mkv")]) == 2 and not any(folder.rglob("*.mkv"))
+
+
 async def test_files_deleted_by_hand_stop_counting(harness, settings):
     async with harness() as h:
         job, folder = filed(h, settings)

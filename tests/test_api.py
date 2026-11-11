@@ -149,6 +149,19 @@ def test_setting_fields_describe_every_editable_setting(client):
     assert all(f["title"] for f in fields.values() if f["section"] and not f["name"].endswith("_path"))
 
 
+def test_windows_settings_offer_no_vaapi(client, monkeypatch):
+    from ripshelf import proc
+
+    monkeypatch.setattr(proc, "WINDOWS", True)
+    fields = {f["name"]: f for f in client.get("/api/settings/fields").json()}
+    assert "vaapi_device" not in fields  # a /dev/dri render node
+    choices = fields["transcode_encoder"]["choices"]
+    assert [c["value"] for c in choices] == ["auto", "qsv", "nvenc", "x265"] and "VAAPI" not in choices[0]["label"]
+    r = client.put("/api/settings", json={"transcode_encoder": "vaapi"})
+    assert r.status_code == 400 and "Linux only" in r.json()["detail"]
+    assert client.put("/api/settings", json={"transcode_encoder": "qsv"}).status_code == 200
+
+
 def test_settings_json_with_values_out_of_range(tmp_path, monkeypatch, caplog):
     from ripshelf.config import Settings, load_settings
     data = tmp_path / "data"
@@ -315,6 +328,21 @@ def test_setup_flag_and_tools(client, settings):
     assert client.put("/api/settings", json={"setup_complete": True}).json()["setup_complete"] is True
 
 
+def test_setup_tools_reports_tesseract_and_zbar(client, settings, monkeypatch, tmp_path):
+    from ripshelf.scanner import ocr
+
+    settings.tesseract = str(tmp_path / "no-tesseract")
+    monkeypatch.setattr(ocr, "barcodes_available", lambda: False)  # pyzbar without its DLLs
+    tools = client.get("/api/setup/tools").json()
+    assert tools["tesseract"] == {"found": False, "path": None} and tools["zbar"]["found"] is False
+    exe = tmp_path / "tesseract"
+    exe.write_text("")
+    settings.tesseract = str(exe)
+    monkeypatch.setattr(ocr, "barcodes_available", lambda: True)
+    tools = client.get("/api/setup/tools").json()
+    assert tools["tesseract"] == {"found": True, "path": str(exe)} and tools["zbar"]["found"] is True
+
+
 def test_makemkv_eula_is_shown_until_accepted(client, settings, tmp_path):
     assert not client.get("/api/setup/tools").json()["makemkv_eula_pending"]
     assert client.get("/api/setup/makemkv/eula").status_code == 404  # MakeMKV didn't come with ripshelf
@@ -334,6 +362,9 @@ def test_installs_from_before_the_setup_page_count_as_set_up(settings, monkeypat
     monkeypatch.setenv("RIPSHELF_SCRATCH_DIR", str(settings.scratch_dir))
     monkeypatch.setenv("RIPSHELF_LIBRARY_DIR", str(settings.library_dir))
     assert not config.load_settings().setup_complete  # nothing saved yet, so a fresh install
+    # A virtual drive found on the first start is disabled by ripshelf itself: still a fresh install.
+    (settings.data_dir / "settings.json").write_text('{"disabled_drives": ["qemu-dvd-rom-9269"]}', encoding="utf-8")
+    assert not config.load_settings().setup_complete
     (settings.data_dir / "settings.json").write_text('{"auto_eject": false}', encoding="utf-8")
     assert config.load_settings().setup_complete
 

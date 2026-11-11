@@ -66,7 +66,7 @@ Check the listing against the box, as you would a TheDiscDB submission.
 
 The container image includes Tesseract and zbar. Elsewhere:
 - Debian or Ubuntu: `apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd libzbar0`
-- Windows: `winget install -e --id UB-Mannheim.TesseractOCR`. ripshelf finds it in Program Files, and pyzbar brings zbar with it.
+- Windows: `winget install -e --id UB-Mannheim.TesseractOCR`. ripshelf finds it in Program Files. pyzbar brings zbar with it, but zbar needs the Visual C++ 2013 runtime: `winget install -e --id Microsoft.VCRedist.2013.x64`.
 
 Without Tesseract, scans are kept as before, and the panel says text reading isn't available, so you can type the listing in yourself.
 
@@ -245,7 +245,9 @@ The scan runs in the background, and the job shows how it's going. It also shows
 
 **Laying things on the glass.** Put the picture face down. The glass is A4 (or Letter), and an unfolded DVD or Blu-ray sheet (about 273 mm wide) is wider than that. Lay it sideways along the glass's long edge, then turn the scan with ⟳.
 
-**Trimming.** The scan covers the whole glass, so ripshelf finds the picture on it and leaves the empty glass out of the thumbnails, covers and reading. The glass is any side of the scan in one even near-white or near-black colour (the lid, closed or open). An uploaded flatbed scan is trimmed the same way, and a phone photo isn't. **Untrim** shows the whole scan again, and **Cut away the empty glass around a scan** in Settings turns this off. The original file is always kept as the scanner sent it.
+**Trimming.** The scan covers the whole glass, so ripshelf finds the picture on it and leaves the empty glass out of the thumbnails, covers and reading. The glass is any side of the scan in one even near-white or near-black colour (the lid, closed or open). Each side is cut on its own, to a small margin around the picture: the thin grey shadow often along the glass's edge and specks of dust don't count as the picture, and a pale cover's small print and the corners of a sheet laid a little askew aren't cut off. An uploaded flatbed scan is trimmed the same way, and a phone photo isn't. **Cut away the empty glass around a scan** in Settings turns this off. The original file is always kept as the scanner sent it, and that's the copy filed in the library.
+
+**Cropping by hand.** **Crop…** under a scan shows the whole scan with a box around the part that's used. Drag its edges or corners, or move the **Left**, **Right**, **Top** and **Bottom** sliders, then **Use this crop**. The thumbnails, covers and readings then use only what's inside the box, and the scan is read again. **Trim automatically** goes back to the trim ripshelf finds, and **Whole scan** uses all of it. Photos can be cropped too. Turning the scan afterwards keeps the crop.
 
 300 dpi is plenty for covers and for reading small print.
 
@@ -285,8 +287,8 @@ TV/Pippa & Goose (2013)/scans/PIPPA_&_GOOSE_KITE_TRAM - front.jpg
 | `POST /api/jobs/{id}/scans/scanner` | scan: `{"kind": "insert", "source": "feeder", "duplex": true}`. The job's `scanner` says how it's going |
 | `DELETE /api/jobs/{id}/scans/scanner` | stop the scan, or clear a failed one's message |
 | `GET /api/jobs/{id}/scans/{scan}` | the original file |
-| `GET /api/jobs/{id}/scans/{scan}/thumb` | a trimmed, turned JPEG (`?large=true` for up to 1600 px) |
-| `PATCH /api/jobs/{id}/scans/{scan}` | change `kind`, `page`, `rotate` or `trim` |
+| `GET /api/jobs/{id}/scans/{scan}/thumb` | a trimmed, turned JPEG (`?large=true` for up to 1600 px, `?whole=true` for a large one turned but not trimmed) |
+| `PATCH /api/jobs/{id}/scans/{scan}` | change `kind`, `page`, `rotate`, `trim` (`true` trims again, `false` uses the whole scan) or `crop` (`[left, top, right, bottom]` as fractions of the whole scan as shown, turned) |
 | `DELETE /api/jobs/{id}/scans/{scan}` | remove the picture |
 | `POST /api/jobs/{id}/scans/{scan}/covers` | use it as the TheDiscDB covers, with `{"position": 0.5, "spine": 0.05, "swap": false}` for a whole sheet |
 | `GET /api/scanner` | the scanner's model and state |

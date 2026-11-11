@@ -59,7 +59,7 @@ TRANSITIONS: dict[JobState, set[JobState]] = {
     JobState.identifying: {JobState.review, JobState.ripping, JobState.transcoding, JobState.finalising,
                            JobState.clash},
     JobState.review: {JobState.ripping, JobState.transcoding, JobState.finalising, JobState.identifying,
-                      JobState.clash, JobState.checking},
+                      JobState.clash, JobState.checking, JobState.done},
     JobState.clash: {JobState.review, JobState.ripping, JobState.transcoding, JobState.finalising,
                      JobState.identifying, JobState.checking},
     JobState.checking: {JobState.review, JobState.clash},
@@ -67,9 +67,10 @@ TRANSITIONS: dict[JobState, set[JobState]] = {
                        JobState.clash},
     JobState.transcoding: {JobState.finalising, JobState.clash},
     JobState.finalising: {JobState.done, JobState.clash},
-    JobState.done: {JobState.identifying},
+    # A finished job identified again goes back to review, and back to done if kept as it was.
+    JobState.done: {JobState.identifying, JobState.review},
     JobState.failed: {JobState.detected, JobState.scanning, JobState.identifying, JobState.transcoding,
-                      JobState.finalising},
+                      JobState.finalising, JobState.done},
     JobState.cancelled: set(),
 }
 for _s in ACTIVE_STATES:
@@ -361,6 +362,28 @@ class ClashInfo(BaseModel):
     keep_both_name: str | None = Field(None, description="the file name 'keep both' would use (films)")
 
 
+class RefileMove(BaseModel):
+    src: str
+    dst: str
+    done: bool = False
+
+
+class Refile(BaseModel):
+    """A finished job being identified again. Its files stay where they are in the library
+    until the new identity is confirmed, and are then moved (not ripped again) to its names."""
+
+    title: str = Field(description="what it was filed as, \"Moonlit Orchard (2004)\"")
+    identity: Candidate | None = Field(None, description="the identity it had, put back if kept as it was")
+    identity_source: Literal["auto", "user", "cache"] | None = None
+    destination: str | None = None
+    tv: TvPlan | None = None
+    candidates: list[Candidate] = []
+    finished_at: datetime | None = None
+    files: dict[int, str] = Field(default={}, description="title index -> its file in the library")
+    moves: list[RefileMove] = Field(default=[], description="planned once confirmed, each marked done once moved, "
+                                                           "so a move that failed half way can be retried")
+
+
 class ClashRequest(BaseModel):
     action: ClashAction
 
@@ -426,6 +449,7 @@ class CoverScan(BaseModel):
     rotate: ScanRotate = Field(0, description="turned clockwise by this much when shown or used")
     crop: list[int] | None = Field(None, description="the picture within the scan, [left, top, right, "
                                                      "bottom] in the original's pixels, when trimmed")
+    crop_by_hand: bool = Field(False, description="the crop was set by hand, not found by trimming")
     split: ScanSplit | None = Field(None, description="the cut last used for the covers, for a whole sheet")
     vision: Literal["queued", "reading", "done", "failed"] | None = Field(
         None, description="reading it with the vision model")
@@ -748,6 +772,7 @@ class Job(BaseModel):
     scanner: ScannerRun | None = Field(None, description="a scan from the network scanner, under way or failed")
     listing: ScanListing | None = Field(None, description="what's on the disc, read from the scans")
     scan_match: ScanMatch | None = Field(None, description="the listing matched to the disc's titles")
+    refile: Refile | None = Field(None, description="finished, and being identified again")
 
 
 class ContributionTitle(BaseModel):
@@ -816,7 +841,22 @@ class ScanUpdate(BaseModel):
     kind: ScanKind | None = None
     page: int | None = Field(None, ge=1, le=999)
     rotate: ScanRotate | None = None
-    trim: bool | None = Field(None, description="cut away the scanner's empty glass around the picture")
+    trim: bool | None = Field(None, description="cut away the scanner's empty glass around the picture "
+                                                "(found again), or with false keep the whole scan")
+    crop: list[float] | None = Field(None, min_length=4, max_length=4, description=(
+        "crop by hand: [left, top, right, bottom] as fractions of the whole scan as shown (turned, "
+        "not trimmed)"))
+
+    @field_validator("crop", mode="after")
+    @classmethod
+    def _crop_box(cls, v: list[float] | None) -> list[float] | None:
+        if v is not None:
+            left, top, right, bottom = v
+            if not (0 <= left < right <= 1 and 0 <= top < bottom <= 1):
+                raise ValueError("the crop must be [left, top, right, bottom] within 0 to 1")
+            if right - left < 0.05 or bottom - top < 0.05:
+                raise ValueError("the crop leaves too little of the scan")
+        return v
 
 
 class ScannerScanRequest(BaseModel):
@@ -1078,11 +1118,17 @@ SettingsUpdate = _update_model()
 SettingsView = _view_model()
 
 
+# Settings that mean nothing on Windows: the render node VAAPI and Quick Sync open on Linux.
+LINUX_ONLY_SETTINGS = {"vaapi_device"}
+
+
 def setting_fields() -> list[SettingField]:
+    from . import proc, transcode
+
     out = []
     for name, f in Settings.model_fields.items():
         u = ui_of(f)
-        if not u:
+        if not u or proc.WINDOWS and name in LINUX_ONLY_SETTINGS:
             continue
         t, nullable = _plain(f.annotation)
         limits = {k: getattr(m, k) for m in f.metadata for k in ("ge", "le") if hasattr(m, k)}
@@ -1090,6 +1136,8 @@ def setting_fields() -> list[SettingField]:
         choices = u.choices
         if not choices and get_origin(t) is Literal:
             choices = tuple((a, str(a)) for a in get_args(t))
+        if name == "transcode_encoder" and proc.WINDOWS:
+            choices = tuple((v, label.replace(", VAAPI", "")) for v, label in choices if transcode.available(v))
         secret = name in SECRETS
         kind = ("secret" if secret else u.kind or ("bool" if t is bool else "choice" if choices
                 else "number" if t in (int, float) else "path" if name in FOLDERS else "list" if t == list[str]
@@ -1338,6 +1386,7 @@ class Hardware(BaseModel):
     encoder: Literal["qsv", "vaapi", "nvenc", "x265"] = Field(description="what ripshelf transcodes with now")
     encoder_note: str
     checked_at: float
+    windows: bool = Field(False, description="GPUs aren't listed on Windows; the encoders' test encodes tell")
 
 
 class Status(BaseModel):
@@ -1362,6 +1411,9 @@ class SetupTools(BaseModel):
     ffprobe: Tool
     mkvmerge: Tool | None = Field(None, description="MKVToolNix, which splits a TV title holding several episodes")
     java: Tool = Field(description="a Java runtime, which MakeMKV needs for some Blu-ray menus (BD-J)")
+    tesseract: Tool | None = Field(None, description="Tesseract, which reads the text on cover scans")
+    zbar: Tool | None = Field(None, description="zbar, which reads the barcode on cover scans (the pyzbar "
+                                                 "package; on Windows it needs the Visual C++ 2013 runtime)")
     makemkv_eula_pending: bool = Field(False, description="MakeMKV came with ripshelf and its licence isn't accepted yet")
     windows: bool = False
 

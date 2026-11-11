@@ -58,6 +58,15 @@ Files are copied into the library, checked by SHA-256, and never overwritten. Th
 
 Titles on a TV disc that aren't episodes go to extras, Season 00, or are skipped (Settings). Afterwards Emby, Jellyfin and Plex (whichever are set up) are told about the new files, Pushover notifies you, and the disc is ejected.
 
+### Filed as the wrong title
+
+A disc confirmed as the wrong film or show (auto-confirmed, most likely) can be put right after it's done. Open the job and choose **Wrong title? Identify again**. It goes back to Review, on the same card as a new disc: search, pick the film, or the show, season and episodes, and confirm. Nothing is ripped or transcoded again. The files it put in the library move to the new names: the film or episodes, kept originals, extras, cover scans and the `.disc` record, which notes what it was before. The old folder goes once nothing else is in it (a media server's artwork and `.nfo` files of the wrong title go with it). The disc moves to the right show on the Shows page, and a film's disc is recognised as the right film from then on.
+
+- Nothing is moved over a file already in the library. If the new title's file is there already, confirming says so and nothing moves; move or delete it, pick another title, or keep it as it was.
+- A TV disc can only map the titles it put in the library the first time. A title it skipped needs the disc ripping again.
+- **Keep it as …** (on the card, or Cancel) leaves it as it was. If a move failed half way (a share went away), Retry carries on from that file, and Keep it as … puts back the files already moved.
+- A disc already sent to TheDiscDB under the wrong title has to be corrected on TheDiscDB's site; the job's history says so.
+
 ### Shows and old jobs
 
 The **Shows** page lists each show's discs and which episodes they hold, and a new disc of the show carries on from them (its first episode follows the last disc's). It goes by the library: an episode whose file isn't in the show's folder any more (deleted or moved by hand) is shown as gone, and doesn't count. When the TV folder can't be seen at all, as with a library that's offline, nothing is taken as gone.

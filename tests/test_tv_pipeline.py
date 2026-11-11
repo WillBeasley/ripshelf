@@ -63,6 +63,7 @@ async def test_pippa_and_goose_compilation_end_to_end(harness, keyed, settings):
     assert "Pippa & Goose - S03E34 - Kite Tram.mkv" in files and len(files) == 10
     meta = json.loads(next((show / ".disc").glob("*/disc.json")).read_text())
     assert meta["compilation"] and meta["titles"]["1"]["episodes"] == ["S03E34"]
+    assert meta["titles"]["1"]["file"] == "Season 03/Pippa & Goose - S03E34 - Kite Tram.mkv"  # "/" on Windows too
     assert meta["titles"]["0"]["role"] == "play_all"
     assert done.destination == str(show)
     assert not (settings.scratch_dir / f"job-{done.id}").exists()

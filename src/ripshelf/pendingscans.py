@@ -16,6 +16,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from . import library
 from .db import now
 from .models import PendingScan, PendingScans, ScanKind, ScannerRun, ScannerScanRequest, ScanSource
 from .providers import release_info
@@ -57,7 +58,7 @@ class PendingMixin:
         self._pending_dir.mkdir(parents=True, exist_ok=True)
         tmp = self._pending_dir / "index.json.tmp"
         tmp.write_text(idx.model_dump_json(), encoding="utf-8")
-        tmp.replace(self._pending_dir / "index.json")
+        library.replace(tmp, self._pending_dir / "index.json")
 
     def _drive_known(self, drive_id: str) -> None:
         if drive_id not in self.drives:
