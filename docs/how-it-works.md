@@ -17,6 +17,20 @@ detected → scanning → identifying → ripping → [transcoding] → finalisi
 
 [providers.md](providers.md) lists the providers and the order they're asked in.
 
+### Reviewing a TV disc
+
+The Review card lists the disc's titles in disc order, one row each: the episodes it holds, why (the box's name and running time, the season's order, your pick), and an edit button. A title that still needs an episode is outlined, says what the [cover scan](cover-scans.md) calls it, and offers its closest episodes to tap. Play-alls, extras and skipped titles are under **Also on the disc**.
+
+The edit button opens the episode picker (a sheet from the bottom on a phone, a panel on a computer):
+
+- **Search** by name, or by code: `s2e5`, `S02E05`, `2x05` and `205` all find season 2, episode 5. The season buttons show one season.
+- **Best guesses** from the box's name come first.
+- **Several episodes** can be ticked, from any seasons: a two-part story, or a compilation's title holding two short episodes. A run of one season is filed as a range (`S01E04-E05`); anything else takes the first episode's code, and the name lists the others (`S01E05 - Name & S03E07 Other Name`).
+- **An episode another title has** is greyed with "on title 3". Ticking it still works: that title gets this one's old episode instead, or none, to pick again.
+- **Not an episode** makes the title an extra, a play-all, or skipped.
+
+Each change is saved as you make it, so it survives a reload or picking up on another device, and the cover scan never changes a title you set. Nothing is filed until you press **Confirm**; on a phone it stays at the bottom of the screen with how many titles still need an episode. The show sits at the top with **Change**. Scanning and the box's listing are under **Cover scans**, and the run order from the case, splitting a long title, snapshots and ejecting to check are under **More tools**.
+
 ### TV discs with every episode in one title
 
 Some TV discs put every episode into one long title. ripshelf rips it whole, finds where each episode starts (chapters, or black frames and silence), and cuts it into one file per episode without re-encoding, after you review the cuts. See [TV discs with every episode in one title](tv-splitting.md).
