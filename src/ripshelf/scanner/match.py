@@ -35,6 +35,7 @@ from ..identify.scoring import PAL_SPEEDUP, title_similarity
 from ..models import (
     Confidence,
     Episode,
+    EpisodeGuess,
     EpisodeRef,
     Listing,
     ListingItem,
@@ -48,6 +49,7 @@ from .listing import LANGUAGES
 
 NAME_MIN = 0.82  # an episode name this similar is that episode
 NO_MATCH = 0.42  # below this score a line stays unmatched
+GUESS_MIN = 0.45  # a name this similar is worth offering as a guess
 EPISODE_MIN_S = 4 * 60
 FEATURE_MIN_S = 40 * 60
 # What an extra of each type usually runs to (minutes): (low, typical, high).
@@ -224,12 +226,11 @@ def core_name(name: str, prefix: str = "") -> str:
     return ARTICLES.sub("", n).strip()
 
 
-def episode_for(name: str, episodes: list[Episode], season: int | None,
-                box_prefix: str = "", show_prefix: str = "") -> tuple[Episode | None, float]:
-    """The episode a printed name is, from the show's episode list, and how sure. The
-    box's branding (``box_prefix``) and the show's own (``show_prefix``) are allowed
-    for, and a leading "A" or "The"."""
-    best, score = None, 0.0
+def name_scores(name: str, episodes: list[Episode], season: int | None,
+                box_prefix: str = "", show_prefix: str = "") -> list[tuple[Episode, float]]:
+    """How like each named episode a printed name is. The box's branding (``box_prefix``)
+    and the show's own (``show_prefix``) are allowed for, and a leading "A" or "The"."""
+    out = []
     target = _norm_part(name)
     core = _norm_part(core_name(name, box_prefix))
     for e in episodes:
@@ -239,9 +240,33 @@ def episode_for(name: str, episodes: list[Episode], season: int | None,
                 title_similarity(core, _norm_part(core_name(e.name, show_prefix))) if len(core) >= 3 else 0.0)
         if season is not None and e.season == season:
             s += 0.01  # the season on the disc wins a tie
+        out.append((e, s))
+    return out
+
+
+def episode_for(name: str, episodes: list[Episode], season: int | None,
+                box_prefix: str = "", show_prefix: str = "") -> tuple[Episode | None, float]:
+    """The episode a printed name is, from the show's episode list, and how sure."""
+    best, score = None, 0.0
+    for e, s in name_scores(name, episodes, season, box_prefix, show_prefix):
         if s > score:
             best, score = e, s
     return (best, min(score, 1.0)) if score >= NAME_MIN else (None, score)
+
+
+def episode_guesses(name: str, episodes: list[Episode], title_s: float, season: int | None,
+                    box_prefix: str = "", show_prefix: str = "", pal: bool = False, n: int = 3) -> list[EpisodeGuess]:
+    """The episodes a printed name may be, for a title this long, best first: the name
+    counts most, the runtime tells close names apart. Names nothing like it are left out."""
+    out = []
+    for e, s in name_scores(name, episodes, season, box_prefix, show_prefix):
+        if s < GUESS_MIN:
+            continue
+        fit = runtime_fit(title_s, e.runtime, approx=False, pal=pal) if e.runtime else None
+        score = min(1.0, s) if fit is None else 0.75 * min(1.0, s) + 0.25 * fit
+        out.append(EpisodeGuess(**e.model_dump(), score=round(score, 3)))
+    out.sort(key=lambda g: -g.score)
+    return out[:n]
 
 
 def _bluray(t: TitleInfo) -> bool:
@@ -443,10 +468,12 @@ def _assign(out: ScanMatch, items: list[tuple[int, ListingItem]], cands: list[Ti
             score = min(1.0, score + 0.1)
         elif agrees is False:
             score = min(score, 0.7)
+        guesses = episode_guesses(it.title, list(episodes), t.duration_s, season, box_prefix, show_prefix, pal) \
+            if it.kind == "episode" and episodes else []
         out.matches.append(TitleMatch(
             title_index=t.index, duration_s=t.duration_s, kind=it.kind, item=i, name=it.title, episodes=eps, extra_type=it.extra_type,
             score=round(score, 3), confidence=confidence(score), reason=reason or "the best fit left",
-            agrees=agrees, current=cur))
+            agrees=agrees, current=cur, guesses=guesses))
     out.matches.sort(key=lambda m: m.title_index)
 
 

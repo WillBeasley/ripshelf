@@ -609,6 +609,12 @@ class BonusEpisode(BaseModel):
         return f"{self.show.name} - {self.episode.name or self.box_title}"
 
 
+class EpisodeGuess(Episode):
+    """An episode a box's line may be, for the review to offer."""
+
+    score: float = Field(description="how well the name, and the title's length, fit it (0-1)")
+
+
 class TitleMatch(BaseModel):
     """A disc title, and the line of the box's listing it was matched to."""
 
@@ -628,6 +634,8 @@ class TitleMatch(BaseModel):
     current: str | None = Field(None, description="what the existing mapping says instead, when it disagrees")
     bonus: BonusEpisode | None = Field(None, description="a bonus episode of another show, found in its "
                                                          "episode list")
+    guesses: list[EpisodeGuess] = Field(default=[], description="for an episode line, the episodes its name "
+                                                                "and the title's length fit best, best first")
 
 
 class ScanMatch(BaseModel):
