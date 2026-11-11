@@ -35,7 +35,7 @@ There's nothing to configure. The workflow logs in with the job's own `GITHUB_TO
 
 1. Make sure `main` is what you want to ship and the tests pass: `ruff check src tests && pytest -q`, and `npm run check && npm test && npm run test:e2e` in `web/`. To check an image you built, `scripts/smoke-image.sh localhost/ripshelf:latest`.
 2. Pick the version. While it's `0.x`, raise the minor (`0.3.0` → `0.4.0`) for new features or anything that changes settings or the database, and the patch (`0.4.0` → `0.4.1`) for fixes only.
-3. Set it in three places, `version` in `pyproject.toml`, `__version__` in `src/ripshelf/__init__.py` and the release badge at the top of `README.md` (its text and link). In `CHANGELOG.md`, rename the Unreleased section to the version and date, with anything an upgrade needs under Upgrading, and start a new empty Unreleased above it. Commit: `git commit -am "release 0.4.0"`.
+3. Set it in three places, `version` in `pyproject.toml`, `__version__` in `src/ripshelf/__init__.py` and `version` in `web/package.json` and its lock file (`cd web && npm version 0.4.0 --no-git-tag-version`). In `CHANGELOG.md`, rename the Unreleased section to the version and date, with anything an upgrade needs under Upgrading, and start a new empty Unreleased above it. Commit: `git commit -am "release 0.4.0"`. The release badge in `README.md` reads the newest tag from GitHub, so it needs no change.
 4. Tag that commit and push both. An annotated tag carries a message and, with signing set up, a signature:
 
    ```sh
