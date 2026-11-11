@@ -48,10 +48,10 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_DATA_DIR` | `/data` | holds settings.json, the database, MakeMKV data and logs |
 | `RIPSHELF_HOME` | the source checkout | the folder unset folders and `ripshelf.env` go next to, outside a container |
 | `RIPSHELF_ENV_FILE` | `<data>/ripshelf.env` in a container, `ripshelf.env` in the ripshelf folder otherwise | the env file to read |
-| `RIPSHELF_HOST` / `PORT` | `0.0.0.0` / 8380 | the address and port the web UI listens on |
+| `RIPSHELF_HOST` / `PORT` | `0.0.0.0` / 8380 | the address and port the web UI listens on. `0.0.0.0` is every network the machine is on. The Windows batch file sets `127.0.0.1`, so only that PC can open the UI ([windows.md](windows.md)) |
 | `RIPSHELF_ALLOWED_HOSTS` | none | more names the UI is opened by, comma separated (`.example.com` for every name under it, `*` for any). IP addresses, `localhost`, names with no dots, names under `.local`, `.lan`, `.home`, `.home.arpa` and `.internal`, and the public URL's name work without it ([troubleshooting.md](troubleshooting.md#ripshelf-isnt-served-at)) |
 | `RIPSHELF_BACKUP_DIR` | `/backups` | where daily database backups go. How many are kept is set in Settings |
-| `RIPSHELF_MAKEMKVCON`, `FFMPEG`, `FFPROBE`, `SEVENZIP`, `BLKID` | the program name, found on the PATH | the programs ripshelf runs |
+| `RIPSHELF_MAKEMKVCON`, `FFMPEG`, `FFPROBE`, `SEVENZIP`, `BLKID`, `MKVMERGE` | the program name, found on the PATH | the programs ripshelf runs |
 | `RIPSHELF_ACCEPT_MAKEMKV_EULA` | `no` | set `yes` once you have read and accepted MakeMKV's licence. Only needed where MakeMKV came with ripshelf (the image), and on every container that runs MakeMKV. Until it is set, MakeMKV isn't run and discs wait |
 | `RIPSHELF_MAKEMKV_EULA_FILE` | none (the image sets it) | the licence of the MakeMKV that came with ripshelf. Setting it is what makes `ACCEPT_MAKEMKV_EULA` necessary |
 | `RIPSHELF_MAKEMKV_PATH` | `<data>/makemkv` | where the per-drive MakeMKV folders are. A per-drive worker mounts the controller's folder here |
@@ -72,6 +72,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_DISC_BACKUPS_DIR` | `<library>/Disc backups` | where full disc backups go. When set, it must exist ([backup.md](backup.md)) |
 | `RIPSHELF_PORT` | 8380 | |
 | `RIPSHELF_TMDB_API_KEY`, `RIPSHELF_MAKEMKV_KEY` | none | |
+| `RIPSHELF_TMDB_LANGUAGE` | `en-GB` | the language of TMDB's names and overviews |
 | `RIPSHELF_TVDB_API_KEY` / `TVDB_PIN` | none | the TheTVDB v4 key, and the PIN for user-supported keys. TheTVDB finds shows TMDB's search misses, and supplies episode lists |
 | `RIPSHELF_TVDB_EPISODE_ORDER` | `aired` | `aired` or `dvd`, which of TheTVDB's episode orders is used. DVD order follows the discs, but Emby numbers episodes in aired order unless the library is set to DVD order |
 | `RIPSHELF_OMDB_API_KEY` | none | the OMDb key, for a second film search ([providers.md](providers.md)) |
@@ -98,8 +99,10 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_SCAN_TIMEOUT_S` / `SCAN_MAX_S` | 300 / 7200 | stop a scan once MakeMKV has said nothing for this long, and in any case after the limit. Settings takes 30 to 3600 and 300 to 43200 |
 | `RIPSHELF_POLL_INTERVAL_S` | 3 | how often drives are checked for a disc. Settings takes 1 to 60 |
 | `RIPSHELF_RIP_MODE` / `DRIVE_MODES` | `titles` / `{}` | `titles` or `backup` (a whole Blu-ray or UHD, decrypted). `DRIVE_MODES` sets it per drive id, for example `{"pioneer-...": "backup"}` ([backup.md](backup.md)) |
+| `RIPSHELF_DISABLED_DRIVES` | `[]` | drive ids ripshelf leaves alone, for example `["pioneer-..."]`. Usually set with the ticks in Settings → Drives |
 | `RIPSHELF_DRIVE_NAMES` | `{}` | a name for a drive id, shown instead of the model, for example `{"pioneer-...": "Top bay"}`. Usually set with the pencil on the drive card |
 | `RIPSHELF_TRANSCODE_ENABLED` | on | also `TRANSCODE_CODECS` (`["vc1"]`), `TRANSCODE_CROP` (`off`, `when_transcoding` or `always`), `TRANSCODE_HDR`, `TRANSCODE_SOURCES` (per disc type, e.g. `{"bluray": {"transcode": true, "crop": false}}`), `TRANSCODE_ENCODER` (`auto`, `qsv`, `vaapi`, `nvenc` or `x265`; `auto` uses the first of Quick Sync, VAAPI and NVENC whose test encode works, else x265), `VAAPI_DEVICE` (the render node Quick Sync and VAAPI use, `/dev/dri/renderD128`), `TRANSCODE_QUALITY` (21), `TRANSCODE_KEEP_ORIGINAL` and `TRANSCODE_PARALLEL` (1, how many jobs transcode at once, up to 8) |
+| `RIPSHELF_TV_RIP_EXTRAS` | on | TV titles that look like extras start as Extra in review. Off, they start as Skip |
 | `RIPSHELF_TV_UNMATCHED` | `extras` | where a TV disc's extras go when the cover scan doesn't name them: `extras` (the show's extras folder), `specials` (Season 00, numbered after the specials already there) or `skip` (not copied to the library, and named extras aren't either). "TV extras go" in Settings → Library and filing |
 | `RIPSHELF_BACKUP_KEEP` | 7 | daily database backups kept, 0 turns them off (Settings → System) |
 | `RIPSHELF_PUBLIC_URL` | none | this UI's address, used in notification links |
