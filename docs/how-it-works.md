@@ -7,6 +7,13 @@ detected → scanning → identifying → ripping → [transcoding] → finalisi
                                   ↘ review ↗
 ```
 
+A job can also wait in two other states on the way.
+
+- **Already in library** (`clash`). The film or episodes are in the library already. The job waits for you to overwrite them, keep both (films), skip the episodes already there (TV), or skip the disc.
+- **Ejected to check** (`checking`). You ejected the disc from Review to look at it. The job carries on when the same disc goes back in.
+
+Any job can end as failed or cancelled instead of done.
+
 ## Identification
 
 - **TheDiscDB.** If the disc is in [TheDiscDB](https://thediscdb.com), its record says what the disc is and which title is the film or which episode. ripshelf finds it by fingerprints read from the disc in seconds, before the scan.
