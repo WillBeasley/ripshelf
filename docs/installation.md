@@ -67,6 +67,8 @@ Before moving to a new release, read its **Upgrading** notes in [CHANGELOG.md](.
 
 The database, settings and MakeMKV data are in `./data`, so they survive updates and switching between a pulled image and one you built. Daily database backups go to `./backups`.
 
+When a release changes how the database is laid out, the first start copies it aside first, as `data/ripshelf-before-vN.db`, and then upgrades it. To go back to the older release, stop ripshelf and put that copy back as `data/ripshelf.db` (jobs from after the upgrade are lost). From 0.7 on, a release refuses to open a database a later release has upgraded, rather than misread it. A job the new release can't read at all is left out of the job list and named in the log (`skipping jobs row N`), instead of stopping ripshelf.
+
 ## Other ways to run it
 
 - [Build the image yourself](building.md), for another MakeMKV release or architecture.

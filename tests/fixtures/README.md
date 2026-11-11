@@ -21,3 +21,5 @@ The failure logs are short excerpts, rebuilt by hand. They have the real start-u
 `tmdb/` has its own README. `tmdb_tv/` holds TMDB TV responses (search, show and season details) in the same way, with made-up show and episode names.
 
 `escl-capabilities-mfc-l8690cdw.xml` and `escl-status-mfc-l8690cdw.xml` are what a Brother MFC-L8690CDW answered to `GET /eSCL/ScannerCapabilities` and `/eSCL/ScannerStatus` (firmware eSCL 2.62), with its serial number, UUID and address replaced.
+
+`db/ripshelf-<release>.db` are databases written by that release's own code, for checking that this one still opens them (`test_db_upgrade.py`). Each holds Pippa & Goose (TV, done), Moonlit Orchard (done), a scan that timed out, and The Brass Heron waiting for review while it rips. `db/make_fixture.py` made them: copy it into a checkout of the release's `tests/` as `test_zz_make_fixture.py` and run it with `FIXTURE_OUT=/path/to/ripshelf-<release>.db`. Add one for each release that changes the database.
