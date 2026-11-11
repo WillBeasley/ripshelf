@@ -228,19 +228,28 @@ export interface BonusEpisode {
   episode: Episode;
 }
 /**
+ * A TV series. ``source`` is the provider whose id names it: TMDB when there is a
+ * TMDB key, else TheTVDB or TVmaze. ``key`` ("tmdb:1399") is that provider and id.
+ *
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "Show".
  */
 export interface Show {
-  tmdb_id: number;
+  source: "tmdb" | "tvdb" | "tvmaze";
+  /**
+   * the source and its id, "tvmaze:82"; set from them
+   */
+  key: string;
+  tmdb_id: number | null;
   tvdb_id: number | null;
   imdb_id: string | null;
+  tvmaze_id: number | null;
   name: string;
   original_name: string | null;
   year: number | null;
   poster_url: string | null;
   /**
-   * typical minutes, from TMDB
+   * typical minutes, from the show's source
    */
   episode_runtime: number | null;
   /**
@@ -289,7 +298,7 @@ export interface Episode {
  * via the `definition` "Candidate".
  */
 export interface Candidate {
-  source: "tmdb" | "cache" | "manual" | "omdb" | "thediscdb";
+  source: "tmdb" | "cache" | "manual" | "omdb" | "thediscdb" | "tvdb" | "tvmaze";
   tmdb_id: number | null;
   imdb_id: string | null;
   /**
@@ -3042,7 +3051,14 @@ export interface TvMatchTextRequest {
  * via the `definition` "TvProposeRequest".
  */
 export interface TvProposeRequest {
-  show_tmdb_id: number;
+  /**
+   * the show's key ("tmdb:1399", "tvmaze:82")
+   */
+  show_key: string | null;
+  /**
+   * older clients: a TMDB id, in place of show_key
+   */
+  show_tmdb_id: number | null;
   season: number | null;
   disc_number: number | null;
   start_episode: number | null;

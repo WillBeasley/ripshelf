@@ -28,14 +28,14 @@
 		/>
 		<ProviderList
 			title="TV shows"
-			hint="Asked in order until one finds the show. TMDB names everything, so it needs a TMDB key either way."
+			hint="Asked in order until one finds the show. With a TMDB key, TMDB names the show; without one, TheTVDB or TVmaze does."
 			bind:rows={f.metadata_providers.tv}
 			info={form.providerInfo}
 			keyed={form.keyed}
 		/>
 		<ProviderList
 			title="TV episodes"
-			hint="A season's episode list comes from the first provider that has it (TMDB's if none does)."
+			hint="A season's episode list comes from the first provider that has it (if none does, the one that found the show)."
 			bind:rows={f.metadata_providers.episodes}
 			info={form.providerInfo}
 			keyed={form.keyed}
