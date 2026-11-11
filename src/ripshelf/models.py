@@ -228,7 +228,7 @@ class TitleMap(BaseModel):
     title_index: int
     duration_s: int
     role: TitleRole
-    episodes: list[EpisodeRef] = Field(default=[], description="two for a double-length (two-part) title")
+    episodes: list[EpisodeRef] = Field(default=[], description="the episodes it holds: two for a two-part story, or any from the show")
     note: str | None = Field(None, description="why this role/episode, for the review table")
     match_cost: float | None = Field(None, description="runtime disagreement, 0 = exact (proposals only)")
     same_as: int | None = Field(None, description="duplicate of this title")
