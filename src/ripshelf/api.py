@@ -12,7 +12,18 @@ from typing import Annotated, Any, get_args
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from . import applog, art, checks, integrations, proc, providers, scanjobs, system, transcode
+from . import (
+    applog,
+    art,
+    checks,
+    debugbundle,
+    integrations,
+    proc,
+    providers,
+    scanjobs,
+    system,
+    transcode,
+)
 from .bus import next_item
 from .config import EDITABLE, FOLDERS, REQUIRED_FOLDERS, SECRETS, Settings
 from .identify import catalogue
@@ -249,6 +260,17 @@ async def job_log(job_id: int, request: Request, kind: str = "rip", lines: int =
     if not out and kind == "rip":
         out = m.log_tail(job_id, "scan", min(lines, 500))
     return out
+
+
+@api.get("/jobs/{job_id}/debug-bundle", include_in_schema=False)
+async def debug_bundle(job_id: int, request: Request):
+    """Everything ripshelf has about the job, in a zip, with secrets taken out (see debugbundle)."""
+    try:
+        name, fh = await debugbundle.build(manager(request), job_id)
+    except KeyError:
+        raise HTTPException(404) from None
+    return StreamingResponse(debugbundle.chunks(fh), media_type="application/zip",
+                             headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 async def _job_action(request: Request, job_id: int, coro_fn) -> Job:

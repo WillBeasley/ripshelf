@@ -85,4 +85,8 @@ Settings → Transcoding lists the GPUs and the ffmpeg hardware encoders that wo
 
 ## Still stuck?
 
-Open an issue with the job's MakeMKV log (from its panel) and the relevant lines from the Logs page. Check them for anything you'd rather not share first.
+Open the job and press **Download debug bundle** (or `GET /api/jobs/{id}/debug-bundle`). It's a zip of everything ripshelf has about the job: its record and timeline, the disc's titles, every identification candidate and its score, the MakeMKV and ffmpeg logs, the box scans' readings (and the pictures, if small), the lines of ripshelf's own log from while it ran, the drive and remote worker, the settings and the versions of ripshelf, MakeMKV, ffmpeg and the OS. `manifest.json` in it lists every file and what wasn't there, and `README.txt` sums the job up.
+
+API keys, tokens, passwords and the MakeMKV key are replaced with `[REDACTED]`: settings and JSON keys by name, URL parameters, headers and Bearer tokens in logs by pattern, and the keys set in Settings wherever they appear. File paths, disc labels and titles stay, so look through it before sharing it.
+
+Open an issue with the bundle, or with the job's MakeMKV log (from its panel) and the relevant lines from the Logs page.
