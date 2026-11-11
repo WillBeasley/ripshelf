@@ -2,18 +2,22 @@
 
 Jobs are stored as a JSON document plus the columns we query on. Events are
 append-only. One connection, used from the event loop, because every statement is
-small, so blocking is negligible at this scale.
+small, so blocking is negligible at this scale. The daily backup opens its own.
+
+The schema's version is SQLite's user_version. A database older than SCHEMA_VERSION
+is copied aside, then brought up to date by MIGRATIONS, one step at a time.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from .library import replace
 from .models import (
@@ -104,6 +108,53 @@ CREATE INDEX IF NOT EXISTS contributions_group ON contributions(group_key, assig
 """
 
 
+# MIGRATIONS[n] takes a database from version n to n + 1. Version 0 is every database
+# from before the version was kept (0.6 and earlier), so its step must work on any of
+# them, and on a new, empty file. Add a step to change a table or rewrite stored
+# documents, and test it on the old databases in tests/fixtures/db.
+
+
+def _run(conn: sqlite3.Connection, script: str) -> None:
+    """Run the statements of a script one at a time. Unlike executescript, this doesn't
+    commit first, so a migration step stays inside its transaction."""
+    stmt = ""
+    for line in script.splitlines(keepends=True):
+        stmt += line
+        if sqlite3.complete_statement(stmt):
+            conn.execute(stmt)
+            stmt = ""
+
+
+def _v1(conn: sqlite3.Connection) -> None:
+    """Collections used to be keyed by the show's TMDB id (show_tmdb_id). They are
+    keyed by "tmdb:<id>" now, so shows found without TMDB can have one too."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(collections)")}
+    if "show_tmdb_id" in cols:
+        _run(conn, """
+            CREATE TABLE collections_keyed (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                show_key TEXT NOT NULL UNIQUE,
+                updated_at TEXT NOT NULL,
+                data TEXT NOT NULL
+            );
+            INSERT INTO collections_keyed (id, show_key, updated_at, data)
+                SELECT id, 'tmdb:' || show_tmdb_id, updated_at, data FROM collections;
+            DROP TABLE collections;
+            ALTER TABLE collections_keyed RENAME TO collections;
+        """)
+    _run(conn, SCHEMA)
+
+
+MIGRATIONS = [_v1]
+SCHEMA_VERSION = len(MIGRATIONS)
+
+log = logging.getLogger(__name__)
+
+
+class NewerDatabase(RuntimeError):
+    """The database was written by a newer ripshelf than this one."""
+
+
 def now() -> datetime:
     return datetime.now(UTC)
 
@@ -151,50 +202,85 @@ class JobRecord(Job):
 
 class Database:
     def __init__(self, path: Path | str):
+        self.path = Path(path)
         self.conn = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
-        self._key_collections()
-        self.conn.executescript(SCHEMA)
+        self._unreadable: set[tuple[str, int | str]] = set()  # rows already logged as unreadable
+        self.migrate()
         self.backfill_stats()
 
-    def _key_collections(self) -> None:
-        """Collections used to be keyed by the show's TMDB id (show_tmdb_id). They are
-        keyed by "tmdb:<id>" now, so shows found without TMDB can have one too."""
-        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(collections)")}
-        if "show_tmdb_id" not in cols:
+    @property
+    def version(self) -> int:
+        return self.conn.execute("PRAGMA user_version").fetchone()[0]
+
+    def migrate(self) -> None:
+        """Bring the database up to SCHEMA_VERSION, after copying it aside if it holds anything."""
+        version = self.version
+        if version > SCHEMA_VERSION:
+            raise NewerDatabase(
+                f"{self.path} is at schema version {version}, and this ripshelf knows only up to "
+                f"{SCHEMA_VERSION}. Run the newer ripshelf again, or put back the copy it made "
+                f"before upgrading ({self.path.stem}-before-v*.db, next to it)")
+        if version == SCHEMA_VERSION:
             return
-        self.conn.executescript("""
-            BEGIN;
-            CREATE TABLE collections_keyed (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                show_key TEXT NOT NULL UNIQUE,
-                updated_at TEXT NOT NULL,
-                data TEXT NOT NULL
-            );
-            INSERT INTO collections_keyed (id, show_key, updated_at, data)
-                SELECT id, 'tmdb:' || show_tmdb_id, updated_at, data FROM collections;
-            DROP TABLE collections;
-            ALTER TABLE collections_keyed RENAME TO collections;
-            COMMIT;
-        """)
+        if self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table'").fetchone():
+            copy = self.path.with_name(f"{self.path.stem}-before-v{SCHEMA_VERSION}{self.path.suffix}")
+            self.backup(copy)
+            log.info("database is at schema version %d; copied it to %s before upgrading to %d",
+                     version, copy, SCHEMA_VERSION)
+        # foreign_keys can't change inside a transaction, and a step may rebuild a table.
+        self.conn.execute("PRAGMA foreign_keys=OFF")
+        try:
+            for n in range(version, SCHEMA_VERSION):
+                self.conn.execute("BEGIN IMMEDIATE")
+                try:
+                    MIGRATIONS[n](self.conn)
+                    self.conn.execute(f"PRAGMA user_version={n + 1}")
+                except BaseException:
+                    self.conn.execute("ROLLBACK")
+                    raise
+                self.conn.execute("COMMIT")
+        finally:
+            self.conn.execute("PRAGMA foreign_keys=ON")
 
     def close(self) -> None:
         self.conn.close()
 
     def backup(self, dest: Path) -> None:
-        """A consistent copy while in use (SQLite online backup), written atomically."""
+        """A consistent copy while in use (SQLite online backup), written atomically. It reads
+        through a connection of its own, so it can run in a thread while the event loop
+        carries on with the main one."""
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_suffix(".tmp")
         tmp.unlink(missing_ok=True)
-        out = sqlite3.connect(str(tmp))
+        src = sqlite3.connect(str(self.path))
         try:
-            self.conn.backup(out)
+            out = sqlite3.connect(str(tmp))
+            try:
+                src.backup(out)
+            finally:
+                out.close()
         finally:
-            out.close()
+            src.close()
         replace(tmp, dest)  # retried on Windows while a scanner has the new file open
+
+    def _load(self, model: type[BaseModel], table: str, row_id: int | str, data: str):
+        """A stored document as ``model``, or None (logged once) if it no longer fits it,
+        such as one written by an older ripshelf whose field has since changed."""
+        try:
+            return model.model_validate_json(data)
+        except ValidationError as e:
+            if (table, row_id) not in self._unreadable:
+                self._unreadable.add((table, row_id))
+                log.warning("skipping %s row %s, which this version can't read: %s",
+                            table, row_id, e)
+            return None
+
+    def _job(self, row) -> JobRecord | None:
+        return self._load(JobRecord, "jobs", row["id"], row["data"]) if row else None
 
     # --- jobs ---------------------------------------------------------------
 
@@ -218,15 +304,14 @@ class Database:
         )
 
     def get_job(self, job_id: int) -> JobRecord | None:
-        row = self.conn.execute("SELECT data FROM jobs WHERE id=?", (job_id,)).fetchone()
-        return JobRecord.model_validate_json(row["data"]) if row else None
+        return self._job(self.conn.execute("SELECT id, data FROM jobs WHERE id=?", (job_id,)).fetchone())
 
     def list_jobs(self, states: list[str] | None = None, limit: int = 200,
                   before: int | None = None) -> list[JobRecord]:
         """The newest jobs first, those with an id below ``before`` if it's given."""
         where, args = self._job_filter(states, before)
-        rows = self.conn.execute(f"SELECT data FROM jobs{where} ORDER BY id DESC LIMIT ?", (*args, limit)).fetchall()
-        return [JobRecord.model_validate_json(r["data"]) for r in rows]
+        rows = self.conn.execute(f"SELECT id, data FROM jobs{where} ORDER BY id DESC LIMIT ?", (*args, limit)).fetchall()
+        return [j for r in rows if (j := self._job(r))]
 
     def count_jobs(self, states: list[str] | None = None, before: int | None = None) -> int:
         where, args = self._job_filter(states, before)
@@ -244,10 +329,9 @@ class Database:
         return (" WHERE " + " AND ".join(conds) if conds else ""), tuple(args)
 
     def latest_job_for_drive(self, drive_id: str) -> JobRecord | None:
-        row = self.conn.execute(
-            "SELECT data FROM jobs WHERE drive_id=? ORDER BY id DESC LIMIT 1", (drive_id,)
-        ).fetchone()
-        return JobRecord.model_validate_json(row["data"]) if row else None
+        return self._job(self.conn.execute(
+            "SELECT id, data FROM jobs WHERE drive_id=? ORDER BY id DESC LIMIT 1", (drive_id,)
+        ).fetchone())
 
     def jobs_without_hash(self, quick_fp: str) -> list[int]:
         """Jobs of this disc (by its quick fingerprint) with no content hash."""
@@ -309,7 +393,8 @@ class Database:
         ).fetchone()
         if not row:
             return None
-        return Candidate.model_validate_json(row["candidate"]), row["confirmed_at"]
+        c = self._load(Candidate, "fingerprints", fp, row["candidate"])
+        return (c, row["confirmed_at"]) if c else None
 
     # --- drives -------------------------------------------------------------
 
@@ -439,11 +524,12 @@ class Database:
         jobs without a row are read."""
         marks = ",".join("?" * len(TERMINAL_STATES))
         rows = self.conn.execute(
-            f"SELECT data FROM jobs WHERE state IN ({marks}) "
+            f"SELECT id, data FROM jobs WHERE state IN ({marks}) "
             "AND id NOT IN (SELECT job_id FROM rip_stats)", [s.value for s in TERMINAL_STATES]
         ).fetchall()
         for r in rows:
-            self.record_stats(JobRecord.model_validate_json(r["data"]), replace=False)
+            if job := self._job(r):
+                self.record_stats(job, replace=False)
 
     def drive_stats(self) -> list[DriveStats]:
         """Totals per drive, for every drive that has finished a job."""
@@ -473,9 +559,9 @@ class Database:
 
     # --- TV collections -------------------------------------------------------
 
-    def _collection(self, row) -> Collection:
-        c = Collection.model_validate_json(row["data"])
-        c.id = row["id"]
+    def _collection(self, row) -> Collection | None:
+        if c := self._load(Collection, "collections", row["id"], row["data"]):
+            c.id = row["id"]
         return c
 
     def collection(self, collection_id: int) -> Collection | None:
@@ -491,7 +577,7 @@ class Database:
 
     def collections(self) -> list[Collection]:
         rows = self.conn.execute("SELECT id, data FROM collections ORDER BY updated_at DESC").fetchall()
-        return [self._collection(r) for r in rows]
+        return [c for r in rows if (c := self._collection(r))]
 
     def delete_collection(self, collection_id: int) -> None:
         self.conn.execute("DELETE FROM collections WHERE id=?", (collection_id,))
