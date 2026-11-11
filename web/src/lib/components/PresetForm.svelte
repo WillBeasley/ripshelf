@@ -90,7 +90,7 @@
 		<p class="small muted">Leave season and disc empty to carry on from the discs already in the collection.</p>
 	{:else if media === 'tv' && shows}
 		<ul class="list">
-			{#each shows.slice(0, 6) as s (s.tmdb_id)}
+			{#each shows.slice(0, 6) as s (s.key)}
 				<li>
 					<button class="other" onclick={() => (show = s)}>
 						<Poster url={s.poster_url} alt={s.name} width={32} />

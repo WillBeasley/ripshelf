@@ -130,7 +130,7 @@
 	let runOrder = $state('');
 	let initKey = '';
 	$effect(() => {
-		const key = `${plan?.show?.tmdb_id}:${plan?.season}:${plan?.disc_number}:${plan?.start_episode}:${plan?.compilation}`;
+		const key = `${plan?.show?.key}:${plan?.season}:${plan?.disc_number}:${plan?.start_episode}:${plan?.compilation}`;
 		if (key !== initKey) {
 			initKey = key;
 			season = plan?.season != null ? String(plan.season) : '';
@@ -146,7 +146,7 @@
 		found = (await act.run(() => api.tvSearch(showQuery.trim()))) ?? null;
 	}
 
-	// A name from the web search, searched on TMDB like a typed one.
+	// A name from the web search, searched for like a typed one.
 	async function useName(name: string) {
 		showQuery = name;
 		found = (await act.run(() => api.tvSearch(name))) ?? null;
@@ -156,7 +156,8 @@
 		found = null;
 		const ok = await act.run(() =>
 			api.tvPropose(job.id, {
-				show_tmdb_id: show.tmdb_id,
+				show_key: show.key,
+				show_tmdb_id: null,
 				season: compilation ? null : num(season),
 				disc_number: num(disc),
 				start_episode: null,
@@ -170,7 +171,8 @@
 		if (!plan?.show) return;
 		const ok = await act.run(() =>
 			api.tvPropose(job.id, {
-				show_tmdb_id: plan.show!.tmdb_id,
+				show_key: plan.show!.key,
+				show_tmdb_id: null,
 				season: compilation ? null : num(season),
 				disc_number: num(disc),
 				start_episode: compilation ? null : num(start),
@@ -277,14 +279,14 @@
 				</div>
 				<Evidence items={plan.show.evidence.slice(0, 3)} />
 			{:else}
-				<p class="small muted">No show picked yet. Search TMDB, search the web for the label, or eject the disc to look at it.</p>
-				<WebSearch {job} onUse={useName} useLabel="Search TMDB shows for" />
+				<p class="small muted">No show picked yet. Search for it below, search the web for the label, or eject the disc to look at it.</p>
+				<WebSearch {job} onUse={useName} useLabel="Search shows for" />
 			{/if}
 			{#if job.media_evidence.length && !job.refile}<p class="small muted">{job.media_evidence.slice(0, 3).join(' · ')}</p>{/if}
 			{#if plan?.candidates?.length && plan.candidates.length > 1}
 				<p class="small muted">Other shows ({plan.candidates.length - 1})</p>
 				<ul class="shows">
-					{#each plan.candidates.filter((s) => s.tmdb_id !== plan.show?.tmdb_id) as s (s.tmdb_id)}
+					{#each plan.candidates.filter((s) => s.key !== plan.show?.key) as s (s.key)}
 						<li>
 							<button class="other" onclick={() => choose(s)} disabled={act.busy}>
 								<Poster url={s.poster_url} alt={s.name} width={32} />
@@ -300,12 +302,12 @@
 				</ul>
 			{/if}
 			<form class="search-row" onsubmit={searchShows}>
-				<input placeholder="Search TMDB for a show" bind:value={showQuery} />
+				<input placeholder="Search for a show" bind:value={showQuery} />
 				<button type="submit" disabled={act.busy || !showQuery.trim()}>Search</button>
 			</form>
 			{#if found}
 				<ul class="shows">
-					{#each found as s (s.tmdb_id)}
+					{#each found as s (s.key)}
 						<li>
 							<button class="other" onclick={() => choose(s)} disabled={act.busy}>
 								<Poster url={s.poster_url} alt={s.name} width={32} />

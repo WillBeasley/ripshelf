@@ -49,7 +49,7 @@
 		return true;
 	}
 
-	// Without TMDB nothing is identified, so that step needs a key (or "Skip for now").
+	// Without TMDB films are identified only from TheDiscDB, so that step asks for a key (or "Skip for now").
 	const needsTmdb = $derived(step === 3 && form.ready && !form.isSet('tmdb_api_key') && !form.secrets.tmdb_api_key?.trim());
 
 	async function next() {
@@ -97,9 +97,9 @@
 	const ORDER = ['thediscdb', 'tmdb', 'tvdb', 'tvmaze', 'omdb'] as const;
 	const WHY: Record<string, string> = {
 		thediscdb: 'Recognises the exact disc, its edition, and which title is the film or which episodes are on it. No key.',
-		tmdb: 'Names films and shows, with posters and episode lists. Every TV lookup goes through it, so it is needed.',
+		tmdb: 'Names films and shows, with posters and episode lists. Films need it unless TheDiscDB knows the disc.',
 		tvdb: 'Recommended for TV. Finds shows TMDB misses, and has the DVD episode order.',
-		tvmaze: 'TV shows and episode lists. No key.',
+		tvmaze: 'TV shows and episode lists. No key, so TV works even without TMDB.',
 		omdb: 'A second opinion on films (IMDb data). Off unless you want it.'
 	};
 	const KEY_FIELD: Record<string, SecretName> = { tmdb: 'tmdb_api_key', tvdb: 'tvdb_api_key', omdb: 'omdb_api_key' };
@@ -223,8 +223,8 @@
 				<h2>Film and TV data</h2>
 				<p class="small">
 					ripshelf looks each disc up with these, in this order. TheDiscDB comes first, since it knows the disc itself, then the
-					searches. TMDB is the one you need, because without it TV discs can't be identified at all (the show search goes
-					through TMDB), and films only when TheDiscDB knows the disc, without posters.
+					searches. TMDB is the one you want: without it, films are identified only when TheDiscDB knows the disc, without
+					posters. TV shows still work without it, through TVmaze (no key) or TheTVDB.
 				</p>
 				{#each providers as p (p.name)}
 					{@const keyField = KEY_FIELD[p.name]}
@@ -233,7 +233,7 @@
 							<input type="checkbox" aria-label="Use {p.label}" checked={p.name === 'tmdb' || providerOn(p.name)} disabled={p.name === 'tmdb'}
 								onchange={(e) => setProvider(p.name, e.currentTarget.checked)} />
 							<strong>{p.label}</strong>
-							{#if p.name === 'tmdb'}<span class="chip">needed</span>{:else if p.name === 'tvdb'}<span class="chip">recommended for TV</span>{/if}
+							{#if p.name === 'tmdb'}<span class="chip">needed for films</span>{:else if p.name === 'tvdb'}<span class="chip">recommended for TV</span>{/if}
 						</label>
 						<p class="small muted">{WHY[p.name] ?? p.description}</p>
 						{#if keyField}
