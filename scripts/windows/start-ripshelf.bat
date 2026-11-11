@@ -35,7 +35,7 @@ if not exist "%VENV%\Scripts\ripshelf.exe" (
     set "OLD="
 )
 if not "%OLD%"=="%DEPS%" (
-    if defined OLD echo ripshelf's Python packages changed, installing them...
+    echo Installing ripshelf's Python packages...
     "%VENV%\Scripts\python" -m pip install --quiet --upgrade pip
     "%VENV%\Scripts\python" -m pip install --quiet -r "%ROOT%\requirements.lock" || goto :failed
     "%VENV%\Scripts\python" -m pip install --quiet --no-deps --no-build-isolation -e "%ROOT%" || goto :failed
