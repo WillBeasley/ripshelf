@@ -81,7 +81,7 @@ def fake_tmdb(monkeypatch, h):
             pass
 
     async def all_episodes(tmdb, show):
-        return EPISODES[show.tmdb_id]
+        return EPISODES.get(show.tmdb_id, [])
 
     async def find_shows(tmdb, name, runtime, *a, **k):
         return [KITE] if "kite" in name.lower() else []
