@@ -89,6 +89,7 @@ export interface Api {
   EpisodeRef?: EpisodeRef;
   Evidence?: Evidence;
   Filesystem?: Filesystem;
+  FinishedPage?: FinishedPage;
   FolderRequest?: FolderRequest;
   FolderState?: FolderState;
   Hardware?: Hardware;
@@ -983,98 +984,17 @@ export interface StorageFolder {
   exists: boolean;
 }
 /**
+ * Finished, failed and cancelled jobs, newest first, for paging back through the history.
+ *
  * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "FolderRequest".
+ * via the `definition` "FinishedPage".
  */
-export interface FolderRequest {
-  path: string;
+export interface FinishedPage {
+  jobs: Job[];
   /**
-   * make it (and its parents) if it doesn't exist
+   * finished jobs older than these (or than ``before``, if there are none)
    */
-  create: boolean;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "FolderState".
- */
-export interface FolderState {
-  path: string;
-  exists: boolean;
-  created: boolean;
-  /**
-   * bytes free where it is (or would be)
-   */
-  free: number | null;
-  error: string | null;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "Hardware".
- */
-export interface Hardware {
-  devices: HwDevice[];
-  encoders: HwEncoder[];
-  ffmpeg_found: boolean;
-  /**
-   * what ripshelf transcodes with now
-   */
-  encoder: "qsv" | "vaapi" | "nvenc" | "x265";
-  encoder_note: string;
-  checked_at: number;
-  /**
-   * GPUs aren't listed on Windows; the encoders' test encodes tell
-   */
-  windows: boolean;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "HwDevice".
- */
-export interface HwDevice {
-  path: string;
-  vendor: string | null;
-  driver: string | null;
-  model: string | null;
-  /**
-   * ripshelf may open it (read and write)
-   */
-  accessible: boolean;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "HwEncoder".
- */
-export interface HwEncoder {
-  /**
-   * the ffmpeg encoder, e.g. hevc_vaapi
-   */
-  name: string;
-  codec: string;
-  method: string;
-  device: string | null;
-  description: string;
-  /**
-   * a test encode succeeded
-   */
-  works: boolean;
-  /**
-   * false if not tried, because there is no GPU for it
-   */
-  tested: boolean;
-  /**
-   * 10-bit (Main10) test encode succeeded, where tested
-   */
-  ten_bit: boolean | null;
-  error: string | null;
-  used_by_ripshelf: boolean;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "ImportPrivateDataResult".
- */
-export interface ImportPrivateDataResult {
-  drive_ids: string[];
-  files: number;
+  older: number;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1762,6 +1682,100 @@ export interface RefileMove {
   src: string;
   dst: string;
   done: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "FolderRequest".
+ */
+export interface FolderRequest {
+  path: string;
+  /**
+   * make it (and its parents) if it doesn't exist
+   */
+  create: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "FolderState".
+ */
+export interface FolderState {
+  path: string;
+  exists: boolean;
+  created: boolean;
+  /**
+   * bytes free where it is (or would be)
+   */
+  free: number | null;
+  error: string | null;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "Hardware".
+ */
+export interface Hardware {
+  devices: HwDevice[];
+  encoders: HwEncoder[];
+  ffmpeg_found: boolean;
+  /**
+   * what ripshelf transcodes with now
+   */
+  encoder: "qsv" | "vaapi" | "nvenc" | "x265";
+  encoder_note: string;
+  checked_at: number;
+  /**
+   * GPUs aren't listed on Windows; the encoders' test encodes tell
+   */
+  windows: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "HwDevice".
+ */
+export interface HwDevice {
+  path: string;
+  vendor: string | null;
+  driver: string | null;
+  model: string | null;
+  /**
+   * ripshelf may open it (read and write)
+   */
+  accessible: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "HwEncoder".
+ */
+export interface HwEncoder {
+  /**
+   * the ffmpeg encoder, e.g. hevc_vaapi
+   */
+  name: string;
+  codec: string;
+  method: string;
+  device: string | null;
+  description: string;
+  /**
+   * a test encode succeeded
+   */
+  works: boolean;
+  /**
+   * false if not tried, because there is no GPU for it
+   */
+  tested: boolean;
+  /**
+   * 10-bit (Main10) test encode succeeded, where tested
+   */
+  ten_bit: boolean | null;
+  error: string | null;
+  used_by_ripshelf: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ImportPrivateDataResult".
+ */
+export interface ImportPrivateDataResult {
+  drive_ids: string[];
+  files: number;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

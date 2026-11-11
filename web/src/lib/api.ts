@@ -16,6 +16,7 @@ import type {
 	Drive,
 	DriveStats,
 	Filesystem,
+	FinishedPage,
 	FolderState,
 	Hardware,
 	ImportPrivateDataResult,
@@ -93,6 +94,9 @@ export const api = {
 	status: () => call<Status>('GET', '/status'),
 	drives: () => call<Drive[]>('GET', '/drives'),
 	jobs: (limit = 200) => call<Job[]>('GET', `/jobs?limit=${limit}`),
+	// The history older than job `before` (all of it without one). A limit of 0 only counts it.
+	finished: (before: number | null, limit = 100) =>
+		call<FinishedPage>('GET', `/jobs/finished?limit=${limit}${before != null ? `&before=${before}` : ''}`),
 	job: (id: number) => call<JobDetail>('GET', `/jobs/${id}`),
 	log: (id: number, lines = 30, kind: 'rip' | 'transcode' = 'rip') =>
 		call<string[]>('GET', `/jobs/${id}/log?lines=${lines}&kind=${kind}`),

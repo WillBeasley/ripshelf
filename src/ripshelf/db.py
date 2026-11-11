@@ -221,13 +221,27 @@ class Database:
         row = self.conn.execute("SELECT data FROM jobs WHERE id=?", (job_id,)).fetchone()
         return JobRecord.model_validate_json(row["data"]) if row else None
 
-    def list_jobs(self, states: list[str] | None = None, limit: int = 200) -> list[JobRecord]:
-        if states:
-            q = f"SELECT data FROM jobs WHERE state IN ({','.join('?' * len(states))}) ORDER BY id DESC LIMIT ?"
-            rows = self.conn.execute(q, (*states, limit)).fetchall()
-        else:
-            rows = self.conn.execute("SELECT data FROM jobs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    def list_jobs(self, states: list[str] | None = None, limit: int = 200,
+                  before: int | None = None) -> list[JobRecord]:
+        """The newest jobs first, those with an id below ``before`` if it's given."""
+        where, args = self._job_filter(states, before)
+        rows = self.conn.execute(f"SELECT data FROM jobs{where} ORDER BY id DESC LIMIT ?", (*args, limit)).fetchall()
         return [JobRecord.model_validate_json(r["data"]) for r in rows]
+
+    def count_jobs(self, states: list[str] | None = None, before: int | None = None) -> int:
+        where, args = self._job_filter(states, before)
+        return self.conn.execute(f"SELECT COUNT(*) FROM jobs{where}", args).fetchone()[0]
+
+    @staticmethod
+    def _job_filter(states: list[str] | None, before: int | None) -> tuple[str, tuple]:
+        conds, args = [], []
+        if states:
+            conds.append(f"state IN ({','.join('?' * len(states))})")
+            args += states
+        if before is not None:
+            conds.append("id < ?")
+            args.append(before)
+        return (" WHERE " + " AND ".join(conds) if conds else ""), tuple(args)
 
     def latest_job_for_drive(self, drive_id: str) -> JobRecord | None:
         row = self.conn.execute(

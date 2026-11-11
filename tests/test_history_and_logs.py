@@ -135,3 +135,22 @@ def test_logs_api_and_file(settings):
             for h in [h for h in logging.getLogger().handlers if getattr(h, "baseFilename", None) == str(path)]:
                 logging.getLogger().removeHandler(h)
                 h.close()
+
+
+def test_finished_pages(settings):
+    with TestClient(create_app(settings, backend=FakeDrives(present=set()))) as c:
+        m = c.app.state.manager
+        ids = []
+        for i in range(7):
+            j = m.db.create_job("fake-ihas122", "/dev/fake-sr1")
+            j.state = JobState.review if i == 3 else (JobState.done, JobState.failed, JobState.cancelled)[i % 3]
+            m.db.save_job(j)
+            ids.append(j.id)
+        finished = [i for n, i in enumerate(ids) if n != 3][::-1]
+        page = c.get("/api/jobs/finished?limit=2").json()
+        assert [j["id"] for j in page["jobs"]] == finished[:2] and page["older"] == 4
+        page = c.get(f"/api/jobs/finished?limit=10&before={finished[1]}").json()
+        assert [j["id"] for j in page["jobs"]] == finished[2:] and page["older"] == 0
+        assert c.get(f"/api/jobs/finished?limit=0&before={finished[1]}").json() == {"jobs": [], "older": 4}
+        assert [j["id"] for j in c.get(f"/api/jobs?limit=3&before={ids[4]}").json()] == ids[3::-1][:3]
+        assert c.get("/api/jobs?limit=0").status_code == 422
