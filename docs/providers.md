@@ -6,7 +6,7 @@ ripshelf identifies discs with metadata providers, which are online databases of
 |---|---|---|
 | **Films** | which film a disc is | TheDiscDB first, if the disc is in it. Then every ticked search runs, and their results are merged. A film that several providers find is one candidate, and it says which providers found it. |
 | **TV shows** | which show a TV disc is | Asked in order until one finds the show. Later providers are fallbacks. |
-| **TV episodes** | a season's episode list | The first provider that has the season wins. If none of them has it, TMDB's list is used. |
+| **TV episodes** | a season's episode list | The first provider that has the season wins. If none of them has it, the list from the provider that found the show is used (TMDB's, with a TMDB key). |
 
 Drag a provider by its handle to reorder a list. On a phone, or from the keyboard, use the ↑ ↓ buttons, or focus the handle and press the arrow keys. Untick a provider to leave it out of that list. A provider that needs a key is skipped until the key is set.
 
@@ -17,9 +17,9 @@ Keys are shared by every list a provider is in. They go under the lists, each wi
 | Provider | Key | Lists | Used for |
 |---|---|---|---|
 | **TheDiscDB** | none | Films, TV shows | Recognises the disc itself, and says which title is the film or which episode |
-| **TMDB** | free | all three | Search, runtimes, posters. ripshelf names films and shows after TMDB |
+| **TMDB** | free | all three | Search, runtimes, posters. With its key, ripshelf names films and shows after TMDB |
 | **TheTVDB** | free for personal use, or a subscriber PIN | TV shows, TV episodes | Finds shows TMDB's search misses. Episode lists in aired or DVD order |
-| **TVmaze** | none | TV shows, TV episodes | Show search and episode lists when there is no TheTVDB key |
+| **TVmaze** | none | TV shows, TV episodes | Show search and episode lists when there is no TheTVDB key, or no TMDB key |
 | **OMDb** | free (1,000 requests a day) | Films | A second film search (IMDb's titles, years and runtimes), and a cross-check of TMDB's results |
 
 ### TheDiscDB
@@ -52,13 +52,25 @@ TheDiscDB numbers episodes as its contributors entered them, usually in aired or
 
 Get a free key from [themoviedb.org](https://www.themoviedb.org/settings/api). Use the **v3 API key**, not the read access token.
 
-Everything ripshelf files is identified by TMDB.
+With a TMDB key, everything ripshelf files is identified by TMDB.
 
 - Films are named from TMDB's record.
 - TV collections are keyed by TMDB's show id.
 - Shows that TheTVDB or TVmaze find are looked up on TMDB through their TheTVDB or IMDb ids.
 
-So TV needs a TMDB key even with TMDB lower in the TV lists. A film found only by OMDb, with no TMDB key, is named from OMDb's title and year.
+A film found only by OMDb, with no TMDB key, is named from OMDb's title and year.
+
+### TV without a TMDB key
+
+TV works without a TMDB key, through TheTVDB (with its key) and TVmaze (no key needed).
+
+- The show search asks TheTVDB and TVmaze in the order of the **TV shows** list, until one finds the show. The Review page's search box searches them too.
+- A show found this way is named, filed and kept in its collection under that provider's own id. Collections, the season grid and "continues the collection" work as they do with TMDB.
+- The season's episodes come from the **TV episodes** list as usual, with TMDB skipped. If none of the ticked providers has the season, the list from the provider that found the show is used.
+- A disc TheDiscDB knows is looked up on TVmaze by its TheTVDB or IMDb id, or kept under its TheTVDB id.
+- Posters come from TVmaze or TheTVDB, and TVmaze has no season posters.
+
+A show picked without a TMDB key stays keyed by TheTVDB's or TVmaze's id after you add a key. Its collection keeps working; discs of that show identified with the key go into a new, TMDB-keyed collection. TheDiscDB contributions need a TMDB id, so a disc identified without one isn't offered for contributing.
 
 ### TheTVDB
 
@@ -68,7 +80,7 @@ The **Episode order** setting (aired or DVD) picks which of TheTVDB's lists is u
 
 ### TVmaze
 
-[TVmaze](https://www.tvmaze.com/api) needs no key. Its shows carry TheTVDB and IMDb ids, and ripshelf uses those to look a TVmaze show up on TMDB, and to find a TMDB show on TVmaze for its episodes.
+[TVmaze](https://www.tvmaze.com/api) needs no key. Its shows carry TheTVDB and IMDb ids, and ripshelf uses those to look a TVmaze show up on TMDB, and to find a TMDB show on TVmaze for its episodes. Without a TMDB key, TVmaze's own show is used (see [TV without a TMDB key](#tv-without-a-tmdb-key)).
 
 TVmaze lists episodes in aired order and has no season 0.
 
