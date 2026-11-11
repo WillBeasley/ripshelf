@@ -5,6 +5,7 @@
 	import { ENCODER_NAMES, duration, jobTitle, kindLabel, size, when } from '../format';
 	import { live } from '../live.svelte';
 	import { closeJob } from '../nav';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import ContributionPanel from './ContributionPanel.svelte';
 	import CoverScans from './CoverScans.svelte';
@@ -109,6 +110,14 @@
 			live.removeJobs(r.deleted);
 			closeJob();
 		}
+	}
+
+	// Filed as the wrong film or show: back to Review, and its files move once the right one is confirmed.
+	async function reidentify() {
+		const what = job?.media === 'tv' ? 'show and episodes' : 'title';
+		if (!confirm(`Identify this disc again? It goes back to Review, where you pick the right ${what}. Its files stay where they are until you confirm, then move to the new names. Nothing is ripped again.`))
+			return;
+		if (await act.run(() => api.reidentify(jobId))) goto(`/review#job-${jobId}`);
 	}
 
 	function onKey(e: KeyboardEvent) {
@@ -241,14 +250,28 @@
 			{#if job.state === 'failed'}
 				<button class="primary" disabled={act.busy} onclick={() => act.run(() => api.retry(jobId))}>Retry</button>
 			{/if}
-			{#if ['review', 'ripping', 'failed', 'identifying', 'clash'].includes(job.state)}
-				<button disabled={act.busy} onclick={() => act.run(() => api.identifyAgain(jobId))}>Identify again</button>
+			{#if job.refile}
+				{#if job.state === 'review' || job.state === 'failed'}
+					<button disabled={act.busy} onclick={() => act.run(() => api.keepIdentity(jobId))}>
+						Keep it as {job.refile.title}
+					</button>
+				{/if}
+			{:else}
+				{#if ['review', 'ripping', 'failed', 'identifying', 'clash'].includes(job.state)}
+					<button disabled={act.busy} onclick={() => act.run(() => api.identifyAgain(jobId))}>Identify again</button>
+				{/if}
+				{#if (job.state === 'review' || job.state === 'clash') && job.rip.state !== 'running'}
+					<button disabled={act.busy} title="Open the tray to look at the disc without losing the job"
+						onclick={() => act.run(() => api.checkDisc(jobId))}>Eject to check</button>
+				{/if}
+				{#if job.state === 'done' && job.identity && job.destination}
+					<button disabled={act.busy} title="Pick the right film or show; the files in the library move to its names"
+						onclick={reidentify}>Wrong title? Identify again</button>
+				{/if}
 			{/if}
-			{#if (job.state === 'review' || job.state === 'clash') && job.rip.state !== 'running'}
-				<button disabled={act.busy} title="Open the tray to look at the disc without losing the job"
-					onclick={() => act.run(() => api.checkDisc(jobId))}>Eject to check</button>
-			{/if}
-			{#if active}
+			{#if job.refile}
+				<!-- Keep it as it was (above) is its cancel; its files are in the library, so it stays in the history. -->
+			{:else if active}
 				<button class="danger" disabled={act.busy} onclick={() => act.run(() => api.cancel(jobId))}>Cancel job</button>
 			{:else}
 				<button class="danger" disabled={act.busy} onclick={remove}>Delete from history</button>

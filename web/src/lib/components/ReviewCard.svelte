@@ -8,6 +8,7 @@
 	import Evidence from './Evidence.svelte';
 	import CoverScans from './CoverScans.svelte';
 	import Poster from './Poster.svelte';
+	import RefileBanner from './RefileBanner.svelte';
 	import ScoreMeter from './ScoreMeter.svelte';
 	import Snapshots from './Snapshots.svelte';
 	import WebSearch from './WebSearch.svelte';
@@ -99,6 +100,8 @@
 		<button class="link small" onclick={() => openJob(job.id)}>Details</button>
 	</header>
 
+	<RefileBanner {job} />
+
 	{#if best && !searching}
 		<section class="candidate">
 			<Poster url={best.poster_url} alt={best.title} width={84} />
@@ -145,19 +148,21 @@
 		<div class="actions">
 			{#if best && !checking}
 				<button class="primary confirm" disabled={act.busy} onclick={() => confirm(best)}>
-					Confirm {best.title}{best.year ? ` (${best.year})` : ''}
+					{job.refile ? 'Move the files to' : 'Confirm'} {best.title}{best.year ? ` (${best.year})` : ''}
 				</button>
 			{/if}
 			<div class="row">
 				<button disabled={act.busy} onclick={startSearch}>Search TMDB</button>
-				{#if !checking}
+				{#if !checking && !job.refile}
 					<button disabled={act.busy} title="Open the tray to look at the disc without losing the job"
 						onclick={ejectToCheck}>Eject to check</button>
 				{/if}
 			</div>
-			<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.setMedia(job.id, 'tv'))}>
-				This is a TV disc
-			</button>
+			{#if !job.refile}
+				<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.setMedia(job.id, 'tv'))}>
+					This is a TV disc
+				</button>
+			{/if}
 		</div>
 	{/if}
 	{#if act.error}<p class="small error-text">{act.error}</p>{/if}

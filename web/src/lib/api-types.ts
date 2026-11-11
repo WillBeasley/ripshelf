@@ -119,6 +119,8 @@ export interface Api {
   Problem?: Problem;
   ProviderInfo?: ProviderInfo;
   ProviderSlot?: ProviderSlot;
+  Refile?: Refile;
+  RefileMove?: RefileMove;
   ReleaseDetails?: ReleaseDetails1;
   ReleaseLookup?: ReleaseLookup;
   ReleaseLookupRequest?: ReleaseLookupRequest;
@@ -1123,6 +1125,10 @@ export interface Job {
    * the listing matched to the disc's titles
    */
   scan_match: ScanMatch | null;
+  /**
+   * finished, and being identified again
+   */
+  refile: Refile | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1667,6 +1673,47 @@ export interface TitleMatch {
   bonus: BonusEpisode | null;
 }
 /**
+ * A finished job being identified again. Its files stay where they are in the library
+ * until the new identity is confirmed, and are then moved (not ripped again) to its names.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "Refile".
+ */
+export interface Refile {
+  /**
+   * what it was filed as, "Moonlit Orchard (2004)"
+   */
+  title: string;
+  /**
+   * the identity it had, put back if kept as it was
+   */
+  identity: Candidate | null;
+  identity_source: ("auto" | "user" | "cache") | null;
+  destination: string | null;
+  tv: TvPlan | null;
+  candidates: Candidate[];
+  finished_at: string | null;
+  /**
+   * title index -> its file in the library
+   */
+  files: {
+    [k: string]: string;
+  };
+  /**
+   * planned once confirmed, each marked done once moved, so a move that failed half way can be retried
+   */
+  moves: RefileMove[];
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "RefileMove".
+ */
+export interface RefileMove {
+  src: string;
+  dst: string;
+  done: boolean;
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "JobDetail".
  */
@@ -1745,6 +1792,10 @@ export interface JobDetail {
    * the listing matched to the disc's titles
    */
   scan_match: ScanMatch | null;
+  /**
+   * finished, and being identified again
+   */
+  refile: Refile | null;
   events: JobEvent[];
   titles: TitleInfo[];
 }
