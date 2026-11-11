@@ -1,15 +1,17 @@
 <script lang="ts">
-	import type { Job } from '../api-types';
+	import type { Job, TitleSplit } from '../api-types';
 	import { api } from '../api';
 	import { Action } from '../actions.svelte';
 	import { duration, percent } from '../format';
 
-	// One long title holding the disc's episodes: the marks it can be cut at (its chapters, or
-	// breaks found in it, or cuts put in by hand), and where it's cut.
-	let { job }: { job: Job } = $props();
+	// A long title holding several of the disc's episodes: the marks it can be cut at (its
+	// chapters, or breaks found in it, or cuts put in by hand), and where it's cut. ``split``
+	// says which (else the disc's first); ``brief`` leaves out the heading the Review card has.
+	let { job, split = null, brief = false }: { job: Job; split?: TitleSplit | null; brief?: boolean } = $props();
 	const act = new Action();
 
-	const sp = $derived(job.tv?.split ?? null);
+	const sp = $derived(split ?? job.tv?.splits?.[0] ?? null);
+	const which = $derived(sp?.title_index ?? null);
 	const changeable = $derived(['review', 'identifying', 'ripping', 'failed', 'checking', 'clash'].includes(job.state));
 	const editable = $derived(changeable && sp?.state === 'ready');
 
@@ -64,7 +66,7 @@
 	const typedAt = $derived(seconds(typed));
 	async function cutAt(at: number) {
 		if (!editable || !(at > 0 && at < total)) return;
-		const done = await act.run(() => api.tvSplit(job.id, { cuts, off: null, cut_at: at }));
+		const done = await act.run(() => api.tvSplit(job.id, { cuts, off: null, cut_at: at, title_index: which }));
 		if (done) typed = '';
 	}
 	function clickBar(e: MouseEvent) {
@@ -89,20 +91,24 @@
 
 {#if sp}
 	<section class="split">
-		<div>
-			<h3>Title {sp.title_index} holds about {sp.expected} episodes</h3>
-			<p class="small muted">
-				{sp.reason.charAt(0).toUpperCase()}{sp.reason.slice(1)}. It's split {scanned
-					? 'at black frames and silence found in it'
-					: 'at chapter marks'}, without re-encoding.
-			</p>
-		</div>
+		{#if !brief}
+			<div>
+				<h3>Title {sp.title_index} holds about {sp.expected} episodes</h3>
+				<p class="small muted">
+					{sp.reason.charAt(0).toUpperCase()}{sp.reason.slice(1)}. It's split {scanned
+						? 'at black frames and silence found in it'
+						: 'at chapter marks'}, without re-encoding.
+				</p>
+			</div>
+		{/if}
 
-		{#if sp.state === 'waiting'}
+		{#if sp.state === 'waiting' && !brief}
 			<p class="small muted">
 				Its chapters are read once it's ripped, and the cuts are proposed then. With too few chapters, it's
 				searched for black frames and silence instead, which takes a few minutes.
 			</p>
+		{:else if sp.state === 'waiting'}
+			<!-- said by the Review card -->
 		{:else if sp.state === 'failed'}
 			<p class="small error-text">It can't be split: {sp.error}.</p>
 		{:else}
@@ -192,7 +198,7 @@
 					<button type="submit" disabled={act.busy || typedAt == null || !(typedAt > 0 && typedAt < total)}>Add cut</button>
 				</form>
 				<div class="row">
-					<button class="primary" disabled={!dirty || act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts, off: null, cut_at: null }))}>
+					<button class="primary" disabled={!dirty || act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts, off: null, cut_at: null, title_index: which }))}>
 						Use these cuts
 					</button>
 					<button disabled={act.busy || proposed} onclick={() => (cuts = [...(sp?.proposed ?? [])])}>
@@ -208,14 +214,14 @@
 		{/if}
 
 		{#if changeable && sp.state !== 'split'}
-			<button class="link small keep" disabled={act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts: null, off: true, cut_at: null }))}>
+			<button class="link small keep" disabled={act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts: null, off: true, cut_at: null, title_index: which }))}>
 				Keep it as one title
 			</button>
 		{/if}
 		{#if act.error}<p class="small error-text">{act.error}</p>{/if}
 	</section>
-{:else if job.tv?.split_off && changeable}
-	<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts: null, off: false, cut_at: null }))}>
+{:else if (job.tv?.split_off || job.tv?.whole?.length) && changeable}
+	<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.tvSplit(job.id, { cuts: null, off: false, cut_at: null, title_index: null }))}>
 		Split the long title into episodes after all
 	</button>
 	{#if act.error}<p class="small error-text">{act.error}</p>{/if}

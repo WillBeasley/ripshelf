@@ -188,7 +188,12 @@
 			{#if job.destination && job.state !== 'done'}<p class="small muted">planned</p>{/if}
 		</section>
 
-		{#if job.tv?.split || job.tv?.split_off}
+		{#each job.tv?.splits ?? [] as sp (sp.title_index)}
+			<section>
+				<SplitTimeline {job} split={sp} />
+			</section>
+		{/each}
+		{#if !job.tv?.splits?.length && (job.tv?.split_off || job.tv?.whole?.length)}
 			<section>
 				<SplitTimeline {job} />
 			</section>

@@ -29,15 +29,20 @@
 		)
 	);
 	const episodeRows = $derived(rows.filter((r) => r.role === 'episode'));
-	const otherRows = $derived(rows.filter((r) => r.role !== 'episode'));
+	// The long titles being split are said once, at the top, rather than as rows.
+	const otherRows = $derived(rows.filter((r) => r.role !== 'episode' && !splits.some((sp) => sp.title_index === r.title_index)));
 
 	const epKey = (e: EpisodeRef) => `${e.season}:${e.episode}`;
 	const code = (e: EpisodeRef) =>
 		`S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}`;
-	// Parts of a split title are numbered 1000 and up; call them by the title they're from.
+	// Parts of a split title are numbered from 1000 (the next title's from 1100); call them
+	// by the title they're from.
+	const partNo = (r: TitleMap) => ((r.title_index - 1000) % 100) + 1;
 	const rowName = (r: TitleMap) =>
-		r.part_of != null ? `Title ${r.part_of}, part ${(r.title_index % 1000) + 1}` : `Title ${r.title_index}`;
-	const rowNumber = (r: TitleMap) => (r.part_of != null ? `${r.part_of}.${(r.title_index % 1000) + 1}` : `${r.title_index}`);
+		r.part_of != null ? `Title ${r.part_of}, part ${partNo(r)}` : `Title ${r.title_index}`;
+	const rowNumber = (r: TitleMap) => (r.part_of != null ? `${r.part_of}.${partNo(r)}` : `${r.title_index}`);
+	const splits = $derived(plan?.splits ?? []);
+	const splitOf = (i: number) => splits.find((sp) => sp.title_index === i);
 	const byKey = $derived(new Map((plan?.episodes ?? []).map((e) => [epKey(e), e])));
 	const same = (a: EpisodeRef[], b: EpisodeRef[]) =>
 		JSON.stringify(a.map(epKey).sort()) === JSON.stringify(b.map(epKey).sort());
@@ -69,7 +74,9 @@
 	const unpicked = $derived(episodeRows.filter((r) => !r.episodes.length).length);
 	// The server's problems not already said on a row.
 	const otherProblems = $derived(
-		(plan?.problems ?? []).filter((p) => !/marked as an episode but has none| is on both title /.test(p))
+		(plan?.problems ?? []).filter(
+			(p) => !/marked as an episode but has none| is on both title |chapters are read once it's ripped/.test(p)
+		)
 	);
 	const problemCount = $derived(episodeRows.filter((r) => problem(r)).length + otherProblems.length);
 
@@ -92,11 +99,11 @@
 			? rows
 					.filter((r) => r.role === 'episode' || r.role === 'extra')
 					// A part of a title not split yet needs that title.
-					.map((r) => (r.part_of != null && plan?.split?.state !== 'split' ? r.part_of : r.title_index))
+					.map((r) => (r.part_of != null && splitOf(r.part_of)?.state !== 'split' ? r.part_of : r.title_index))
 					.filter((i, n, all) => all.indexOf(i) === n && !(String(i) in (job.rip.files ?? {})))
 			: []
 	);
-	const canConfirm = $derived(!!plan?.show && !problemCount && !!episodeRows.length && !act.busy && !missing.length);
+	const canConfirm = $derived(!!plan?.show && !splits.some((sp) => sp.state === 'waiting') && !problemCount && !!episodeRows.length && !act.busy && !missing.length);
 
 	// --- changing titles
 
@@ -218,15 +225,19 @@
 			const x = matchFor.get(r.title_index);
 			return x && x.episodes.length && x.confidence !== 'low' && same(x.episodes, r.episodes);
 		}).length;
-		return { reading: sl?.state === 'reading', progress: sl?.progress, what, names: names.length, placed };
+		// Episodes that go on parts not cut yet.
+		const toCome = splits.filter((sp) => sp.state === 'waiting').reduce((n, sp) => n + sp.expected, 0);
+		return { reading: sl?.state === 'reading', progress: sl?.progress, what, names: names.length, placed, toCome };
 	});
 
 	// Only the season's order put the episodes on these titles, and nothing checked it.
 	const orderGuess = $derived(
 		plan?.order_from === 'season' && plan.order_verified == null && episodeRows.length >= 2
 	);
-	// Splitting needs a look before the episodes do.
-	const splitWaits = $derived(!job.refile && !!plan?.split && plan.split.state === 'ready' && !plan.split.edited);
+	// A long title waits to be ripped before it can be cut; the rip's progress says how long.
+	const ripped = $derived(job.rip.state === 'running' && progress ? percent(progress.fraction) : null);
+	const titlesText = (xs: number[]) =>
+		xs.length === 1 ? `title ${xs[0]}` : `titles ${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
 
 	const roleLabel: Record<string, string> = {
 		episode: 'Episode',
@@ -341,7 +352,11 @@
 				<div class="small sub">{scan.what} · {scan.names} name{scan.names === 1 ? '' : 's'} read</div>
 				{#if scan.names}
 					<div class="headline">
-						{#if scan.placed && unpicked}
+						{#if scan.toCome}
+							The box's names go on the titles once {titlesText(splits.filter((sp) => sp.state === 'waiting').map((sp) => sp.title_index))}
+							{splits.filter((sp) => sp.state === 'waiting').length === 1 ? 'is' : 'are'} ripped and cut into about
+							{scan.toCome} episodes.
+						{:else if scan.placed && unpicked}
 							{scan.placed} title{scan.placed === 1 ? '' : 's'} placed from the box. {unpicked} need{unpicked === 1 ? 's' : ''} you to pick.
 						{:else if scan.placed}
 							{scan.placed === episodeRows.length ? `All ${scan.placed}` : scan.placed} title{scan.placed === 1 ? '' : 's'} placed from the box.
@@ -349,7 +364,7 @@
 							The box's names didn't place any title{unpicked ? '; pick them below' : ''}.
 						{/if}
 					</div>
-					<div class="small sub">Matched by name and running time. Nothing is filed until you confirm.</div>
+					{#if !scan.toCome}<div class="small sub">Matched by name and running time. Nothing is filed until you confirm.</div>{/if}
 				{:else}
 					<div class="small sub">No episode names read off it. Check “What's on the disc” under Cover scans.</div>
 				{/if}
@@ -363,10 +378,45 @@
 		<span class="badge bad">✗ {plan.order_note}</span>
 	{:else if orderGuess}
 		<p class="small warn-note">
-			Which {plan?.split ? 'part' : 'title'} is which episode is a guess: they're given the season's episodes in
+			Which {splits.length ? 'part' : 'title'} is which episode is a guess: they're given the season's episodes in
 			order{plan?.start_episode ? ` from episode ${plan.start_episode}` : ''}, and discs often hold them in another
 			order. Check them, scan the box, or paste its run order under More tools.
 		</p>
+	{/if}
+
+	{#if plan?.show && !job.refile}
+		{#each splits.filter((sp) => sp.state !== 'split') as sp (sp.title_index)}
+			<section class="split-card" class:waits={sp.state === 'ready' && !sp.edited}>
+				<div class="headline">
+					Title {sp.title_index} · <span class="mono">{duration(sp.duration_s)}</span> looks like {sp.expected} episodes in one.
+				</div>
+				{#if sp.state === 'waiting'}
+					<p class="small">
+						It's cut into {sp.expected} parts at its chapters once it's ripped{ripped ? ` (the rip is ${ripped} done)` : ''},
+						and the box's names then go on the parts in order. Nothing to do until then.
+					</p>
+				{:else if sp.state === 'ready'}
+					<p class="small">
+						Cut into {sp.cuts.length + 1} parts{sp.confidence != null && !sp.edited ? `, ${percent(sp.confidence)} sure` : ''}{sp.edited
+							? ', at your cuts'
+							: ''}. The parts are in the list below{sp.cuts.length + 1 !== sp.expected ? `, though about ${sp.expected} were expected: check the cuts` : ''}.
+					</p>
+				{:else if sp.state === 'failed'}
+					<p class="small error-text">It can't be split: {sp.error}.</p>
+				{/if}
+				{#if sp.state === 'ready'}
+					<details open={!sp.edited && (sp.confidence ?? 0) < 0.8}>
+						<summary class="small">Check the cuts</summary>
+						<SplitTimeline {job} split={sp} brief />
+					</details>
+				{:else}
+					<button class="link small keep" disabled={act.busy}
+						onclick={() => act.run(() => api.tvSplit(job.id, { cuts: null, off: true, cut_at: null, title_index: sp.title_index }))}>
+						Keep it as one title
+					</button>
+				{/if}
+			</section>
+		{/each}
 	{/if}
 
 	{#if plan?.show}
@@ -449,7 +499,7 @@
 
 	<CoverScans {job} auto={false} />
 
-	<details class="tools" open={splitWaits}>
+	<details class="tools">
 		<summary class="small">More tools</summary>
 		<div class="stack">
 			{#if plan?.show}
@@ -462,7 +512,7 @@
 					</div>
 				</div>
 			{/if}
-			{#if !job.refile}
+			{#if !job.refile && !splits.length && (plan?.split_off || plan?.whole?.length)}
 				<SplitTimeline {job} />
 			{/if}
 			<Snapshots {job} />
@@ -502,6 +552,8 @@
 		<div class="small status" class:warn={!canConfirm}>
 			{#if !plan?.show}
 				Pick the show
+			{:else if scan?.toCome}
+				Waiting for {titlesText(splits.filter((sp) => sp.state === 'waiting').map((sp) => sp.title_index))} to be ripped
 			{:else if unpicked}
 				{unpicked} title{unpicked === 1 ? '' : 's'} still need{unpicked === 1 ? 's' : ''} an episode
 			{:else if problemCount}
@@ -647,6 +699,24 @@
 	}
 	.warn-note {
 		color: var(--warn);
+	}
+	.split-card {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface-2);
+		padding: 12px 14px;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.split-card.waits {
+		border-color: var(--accent);
+	}
+	.split-card .keep {
+		align-self: flex-start;
+	}
+	.split-card summary {
+		min-height: 44px;
 	}
 	.list-head {
 		display: flex;
