@@ -163,7 +163,7 @@ What decides a match:
 The play-all, duplicates and a Blu-ray's loose clips are left out. Lines and titles nothing matched are listed underneath.
 
 How the matches are used:
-- **TV review.** When every episode the box lists is matched (high or medium), or the box lists more than the disc holds and every episode title is matched, the mapping is set from the box, and a title still mapped as an episode becomes an extra. The card starts with "The box says: … S01E18 Treehouse, S01E24 Giant Cake …", with **Use this** when the mapping says otherwise (a mapping you changed by hand is only changed by Use this). A mapping set from the scan is never confirmed on its own: you press Confirm.
+- **TV review.** Each title the box places (high or medium) gets that episode, and the card starts with a summary: "Back cover scanned · 10 names read. 8 titles placed from the box. 2 need you to pick." A title the box placed only with low confidence, or whose name matches no episode, says what the box calls it ("Box says “Lost Hat”") with its closest episodes by name and running time, to tap. When every episode the box lists is placed (or the box lists more than the disc holds and every episode title is placed), a title still mapped as an episode becomes an extra. Titles you set by hand are never changed by the box, and a show you picked is kept. A mapping set from the scan is never confirmed on its own: you press Confirm.
 - **TheDiscDB.** The naming list for extras starts from the names and types the scan gives.
 - **The library.** Matched extras are filed by name (below). Low matches aren't used for names.
 
