@@ -30,7 +30,7 @@ def episode_path(tv: Path, show: Show, eps: list[Episode]) -> Path:
     eps = sorted(eps, key=lambda e: (e.season, e.episode))
     first = eps[0]
     code = f"S{first.season:02d}E{first.episode:02d}"
-    run = all(b.season == first.season and b.episode == a.episode + 1 for a, b in zip(eps, eps[1:]))
+    run = all(b.season == first.season and b.episode == a.episode + 1 for a, b in zip(eps, eps[1:], strict=False))
     if len(eps) > 1 and run:
         code += f"-E{eps[-1].episode:02d}"
         names = " & ".join(e.name for e in eps if e.name)
