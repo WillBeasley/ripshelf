@@ -985,6 +985,10 @@ export interface Hardware {
   encoder: "qsv" | "vaapi" | "nvenc" | "x265";
   encoder_note: string;
   checked_at: number;
+  /**
+   * GPUs aren't listed on Windows; the encoders' test encodes tell
+   */
+  windows: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

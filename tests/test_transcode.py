@@ -607,3 +607,25 @@ async def test_pick_encoder_auto_takes_the_first_that_works(tmp_path, monkeypatc
     tried.clear()
     assert await transcode.pick_encoder(str(ffmpeg), s) == "x265" and "hevc_nvenc" not in tried
     assert await transcode.pick_encoder(str(ffmpeg), settings(transcode_encoder="qsv")) == "qsv"
+
+
+async def test_windows_opens_quick_sync_without_vaapi_and_never_picks_vaapi(tmp_path, monkeypatch):
+    from ripshelf import proc
+
+    monkeypatch.setattr(proc, "WINDOWS", True)
+    assert transcode.hw_args("qsv", "/dev/dri/renderD128") == ["-init_hw_device", "qsv=qs", "-filter_hw_device", "qs"]
+    assert "vaapi" not in " ".join(transcode.trial_command("ffmpeg", "qsv", "/dev/dri/renderD128"))
+    tried = []
+
+    async def fake_run(cmd, timeout=0):
+        enc = cmd[next(i for i, a in enumerate(cmd) if a.startswith("-c:v")) + 1]
+        tried.append(enc)
+        return (0 if enc == "hevc_nvenc" else 1), b"", b""
+
+    monkeypatch.setattr(transcode, "_run", fake_run)
+    s = settings(vaapi_device=str(tmp_path / "missing"))  # no /dev on Windows: the test encodes decide
+    assert await transcode.pick_encoder("ffmpeg", s) == "nvenc" and tried == ["hevc_qsv", "hevc_nvenc"]
+    tried.clear()
+    # VAAPI saved before (or on Linux) is never used on Windows: auto instead.
+    assert await transcode.pick_encoder("ffmpeg", settings(transcode_encoder="vaapi")) == "nvenc"
+    assert "hevc_vaapi" not in tried

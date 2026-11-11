@@ -1066,11 +1066,17 @@ SettingsUpdate = _update_model()
 SettingsView = _view_model()
 
 
+# Settings that mean nothing on Windows: the render node VAAPI and Quick Sync open on Linux.
+LINUX_ONLY_SETTINGS = {"vaapi_device"}
+
+
 def setting_fields() -> list[SettingField]:
+    from . import proc, transcode
+
     out = []
     for name, f in Settings.model_fields.items():
         u = ui_of(f)
-        if not u:
+        if not u or proc.WINDOWS and name in LINUX_ONLY_SETTINGS:
             continue
         t, nullable = _plain(f.annotation)
         limits = {k: getattr(m, k) for m in f.metadata for k in ("ge", "le") if hasattr(m, k)}
@@ -1078,6 +1084,8 @@ def setting_fields() -> list[SettingField]:
         choices = u.choices
         if not choices and get_origin(t) is Literal:
             choices = tuple((a, str(a)) for a in get_args(t))
+        if name == "transcode_encoder" and proc.WINDOWS:
+            choices = tuple((v, label.replace(", VAAPI", "")) for v, label in choices if transcode.available(v))
         secret = name in SECRETS
         kind = ("secret" if secret else u.kind or ("bool" if t is bool else "choice" if choices
                 else "number" if t in (int, float) else "path" if name in FOLDERS else "list" if t == list[str]
@@ -1326,6 +1334,7 @@ class Hardware(BaseModel):
     encoder: Literal["qsv", "vaapi", "nvenc", "x265"] = Field(description="what ripshelf transcodes with now")
     encoder_note: str
     checked_at: float
+    windows: bool = Field(False, description="GPUs aren't listed on Windows; the encoders' test encodes tell")
 
 
 class Status(BaseModel):
