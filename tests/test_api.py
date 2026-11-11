@@ -315,6 +315,21 @@ def test_setup_flag_and_tools(client, settings):
     assert client.put("/api/settings", json={"setup_complete": True}).json()["setup_complete"] is True
 
 
+def test_setup_tools_reports_tesseract_and_zbar(client, settings, monkeypatch, tmp_path):
+    from ripshelf.scanner import ocr
+
+    settings.tesseract = str(tmp_path / "no-tesseract")
+    monkeypatch.setattr(ocr, "barcodes_available", lambda: False)  # pyzbar without its DLLs
+    tools = client.get("/api/setup/tools").json()
+    assert tools["tesseract"] == {"found": False, "path": None} and tools["zbar"]["found"] is False
+    exe = tmp_path / "tesseract"
+    exe.write_text("")
+    settings.tesseract = str(exe)
+    monkeypatch.setattr(ocr, "barcodes_available", lambda: True)
+    tools = client.get("/api/setup/tools").json()
+    assert tools["tesseract"] == {"found": True, "path": str(exe)} and tools["zbar"]["found"] is True
+
+
 def test_makemkv_eula_is_shown_until_accepted(client, settings, tmp_path):
     assert not client.get("/api/setup/tools").json()["makemkv_eula_pending"]
     assert client.get("/api/setup/makemkv/eula").status_code == 404  # MakeMKV didn't come with ripshelf

@@ -66,7 +66,7 @@ Check the listing against the box, as you would a TheDiscDB submission.
 
 The container image includes Tesseract and zbar. Elsewhere:
 - Debian or Ubuntu: `apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd libzbar0`
-- Windows: `winget install -e --id UB-Mannheim.TesseractOCR`. ripshelf finds it in Program Files, and pyzbar brings zbar with it.
+- Windows: `winget install -e --id UB-Mannheim.TesseractOCR`. ripshelf finds it in Program Files. pyzbar brings zbar with it, but zbar needs the Visual C++ 2013 runtime: `winget install -e --id Microsoft.VCRedist.2013.x64`.
 
 Without Tesseract, scans are kept as before, and the panel says text reading isn't available, so you can type the listing in yourself.
 

@@ -1350,6 +1350,9 @@ class SetupTools(BaseModel):
     ffprobe: Tool
     mkvmerge: Tool | None = Field(None, description="MKVToolNix, which splits a TV title holding several episodes")
     java: Tool = Field(description="a Java runtime, which MakeMKV needs for some Blu-ray menus (BD-J)")
+    tesseract: Tool | None = Field(None, description="Tesseract, which reads the text on cover scans")
+    zbar: Tool | None = Field(None, description="zbar, which reads the barcode on cover scans (the pyzbar "
+                                                 "package; on Windows it needs the Visual C++ 2013 runtime)")
     makemkv_eula_pending: bool = Field(False, description="MakeMKV came with ripshelf and its licence isn't accepted yet")
     windows: bool = False
 
