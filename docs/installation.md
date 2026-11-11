@@ -28,7 +28,7 @@ The image is `ghcr.io/willbeasley/ripshelf`, for `linux/amd64` and `linux/arm64`
 
 By default films go to `./movies` and TV to `./tv` next to the compose file. To use an existing library, change the left-hand side of the `/movies` and `/tv` mounts (for example `/media/Movies:/movies`). Or mount one folder holding `Movies/` and `TV/` at `/library`, and delete the `RIPSHELF_MOVIES_DIR` and `RIPSHELF_TV_DIR` lines. Each folder must already exist. ripshelf never creates them, so an unmounted disk can't fill your system disk.
 
-There's no login on the UI, so keep it on your LAN or VPN.
+There's no login on the UI, so keep it on your LAN or VPN. It does refuse changes sent by web pages on other sites, and answers only to the names a LAN uses, so a page open in your browser can't use it behind your back. If you open it by a public name (through a reverse proxy, or a Tailscale name), set that address in Settings → System or add the name to `RIPSHELF_ALLOWED_HOSTS` ([settings.md](settings.md#settings-that-arent-on-the-settings-page)).
 
 ## First-run configuration
 

@@ -49,6 +49,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_HOME` | the source checkout | the folder unset folders and `ripshelf.env` go next to, outside a container |
 | `RIPSHELF_ENV_FILE` | `<data>/ripshelf.env` in a container, `ripshelf.env` in the ripshelf folder otherwise | the env file to read |
 | `RIPSHELF_HOST` / `PORT` | `0.0.0.0` / 8380 | the address and port the web UI listens on |
+| `RIPSHELF_ALLOWED_HOSTS` | none | more names the UI is opened by, comma separated (`.example.com` for every name under it, `*` for any). IP addresses, `localhost`, names with no dots, names under `.local`, `.lan`, `.home`, `.home.arpa` and `.internal`, and the public URL's name work without it ([troubleshooting.md](troubleshooting.md#ripshelf-isnt-served-at)) |
 | `RIPSHELF_BACKUP_DIR` | `/backups` | where daily database backups go. How many are kept is set in Settings |
 | `RIPSHELF_MAKEMKVCON`, `FFMPEG`, `FFPROBE`, `SEVENZIP`, `BLKID` | the program name, found on the PATH | the programs ripshelf runs |
 | `RIPSHELF_ACCEPT_MAKEMKV_EULA` | `no` | set `yes` once you have read and accepted MakeMKV's licence. Only needed where MakeMKV came with ripshelf (the image), and on every container that runs MakeMKV. Until it is set, MakeMKV isn't run and discs wait |

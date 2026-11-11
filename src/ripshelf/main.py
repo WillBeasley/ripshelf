@@ -20,6 +20,7 @@ from .bus import EventBus
 from .config import Settings, load_settings, load_worker_token
 from .db import Database
 from .jobs import Manager
+from .origins import OriginGuard
 from .system import HardwareCache
 from .workers.api import admin as remote_workers_router
 from .workers.api import router as workers_router
@@ -79,6 +80,7 @@ def create_app(settings: Settings | None = None, backend=None) -> FastAPI:
     # Set when shutdown starts, so worker long-polls and UI event streams end by themselves
     # instead of being cancelled (with a traceback each) when the grace period runs out.
     app.state.closing = asyncio.Event()
+    app.add_middleware(OriginGuard, settings=s)
     app.include_router(api)
     app.include_router(workers_router)
     app.include_router(remote_workers_router)
