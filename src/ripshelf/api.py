@@ -88,7 +88,7 @@ from .models import (
 )
 from .providers import contribute as contribute_provider
 from .providers import release_info
-from .scanner import escl, images
+from .scanner import escl, images, ocr
 from .tv import split as tvsplit
 
 SSE_HEARTBEAT_S = 15
@@ -941,7 +941,7 @@ async def import_private_data(
 
 @api.get("/setup/tools", response_model=SetupTools)
 async def setup_tools(request: Request):
-    """Whether MakeMKV, ffmpeg, mkvmerge and Java are where ripshelf will look for them."""
+    """Whether MakeMKV, ffmpeg, mkvmerge, Java, Tesseract and zbar are where ripshelf will look for them."""
     s = settings(request)
 
     def tool(command: str) -> Tool:
@@ -951,7 +951,9 @@ async def setup_tools(request: Request):
 
     registered = bool(s.makemkv_key) or (proc.WINDOWS and runner.registry_key() is not None)
     return SetupTools(makemkv=tool(s.makemkvcon), makemkv_registered=registered or s.fake_hardware,
-                      ffmpeg=tool(s.ffmpeg), ffprobe=tool(s.ffprobe), mkvmerge=tool(tvsplit.default_mkvmerge(s.mkvmerge)), java=tool("java"), windows=proc.WINDOWS,
+                      ffmpeg=tool(s.ffmpeg), ffprobe=tool(s.ffprobe), mkvmerge=tool(tvsplit.default_mkvmerge(s.mkvmerge)), java=tool("java"),
+                      tesseract=tool(ocr.default_command(s.tesseract)), zbar=Tool(found=ocr.barcodes_available()),
+                      windows=proc.WINDOWS,
                       makemkv_eula_pending=s.makemkv_eula_pending())
 
 

@@ -17,6 +17,7 @@ winget install -e --id Gyan.FFmpeg            # optional, for transcoding and ep
 winget install -e --id Microsoft.OpenJDK.21   # optional, for Blu-ray menus (BD-J), which some discs need
 winget install -e --id MoritzBunkus.MKVToolNix # optional, to split TV discs with every episode in one title
 winget install -e --id UB-Mannheim.TesseractOCR # optional, to read the text on scans of the box
+winget install -e --id Microsoft.VCRedist.2013.x64 # optional, for zbar to read barcodes on scans of the box
 ```
 
 Then open a new terminal, so the new programs are on the PATH.
@@ -30,7 +31,7 @@ Then open a new terminal, so the new programs are on the PATH.
 | **ffmpeg** (optional) | transcoding, and checking the episode order of TV discs. On Windows, transcoding uses x265 on the CPU. |
 | **Java** (optional) | some Blu-rays need their menus (BD-J) read to find the right playlist. |
 | **MKVToolNix** (optional) | splits a TV disc's one long title into episodes. ripshelf finds `mkvmerge` in Program Files. |
-| **Tesseract** (optional) | reads the text on [cover scans](cover-scans.md) to list what's on the disc. ripshelf finds it in Program Files. Without it the scans are still kept, and the job says text reading isn't available. Barcodes are read by zbar, which comes with ripshelf's Python packages on Windows. |
+| **Tesseract** (optional) | reads the text on [cover scans](cover-scans.md) to list what's on the disc. ripshelf finds it in Program Files. Without it the scans are still kept, and the job says text reading isn't available. Barcodes are read by zbar, which comes with ripshelf's Python packages but needs the Visual C++ 2013 runtime (`Microsoft.VCRedist.2013.x64`). Without it, barcodes are read from their printed digits. |
 
 ## Installation
 

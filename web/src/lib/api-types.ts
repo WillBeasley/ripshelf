@@ -2821,6 +2821,14 @@ export interface SetupTools {
   mkvmerge: Tool | null;
   java: Tool1;
   /**
+   * Tesseract, which reads the text on cover scans
+   */
+  tesseract: Tool | null;
+  /**
+   * zbar, which reads the barcode on cover scans (the pyzbar package; on Windows it needs the Visual C++ 2013 runtime)
+   */
+  zbar: Tool | null;
+  /**
    * MakeMKV came with ripshelf and its licence isn't accepted yet
    */
   makemkv_eula_pending: boolean;
