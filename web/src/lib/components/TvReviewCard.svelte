@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Episode, EpisodeRef, Job, Show, TitleMap, TitleRole } from '../api-types';
+	import type { EpisodeRef, Job, Show, TitleMap, TitleMatch, TitleRole } from '../api-types';
 	import { api } from '../api';
 	import { Action } from '../actions.svelte';
 	import { duration, kindLabel, percent, via } from '../format';
@@ -7,6 +7,7 @@
 	import { openJob } from '../nav';
 	import Evidence from './Evidence.svelte';
 	import CoverScans from './CoverScans.svelte';
+	import EpisodePicker from './EpisodePicker.svelte';
 	import Poster from './Poster.svelte';
 	import RefileBanner from './RefileBanner.svelte';
 	import Snapshots from './Snapshots.svelte';
@@ -19,50 +20,71 @@
 	const plan = $derived(job.tv);
 	const progress = $derived(live.progressFor(job));
 
-	// Editable copy of the server's mapping; reset whenever the server's changes.
-	let rows = $state<TitleMap[]>([]);
-	let serverKey = '';
-	$effect(() => {
-		const key = JSON.stringify(plan?.mapping ?? []);
-		if (key !== serverKey) {
-			serverKey = key;
-			rows = JSON.parse(key); // a plain copy (structuredClone rejects reactive proxies)
-		}
-	});
+	// The mapping as the server keeps it: each change made here is saved as it's made
+	// (marked as set by hand, so the box's picks leave it alone), and Confirm files it.
+	// Split parts sit where the title they're cut from is.
+	const rows = $derived(
+		[...(plan?.mapping ?? [])].sort(
+			(a, b) => (a.part_of ?? a.title_index) - (b.part_of ?? b.title_index) || a.title_index - b.title_index
+		)
+	);
+	const episodeRows = $derived(rows.filter((r) => r.role === 'episode'));
+	const otherRows = $derived(rows.filter((r) => r.role !== 'episode'));
 
 	const epKey = (e: EpisodeRef) => `${e.season}:${e.episode}`;
+	const code = (e: EpisodeRef) =>
+		`S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}`;
 	// Parts of a split title are numbered 1000 and up; call them by the title they're from.
 	const rowName = (r: TitleMap) =>
 		r.part_of != null ? `Title ${r.part_of}, part ${(r.title_index % 1000) + 1}` : `Title ${r.title_index}`;
-	const code = (e: EpisodeRef) =>
-		`S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}`;
+	const rowNumber = (r: TitleMap) => (r.part_of != null ? `${r.part_of}.${(r.title_index % 1000) + 1}` : `${r.title_index}`);
 	const byKey = $derived(new Map((plan?.episodes ?? []).map((e) => [epKey(e), e])));
-	const seasons = $derived.by(() => {
-		const out = new Map<number, Episode[]>();
-		for (const e of plan?.episodes ?? []) {
-			if (!out.has(e.season)) out.set(e.season, []);
-			out.get(e.season)!.push(e);
-		}
-		return [...out.entries()].sort(([a], [b]) => (a === 0 ? 1 : b === 0 ? -1 : a - b));
-	});
+	const same = (a: EpisodeRef[], b: EpisodeRef[]) =>
+		JSON.stringify(a.map(epKey).sort()) === JSON.stringify(b.map(epKey).sort());
 
-	// Episodes used by more than one row.
+	// What the cover scan matched to each title.
+	const matchFor = $derived(
+		new Map((job.scan_match?.matches ?? []).filter((x) => x.kind === 'episode').map((x) => [x.title_index, x]))
+	);
+
+	// Episodes on more than one title.
 	const clashes = $derived.by(() => {
 		const seen = new Map<string, number>();
 		for (const r of rows) for (const e of r.episodes) seen.set(epKey(e), (seen.get(epKey(e)) ?? 0) + 1);
 		return new Set([...seen].filter(([, n]) => n > 1).map(([k]) => k));
 	});
-	const localProblems = $derived.by(() => {
-		const out: string[] = [];
-		if (!plan?.show) out.push('Pick the show');
-		for (const r of rows)
-			if (r.role === 'episode' && !r.episodes.length) out.push(`${rowName(r)} needs an episode`);
-		if (clashes.size) out.push('An episode is on two titles');
-		if (!rows.some((r) => r.role === 'episode')) out.push('No title is mapped to an episode');
-		return out;
-	});
-	const dirty = $derived(JSON.stringify(rows) !== serverKey);
-	const serverProblems = $derived(dirty ? [] : (plan?.problems ?? []));
+	const holderOf = (k: string, not: number) => rows.find((r) => r.title_index !== not && r.episodes.some((e) => epKey(e) === k));
+
+	// What's wrong with a row, said on the row.
+	function problem(r: TitleMap): string | null {
+		if (r.role !== 'episode') return null;
+		if (!r.episodes.length) return 'Needs an episode';
+		const clash = r.episodes.find((e) => clashes.has(epKey(e)));
+		if (clash) {
+			const other = holderOf(epKey(clash), r.title_index);
+			return `${code(clash)} is on ${other ? rowName(other).toLowerCase() : 'another title'} too`;
+		}
+		return null;
+	}
+	const unpicked = $derived(episodeRows.filter((r) => !r.episodes.length).length);
+	// The server's problems not already said on a row.
+	const otherProblems = $derived(
+		(plan?.problems ?? []).filter((p) => !/marked as an episode but has none| is on both title /.test(p))
+	);
+	const problemCount = $derived(episodeRows.filter((r) => problem(r)).length + otherProblems.length);
+
+	// Why a row has its episode, in a few words.
+	function reason(r: TitleMap, x: TitleMatch | undefined): string {
+		if (r.by_hand) return 'Set by you';
+		if (x && x.episodes.length && same(x.episodes, r.episodes))
+			return x.confidence === 'high' ? 'Box name and running time match' : 'From the box: worth a check';
+		if (plan?.disc_db) return 'From TheDiscDB';
+		if (plan?.order_from === 'names') return 'From the run order you pasted';
+		if (plan?.order_from === 'season' && plan.order_verified !== true) return "Season order: a guess, check it";
+		if (plan?.order_verified) return 'Order checked against the play-all';
+		return r.note ?? '';
+	}
+
 	const checking = $derived(job.state === 'checking');
 	// With the disc out, Confirm works once every title the mapping copies has been ripped.
 	const missing = $derived(
@@ -74,46 +96,31 @@
 					.filter((i, n, all) => all.indexOf(i) === n && !(String(i) in (job.rip.files ?? {})))
 			: []
 	);
-	const canConfirm = $derived(!localProblems.length && !serverProblems.length && !act.busy && !missing.length);
+	const canConfirm = $derived(!!plan?.show && !problemCount && !!episodeRows.length && !act.busy && !missing.length);
 
-	// Eject to check (episode numbers are often printed on the disc). Mid-rip the rip pauses.
-	function ejectToCheck() {
-		const ripping = job.rip.state === 'running';
-		if (ripping && !window.confirm('Eject to check the disc? The rip pauses; titles already ripped are kept, and the rest are ripped when you put the same disc back.'))
-			return;
-		act.run(() => api.checkDisc(job.id, ripping));
-	}
+	// --- changing titles
 
-	function setEpisode(row: TitleMap, value: string) {
-		if (!value) {
-			row.episodes = [];
-			return;
+	// Save rows changed by hand. An episode another title has moves here, and that title
+	// gets this one's old episodes instead (a swap), or none, to pick again.
+	async function assign(row: TitleMap, role: TitleRole, eps: EpisodeRef[]) {
+		const want = new Set(eps.map(epKey));
+		const updates = [{ title_index: row.title_index, role, episodes: role === 'episode' ? eps : [] }];
+		for (const other of rows) {
+			if (other.title_index === row.title_index || !other.episodes.some((e) => want.has(epKey(e)))) continue;
+			let left = other.episodes.filter((e) => !want.has(epKey(e)));
+			if (!left.length) left = row.episodes.filter((e) => !want.has(epKey(e)));
+			updates.push({ title_index: other.title_index, role: other.role, episodes: left });
 		}
-		const [s, n] = value.split(':').map(Number);
-		const want = { season: s, episode: n };
-		// Swap, so whichever row held this episode gets this row's old episodes.
-		const holder = rows.find((r) => r !== row && r.episodes.some((e) => epKey(e) === value));
-		if (holder) {
-			holder.episodes = row.episodes.filter((e) => epKey(e) !== value);
-			if (!holder.episodes.length && holder.role === 'episode') holder.note = 'swapped, so pick an episode';
-		}
-		const twoPart = row.episodes.length === 2;
-		row.episodes = twoPart ? [want, { season: s, episode: n + 1 }] : [want];
-		row.role = 'episode';
+		const ok = await act.run(() => api.tvSetMapping(job.id, updates));
+		if (ok) picking = null;
 	}
 
-	function setRole(row: TitleMap, role: TitleRole) {
-		row.role = role;
-		if (role !== 'episode') row.episodes = [];
-	}
-
-	function toggleTwoPart(row: TitleMap, on: boolean) {
-		const first = row.episodes[0];
-		if (!first) return;
-		row.episodes = on ? [first, { season: first.season, episode: first.episode + 1 }] : [first];
-	}
+	let picking = $state<number | null>(null);
+	const pickRow = $derived(picking === null ? null : (rows.find((r) => r.title_index === picking) ?? null));
 
 	// --- show / season controls
+
+	let changingShow = $state(false);
 	let showQuery = $state('');
 	let found = $state<Show[] | null>(null);
 	let season = $state<string>('');
@@ -145,48 +152,9 @@
 		found = (await act.run(() => api.tvSearch(name))) ?? null;
 	}
 
-	// What the cover scan says the disc holds, set beside the mapping: one tap takes it
-	// (the show too, when its episode names are another show's).
-	const box = $derived.by(() => {
-		const l = job.listing?.edited ?? job.listing?.found;
-		const names = (l?.items ?? []).filter((i) => i.kind === 'episode').map((i) => i.title);
-		if (!l || !names.length) return null;
-		const picks = (job.scan_match?.matches ?? []).filter((x) => x.kind === 'episode' && x.episodes.length);
-		const bonus = (job.scan_match?.matches ?? []).filter((x) => x.bonus && x.confidence !== 'low');
-		const byTitle = new Map((plan?.mapping ?? []).map((r) => [r.title_index, r]));
-		// Every line placed, or, when the box lists more than the disc holds, every episode title.
-		const onDisc = (plan?.mapping ?? []).filter((r) => r.role === 'episode').map((r) => r.title_index);
-		const placed = new Set(picks.filter((x) => x.confidence !== 'low').map((x) => x.title_index));
-		const enough =
-			picks.length >= names.length ||
-			(names.length > onDisc.length && onDisc.length >= 2 && onDisc.every((i) => placed.has(i)));
-		const agrees =
-			enough &&
-			picks.every((x) => {
-				const r = byTitle.get(x.title_index);
-				return r?.role === 'episode' && JSON.stringify(r.episodes.map(epKey)) === JSON.stringify(x.episodes.map(epKey));
-			}) &&
-			bonus.every((x) => byTitle.get(x.title_index)?.role === 'extra');
-		return {
-			title: l.details.title,
-			names,
-			picks: enough ? picks : [],
-			// A bonus episode of another show, as found in its episode list ("Guess with Jess
-			// S01E24 Where's My Feather Gone?"), or as the box gives it.
-			bonus: l.items
-				.filter((i) => i.kind === 'extra' && i.show)
-				.map((i) => {
-					const b = bonus.find((x) => x.bonus?.box_title === i.title)?.bonus;
-					return b ? `${b.show.name} ${code(b.episode)} ${b.episode.name}` : `${i.show} “${i.title}”`;
-				}),
-			extras: l.items.filter((i) => i.kind === 'extra' && !i.show).map((i) => i.title),
-			agrees
-		};
-	});
-
 	async function choose(show: Show) {
 		found = null;
-		await act.run(() =>
+		const ok = await act.run(() =>
 			api.tvPropose(job.id, {
 				show_tmdb_id: show.tmdb_id,
 				season: compilation ? null : num(season),
@@ -195,11 +163,12 @@
 				compilation
 			})
 		);
+		if (ok) changingShow = false;
 	}
 
 	async function apply() {
 		if (!plan?.show) return;
-		await act.run(() =>
+		const ok = await act.run(() =>
 			api.tvPropose(job.id, {
 				show_tmdb_id: plan.show!.tmdb_id,
 				season: compilation ? null : num(season),
@@ -208,58 +177,62 @@
 				compilation
 			})
 		);
+		if (ok) changingShow = false;
 	}
 
 	async function matchText() {
 		if (runOrder.trim()) await act.run(() => api.tvMatchText(job.id, runOrder));
 	}
 
-	// The cover scan's picks: episodes it matched with high or medium confidence.
-	const scanPicks = $derived(
-		new Map(
-			(job.scan_match?.matches ?? [])
-				.filter((x) => x.kind === 'episode' && x.episodes.length && x.confidence !== 'low')
-				.map((x) => [x.title_index, x])
-		)
-	);
-	const scanDiffers = $derived(
-		[...scanPicks].some(([i, x]) => {
-			const r = rows.find((r) => r.title_index === i);
-			return !r || r.role !== 'episode' || JSON.stringify(r.episodes.map(epKey)) !== JSON.stringify(x.episodes.map(epKey));
-		})
-	);
-	function useScanPicks() {
-		rows = rows.map((r) => {
-			const x = scanPicks.get(r.title_index);
-			return x ? { ...r, role: 'episode', episodes: x.episodes.map((e) => ({ season: e.season, episode: e.episode })) } : r;
-		});
+	// Eject to check (episode numbers are often printed on the disc). Mid-rip the rip pauses.
+	function ejectToCheck() {
+		const ripping = job.rip.state === 'running';
+		if (ripping && !window.confirm('Eject to check the disc? The rip pauses; titles already ripped are kept, and the rest are ripped when you put the same disc back.'))
+			return;
+		act.run(() => api.checkDisc(job.id, ripping));
 	}
 
 	async function confirm() {
-		await act.run(() =>
-			api.tvConfirm(
-				job.id,
-				rows.map((r) => ({ title_index: r.title_index, role: r.role, episodes: r.episodes }))
-			)
-		);
+		await act.run(() => api.tvConfirm(job.id, []));
 	}
+
+	// --- the cover scan, in one line
+
+	const KIND: Record<string, string> = {
+		front: 'Front cover', back: 'Back cover', outside_full: 'Whole outside', inside_full: 'Inside of the cover',
+		insert: 'Insert', other: 'Scan'
+	};
+	const scan = $derived.by(() => {
+		const sl = job.listing;
+		const l = sl?.edited ?? sl?.found;
+		const names = (l?.items ?? []).filter((i) => i.kind === 'episode');
+		const scans = job.scans ?? [];
+		if (!scans.length && !names.length) return null;
+		const ids = [...new Set(names.map((i) => i.scan_id).filter(Boolean))];
+		const kinds = [...new Set(scans.filter((s) => !ids.length || ids.includes(s.id)).map((s) => KIND[s.kind]))];
+		const what = kinds.length === 1 ? `${kinds[0]} scanned` : `${scans.length} scans`;
+		// Titles that have the episode the box gives them.
+		const placed = episodeRows.filter((r) => {
+			const x = matchFor.get(r.title_index);
+			return x && x.episodes.length && x.confidence !== 'low' && same(x.episodes, r.episodes);
+		}).length;
+		return { reading: sl?.state === 'reading', progress: sl?.progress, what, names: names.length, placed };
+	});
 
 	// Only the season's order put the episodes on these titles, and nothing checked it.
 	const orderGuess = $derived(
-		plan?.order_from === 'season' &&
-			plan.order_verified == null &&
-			(plan.mapping ?? []).filter((r) => r.role === 'episode').length >= 2
+		plan?.order_from === 'season' && plan.order_verified == null && episodeRows.length >= 2
 	);
+	// Splitting needs a look before the episodes do.
+	const splitWaits = $derived(!job.refile && !!plan?.split && plan.split.state === 'ready' && !plan.split.edited);
 
-	const skippedRoles = new Set(['play_all', 'duplicate']);
 	const roleLabel: Record<string, string> = {
 		episode: 'Episode',
 		extra: 'Extra',
-		skip: 'Skip',
-		play_all: 'Play all',
-		duplicate: 'Duplicate'
+		skip: 'Skipped',
+		play_all: 'Play all (skipped)',
+		duplicate: 'Duplicate (skipped)'
 	};
-	let thumbFailed = $state<Record<number, boolean>>({});
 </script>
 
 <article class="card review" id="job-{job.id}">
@@ -268,14 +241,12 @@
 			<h2 class="mono label">{job.disc.label ?? 'No volume label'}</h2>
 			<div class="small muted">
 				TV · {kindLabel(job.disc.kind)}{job.disc.title_count ? ` · ${job.disc.title_count} titles` : ''}
-			</div>
-			<div class="small muted">
 				{#if job.rip.state === 'running' && progress}
-					Ripping every title meanwhile, {percent(progress.fraction)} done
+					· ripping every title meanwhile, {percent(progress.fraction)} done
 				{:else if job.rip.state === 'done'}
-					Ripped, waiting for you
+					· ripped, waiting for you
 				{:else if job.rip.state === 'failed'}
-					<span class="error-text">Rip failed</span>
+					· <span class="error-text">rip failed</span>
 				{/if}
 			</div>
 		</div>
@@ -284,104 +255,104 @@
 
 	<RefileBanner {job} />
 
-	{#if job.media_evidence.length && !job.refile}
-		<p class="small muted">{job.media_evidence.slice(0, 3).join(' · ')}</p>
-	{/if}
-
-	{#if box}
-		<section class="box-says small" class:agrees={box.agrees}>
-			<div class="grow">
-				<strong>The box says:</strong>
-				{box.title ?? ''}{box.title ? ' — ' : ''}{#if box.picks.length}{box.picks
-						.map((x) => x.episodes.map(code).join(' & ') + (x.episodes[0] && byKey.get(epKey(x.episodes[0]))?.name ? ` ${byKey.get(epKey(x.episodes[0]))?.name}` : ''))
-						.join(', ')}{:else}{box.names.length} episode{box.names.length === 1 ? '' : 's'}: {box.names
-						.map((n) => `“${n}”`)
-						.join(', ')}{/if}{#if box.bonus.length}, plus bonus: {box.bonus.join(', ')}{/if}{#if box.extras.length}, plus {box.extras.join(', ')}{/if}
-				{#if box.agrees}<div class="muted">The mapping below says the same. Check it and confirm.</div>{/if}
-			</div>
-			{#if !box.agrees}
-				<button class="primary small" disabled={act.busy} onclick={() => act.run(() => api.useScan(job.id))}>Use this</button>
-			{/if}
-		</section>
-	{/if}
-
-	{#if plan?.show}
-		<section class="show">
-			<Poster url={plan.show.poster_url} alt={plan.show.name} width={56} />
+	{#if plan?.show && !changingShow}
+		<section class="show box">
+			<Poster url={plan.show.poster_url} alt={plan.show.name} width={44} />
 			<div class="grow">
 				<h3>{plan.show.name}{plan.show.year ? ` (${plan.show.year})` : ''}</h3>
 				<div class="small muted">
-					{plan.compilation ? 'Compilation, with episodes from anywhere in the show' : `Season ${plan.season}`}{plan.disc_number
+					{plan.compilation ? 'Compilation, episodes from anywhere' : `Season ${plan.season}`}{plan.disc_number
 						? ` · disc ${plan.disc_number}`
-						: ''}{plan.show.episode_runtime ? ` · episodes ~${plan.show.episode_runtime} min` : ''}{plan.show.providers?.length
-						? ` · ${via(plan.show.providers)}`
-						: ''}
+						: ''}{plan.show.providers?.length ? ` · ${via(plan.show.providers)}` : ''}
 				</div>
-				<Evidence items={plan.show.evidence.slice(0, 3)} />
 			</div>
+			<button class="change" onclick={() => (changingShow = true)}>Change</button>
 		</section>
 	{:else}
-		<p class="small muted">No show picked yet. Search TMDB below, search the web for the label, or eject the disc to look at it.</p>
-		<WebSearch {job} onUse={useName} useLabel="Search TMDB shows for" />
-	{/if}
-
-	{#if plan?.candidates?.length && plan.candidates.length > 1}
-		<div>
-			<p class="small muted">Other shows ({plan.candidates.length - 1})</p>
-			<ul class="shows">
-				{#each plan.candidates.filter((s) => s.tmdb_id !== plan.show?.tmdb_id) as s (s.tmdb_id)}
-					<li>
-						<button class="other" onclick={() => choose(s)} disabled={act.busy}>
-							<Poster url={s.poster_url} alt={s.name} width={32} />
-							<span class="grow">
-								{s.name}{s.year ? ` (${s.year})` : ''}
-								{#if s.providers?.length}<span class="muted small">{` · ${via(s.providers)}`}</span>{/if}
-								{#if s.excluded}<span class="small error-text excl">{s.evidence[0]?.text}</span>{/if}
-							</span>
-							<span class="small muted">{s.score.toFixed(2)}</span>
-						</button>
-					</li>
-				{/each}
-			</ul>
-		</div>
-	{/if}
-
-	<form class="search-row" onsubmit={searchShows}>
-		<input placeholder="Search TMDB for a show" bind:value={showQuery} />
-		<button type="submit" disabled={act.busy || !showQuery.trim()}>Search</button>
-	</form>
-	{#if found}
-		<ul class="shows">
-			{#each found as s (s.tmdb_id)}
-				<li>
-					<button class="other" onclick={() => choose(s)} disabled={act.busy}>
-						<Poster url={s.poster_url} alt={s.name} width={32} />
-						<span class="grow">{s.name}{s.year ? ` (${s.year})` : ''}</span>
-					</button>
-				</li>
+		<section class="box stack tight">
+			{#if plan?.show}
+				<div class="spread">
+					<h3>{plan.show.name}{plan.show.year ? ` (${plan.show.year})` : ''}</h3>
+					<button class="link small" onclick={() => (changingShow = false)}>Done</button>
+				</div>
+				<Evidence items={plan.show.evidence.slice(0, 3)} />
 			{:else}
-				<li class="small muted">No shows found.</li>
-			{/each}
-		</ul>
+				<p class="small muted">No show picked yet. Search TMDB, search the web for the label, or eject the disc to look at it.</p>
+				<WebSearch {job} onUse={useName} useLabel="Search TMDB shows for" />
+			{/if}
+			{#if job.media_evidence.length && !job.refile}<p class="small muted">{job.media_evidence.slice(0, 3).join(' · ')}</p>{/if}
+			{#if plan?.candidates?.length && plan.candidates.length > 1}
+				<p class="small muted">Other shows ({plan.candidates.length - 1})</p>
+				<ul class="shows">
+					{#each plan.candidates.filter((s) => s.tmdb_id !== plan.show?.tmdb_id) as s (s.tmdb_id)}
+						<li>
+							<button class="other" onclick={() => choose(s)} disabled={act.busy}>
+								<Poster url={s.poster_url} alt={s.name} width={32} />
+								<span class="grow">
+									{s.name}{s.year ? ` (${s.year})` : ''}
+									{#if s.providers?.length}<span class="muted small">{` · ${via(s.providers)}`}</span>{/if}
+									{#if s.excluded}<span class="small error-text excl">{s.evidence[0]?.text}</span>{/if}
+								</span>
+								<span class="small muted">{s.score.toFixed(2)}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			<form class="search-row" onsubmit={searchShows}>
+				<input placeholder="Search TMDB for a show" bind:value={showQuery} />
+				<button type="submit" disabled={act.busy || !showQuery.trim()}>Search</button>
+			</form>
+			{#if found}
+				<ul class="shows">
+					{#each found as s (s.tmdb_id)}
+						<li>
+							<button class="other" onclick={() => choose(s)} disabled={act.busy}>
+								<Poster url={s.poster_url} alt={s.name} width={32} />
+								<span class="grow">{s.name}{s.year ? ` (${s.year})` : ''}</span>
+							</button>
+						</li>
+					{:else}
+						<li class="small muted">No shows found.</li>
+					{/each}
+				</ul>
+			{/if}
+			{#if plan?.show}
+				<div class="controls">
+					<label class="check"><input type="checkbox" bind:checked={compilation} /> Compilation</label>
+					{#if !compilation}
+						<label class="field tiny">Season <input bind:value={season} inputmode="numeric" /></label>
+						<label class="field tiny">Disc <input bind:value={disc} inputmode="numeric" /></label>
+						<label class="field tiny">From ep. <input bind:value={start} inputmode="numeric" /></label>
+					{/if}
+					<button onclick={apply} disabled={act.busy}>Apply</button>
+				</div>
+			{/if}
+		</section>
 	{/if}
 
-	{#if plan?.show}
-		<div class="controls">
-			<label class="check"><input type="checkbox" bind:checked={compilation} /> Compilation</label>
-			{#if !compilation}
-				<label class="field tiny">Season <input bind:value={season} inputmode="numeric" /></label>
-				<label class="field tiny">Disc <input bind:value={disc} inputmode="numeric" /></label>
-				<label class="field tiny">From ep. <input bind:value={start} inputmode="numeric" /></label>
+	{#if scan}
+		<section class="scan" class:done={scan.names && scan.placed >= episodeRows.length && !unpicked}>
+			{#if scan.reading}
+				<div class="small" role="status">{scan.progress ?? 'Reading the scans…'}</div>
+			{:else}
+				<div class="small sub">{scan.what} · {scan.names} name{scan.names === 1 ? '' : 's'} read</div>
+				{#if scan.names}
+					<div class="headline">
+						{#if scan.placed && unpicked}
+							{scan.placed} title{scan.placed === 1 ? '' : 's'} placed from the box. {unpicked} need{unpicked === 1 ? 's' : ''} you to pick.
+						{:else if scan.placed}
+							{scan.placed === episodeRows.length ? `All ${scan.placed}` : scan.placed} title{scan.placed === 1 ? '' : 's'} placed from the box.
+						{:else}
+							The box's names didn't place any title{unpicked ? '; pick them below' : ''}.
+						{/if}
+					</div>
+					<div class="small sub">Matched by name and running time. Nothing is filed until you confirm.</div>
+				{:else}
+					<div class="small sub">No episode names read off it. Check “What's on the disc” under Cover scans.</div>
+				{/if}
 			{/if}
-			<button onclick={apply} disabled={act.busy}>Apply</button>
-		</div>
-		<details>
-			<summary class="small">Paste the run order from the case</summary>
-			<div class="stack tight">
-				<textarea rows="4" bind:value={runOrder} placeholder="Kite Tram, Puddle Dash, Beard Trim, …"></textarea>
-				<button onclick={matchText} disabled={act.busy || !runOrder.trim()}>Match episode names</button>
-			</div>
-		</details>
+		</section>
 	{/if}
 
 	{#if plan?.order_verified === true}
@@ -389,116 +360,123 @@
 	{:else if plan?.order_verified === false}
 		<span class="badge bad">✗ {plan.order_note}</span>
 	{:else if orderGuess}
-		<p class="small warn-note" role="note">
+		<p class="small warn-note">
 			Which {plan?.split ? 'part' : 'title'} is which episode is a guess: they're given the season's episodes in
-			order{plan?.start_episode ? ` from episode ${plan.start_episode}` : ''}, and discs often hold them in
-			another order. Check them against the thumbnails, scan the box, or paste its run order.
+			order{plan?.start_episode ? ` from episode ${plan.start_episode}` : ''}, and discs often hold them in another
+			order. Check them, scan the box, or paste its run order under More tools.
 		</p>
 	{/if}
 
-	{#if !job.refile}
-		<SplitTimeline {job} />
-	{/if}
-
-	<table class="map">
-		<tbody>
-			{#each rows as row (row.title_index)}
-				{@const skipped = skippedRoles.has(row.role)}
-				{@const clash = row.episodes.some((e) => clashes.has(epKey(e)))}
-				<tr class:skipped class:clash>
-					<td class="thumb">
-						{#if job.rip.all_titles && !thumbFailed[row.title_index]}
-							<img
-								src={api.thumbUrl(job.id, row.title_index)}
-								alt=""
-								loading="lazy"
-								onerror={() => (thumbFailed[row.title_index] = true)}
-							/>
-						{:else}
-							<div class="nothumb"></div>
-						{/if}
-					</td>
-					<td class="what">
-						<div>
-							<strong>{rowName(row)}</strong> <span class="muted">{duration(row.duration_s)}</span>
-							{#if row.start_s}<span class="small muted">from {duration(row.start_s)}</span>{/if}
-						</div>
-						{#if skipped}
-							<div class="small muted">{roleLabel[row.role]}: skipped{row.note ? ` (${row.note})` : ''}</div>
-						{:else}
-							<div class="pick">
-								<select
-									aria-label="Role of title {row.title_index}"
-									value={row.role}
-									onchange={(e) => setRole(row, e.currentTarget.value as TitleRole)}
-								>
-									<option value="episode">Episode</option>
-									<option value="extra">Extra</option>
-									<option value="skip">Skip</option>
-								</select>
-								{#if row.role === 'episode'}
-									<select
-										aria-label="Episode for title {row.title_index}"
-										value={row.episodes[0] ? epKey(row.episodes[0]) : ''}
-										onchange={(e) => setEpisode(row, e.currentTarget.value)}
-									>
-										<option value="">Pick an episode</option>
-										{#each seasons as [s, eps] (s)}
-											<optgroup label={s === 0 ? 'Specials' : `Season ${s}`}>
-												{#each eps as e (epKey(e))}
-													<option value={epKey(e)}>
-														{code(e)} · {e.name}{e.runtime ? ` · ${e.runtime} min` : ''}
-													</option>
-												{/each}
-											</optgroup>
-										{/each}
-									</select>
-								{/if}
-							</div>
-							{#if row.role === 'episode' && row.episodes[0]}
-								<label class="check small">
-									<input
-										type="checkbox"
-										checked={row.episodes.length === 2}
-										onchange={(e) => toggleTwoPart(row, e.currentTarget.checked)}
-									/>
-									Two-part ({row.episodes.length === 2
-										? `${code(row.episodes[0])}–E${String(row.episodes[1].episode).padStart(2, '0')}`
-										: '+ next episode'})
-								</label>
-							{/if}
-							{#if scanPicks.get(row.title_index)}
-								{@const x = scanPicks.get(row.title_index)!}
-								<div class="small muted scanpick" title={x.reason}>
-									From the cover scan: {x.episodes.map(code).join(' & ')} “{x.name}” ({x.confidence}){x.agrees === false ? ', which differs' : ''}
+	{#if plan?.show}
+		<div class="list-head">
+			<h3>Titles on the disc</h3>
+			<span class="small muted">in disc order</span>
+		</div>
+		<ul class="titles">
+			{#each episodeRows as row (row.title_index)}
+				{@const x = matchFor.get(row.title_index)}
+				{@const p = problem(row)}
+				{@const boxDiffers = x && x.episodes.length && row.episodes.length && !same(x.episodes, row.episodes)}
+				<li class="title" class:problem={p}>
+					<div class="num">
+						<span class="n">{rowNumber(row)}</span>
+						<span class="t mono">{duration(row.duration_s)}</span>
+					</div>
+					<div class="body">
+						{#if row.episodes.length}
+							{#each row.episodes as e (epKey(e))}
+								<div class="ep">
+									<span class="code">{code(e)}</span>
+									<span class="name">{byKey.get(epKey(e))?.name || 'No name'}</span>
+								</div>
+							{/each}
+							{#if reason(row, x)}<div class="small muted why">{reason(row, x)}</div>{/if}
+							{#if boxDiffers}
+								<div class="small warn-note">
+									Box says “{x!.name}”, which is
+									<button class="guess" disabled={act.busy} onclick={() => assign(row, 'episode', x!.episodes)}>
+										{x!.episodes.map(code).join(' & ')}
+									</button>
 								</div>
 							{/if}
-							{#if row.note}<div class="small muted">{row.note}</div>{/if}
-							{#if clash}<div class="small error-text">This episode is on another title too</div>{/if}
+						{:else if x}
+							<div class="small warn-note">Box says <strong>“{x.name}”</strong>. {x.guesses.length ? 'Not sure which episode:' : 'No episode with that name.'}</div>
+							{#if x.guesses.length}
+								<div class="guesses">
+									{#each x.guesses as g (epKey(g))}
+										{@const holder = holderOf(epKey(g), row.title_index)}
+										<button class="guess" disabled={act.busy} title={holder ? `On ${rowName(holder).toLowerCase()} now` : ''}
+											onclick={() => assign(row, 'episode', [{ season: g.season, episode: g.episode }])}>
+											<span class="code">{code(g)}</span> {g.name}{holder ? ' ⇄' : ''}
+										</button>
+									{/each}
+								</div>
+							{/if}
+						{:else}
+							<div class="small warn-note">{row.note && !/^pick the episode/.test(row.note) ? row.note : 'Pick the episode.'}</div>
 						{/if}
-					</td>
-				</tr>
+						{#if p && row.episodes.length}<div class="small warn-note">{p}</div>{/if}
+					</div>
+					<button class="edit" aria-label="Change the episode of {rowName(row).toLowerCase()}" title="Change"
+						disabled={act.busy} onclick={() => (picking = row.title_index)}>
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+							stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"></path></svg>
+					</button>
+				</li>
 			{:else}
-				<tr><td class="small muted">No titles.</td></tr>
+				<li class="small muted">No title is an episode yet.</li>
 			{/each}
-		</tbody>
-	</table>
-
-	{#if scanPicks.size && scanDiffers}
-		<div class="row scanpicks">
-			<button onclick={useScanPicks}>Use the cover scan's picks ({scanPicks.size})</button>
-			<span class="small muted">Fills in the episodes it matched; nothing is saved until you confirm.</span>
-		</div>
-	{/if}
-
-	<Snapshots {job} />
-	<CoverScans {job} />
-
-	{#if localProblems.length || serverProblems.length}
-		<ul class="problems small">
-			{#each [...new Set([...localProblems, ...serverProblems])] as p (p)}<li>{p}</li>{/each}
 		</ul>
+
+		{#if otherRows.length}
+			<section class="also box">
+				<h4>Also on the disc</h4>
+				<ul>
+					{#each otherRows as row (row.title_index)}
+						<li>
+							<span class="small grow">
+								{rowName(row)} · <span class="mono">{duration(row.duration_s)}</span> · {roleLabel[row.role]}{row.note ? `: ${row.note}` : ''}
+							</span>
+							<button class="link small" disabled={act.busy} onclick={() => (picking = row.title_index)}>Change</button>
+						</li>
+					{/each}
+				</ul>
+			</section>
+		{/if}
 	{/if}
+
+	<CoverScans {job} auto={false} />
+
+	<details class="tools" open={splitWaits}>
+		<summary class="small">More tools</summary>
+		<div class="stack">
+			{#if plan?.show}
+				<div class="stack tight">
+					<label for="run-order-{job.id}" class="small">Paste the run order from the case</label>
+					<textarea id="run-order-{job.id}" rows="4" bind:value={runOrder} placeholder="Kite Tram, Puddle Dash, Beard Trim, …"></textarea>
+					<div class="row">
+						<button onclick={matchText} disabled={act.busy || !runOrder.trim()}>Match episode names</button>
+						<span class="small muted">Puts the names on the titles in disc order.</span>
+					</div>
+				</div>
+			{/if}
+			{#if !job.refile}
+				<SplitTimeline {job} />
+			{/if}
+			<Snapshots {job} />
+			{#if !job.refile}
+				<div class="row">
+					{#if !checking}
+						<button disabled={act.busy} title="Open the tray to read the disc (episode numbers are often printed on it)"
+							onclick={ejectToCheck}>Eject to check</button>
+					{/if}
+					<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.setMedia(job.id, 'movie'))}>
+						This is a film, not TV
+					</button>
+				</div>
+			{/if}
+		</div>
+	</details>
 
 	{#if checking}
 		<p class="checking small">
@@ -511,33 +489,47 @@
 		</p>
 	{/if}
 
-	<div class="actions">
-		{#if !checking && !job.refile}
-			<button disabled={act.busy} title="Open the tray to read the disc (episode numbers are often printed on it)"
-				onclick={ejectToCheck}>Eject to check</button>
-		{/if}
-		<button class="primary confirm" disabled={!canConfirm} onclick={confirm}>
-			{job.refile ? 'Move the files to' : 'Confirm'} {rows.filter((r) => r.role === 'episode').length} episodes{plan?.show ? ` of ${plan.show.name}` : ''}
-		</button>
-		{#if !job.refile}
-			<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.setMedia(job.id, 'movie'))}>
-				This is a film, not TV
-			</button>
-		{/if}
-	</div>
+	{#if otherProblems.length}
+		<ul class="problems small">
+			{#each otherProblems as p (p)}<li>{p}</li>{/each}
+		</ul>
+	{/if}
 	{#if act.error}<p class="small error-text">{act.error}</p>{/if}
+
+	<div class="bar">
+		<div class="small status" class:warn={!canConfirm}>
+			{#if !plan?.show}
+				Pick the show
+			{:else if unpicked}
+				{unpicked} title{unpicked === 1 ? '' : 's'} still need{unpicked === 1 ? 's' : ''} an episode
+			{:else if problemCount}
+				{problemCount} problem{problemCount === 1 ? '' : 's'} to fix
+			{:else if missing.length}
+				Put the disc back to rip titles {missing.join(', ')}
+			{:else}
+				{episodeRows.reduce((n, r) => n + r.episodes.length, 0)} episodes of {plan.show.name}
+			{/if}
+		</div>
+		<button class="primary confirm" disabled={!canConfirm} onclick={confirm}>{job.refile && canConfirm ? 'Move the files' : 'Confirm'}</button>
+	</div>
 </article>
 
+{#if pickRow && plan}
+	<EpisodePicker
+		row={pickRow}
+		{rows}
+		episodes={plan.episodes}
+		boxName={matchFor.get(pickRow.title_index)?.name ?? null}
+		guesses={matchFor.get(pickRow.title_index)?.guesses ?? []}
+		thumb={job.rip.all_titles ? api.thumbUrl(job.id, pickRow.title_index) : null}
+		busy={act.busy}
+		error={act.error}
+		onsave={(role, eps) => assign(pickRow, role, eps)}
+		onclose={() => (picking = null)}
+	/>
+{/if}
+
 <style>
-	.warn-note {
-		color: var(--warn);
-	}
-	.checking {
-		background: var(--warn-bg);
-		border-radius: 9px;
-		padding: 8px 12px;
-		margin: 0;
-	}
 	.review {
 		display: flex;
 		flex-direction: column;
@@ -552,31 +544,41 @@
 	.label {
 		font-size: 1rem;
 	}
-	.box-says {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px 10px;
-		align-items: center;
-		padding: 8px 10px;
-		border-radius: 8px;
-		background: var(--info-bg);
-		overflow-wrap: anywhere;
+	h3 {
+		margin: 0;
+		font-size: 1rem;
 	}
-	.box-says.agrees {
-		background: var(--ok-bg);
+	h4 {
+		margin: 0;
+		font-size: 0.9rem;
+	}
+	p {
+		margin: 0;
+	}
+	.box {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface-2);
+		padding: 12px;
 	}
 	.show {
 		display: flex;
 		gap: 12px;
-		align-items: flex-start;
+		align-items: center;
+	}
+	.change {
+		min-height: 44px;
 	}
 	.grow {
 		flex: 1;
 		min-width: 0;
 	}
+	.tight {
+		gap: 8px;
+	}
 	.shows {
 		list-style: none;
-		margin: 6px 0 0;
+		margin: 0;
 		padding: 0;
 		display: flex;
 		flex-direction: column;
@@ -604,9 +606,27 @@
 	.tiny {
 		width: 5.2em;
 	}
-	.tight {
+	.scan {
+		background: var(--info-bg);
+		border-radius: var(--radius);
+		padding: 12px 14px;
+		display: flex;
+		flex-direction: column;
 		gap: 6px;
-		margin-top: 6px;
+	}
+	.scan.done {
+		background: var(--ok-bg);
+	}
+	.scan .sub {
+		color: var(--info);
+	}
+	.scan.done .sub {
+		color: var(--ok);
+	}
+	.headline {
+		font-weight: 600;
+		font-size: 1rem;
+		line-height: 1.35;
 	}
 	.badge {
 		font-size: 0.82rem;
@@ -623,85 +643,173 @@
 		background: var(--bad-bg);
 		color: var(--bad);
 	}
-	.map {
-		width: 100%;
-		border-collapse: collapse;
+	.warn-note {
+		color: var(--warn);
 	}
-	.map td {
-		padding: 6px 4px;
-		border-top: 1px solid var(--border);
-		vertical-align: top;
-	}
-	.map tr.skipped td {
-		opacity: 0.55;
-	}
-	.map tr.clash td {
-		background: var(--bad-bg);
-	}
-	.thumb {
-		width: 84px;
-	}
-	.thumb img,
-	.nothumb {
-		width: 80px;
-		aspect-ratio: 16 / 9;
-		object-fit: cover;
-		border-radius: 4px;
-		background: var(--surface-2);
-		display: block;
-	}
-	.what {
-		min-width: 0;
-	}
-	.pick {
+	.list-head {
 		display: flex;
-		gap: 6px;
+		align-items: baseline;
+		justify-content: space-between;
 		margin-top: 4px;
-		flex-wrap: wrap;
 	}
-	.pick select:first-child {
-		width: auto;
+	.titles {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.title {
+		display: flex;
+		gap: 12px;
+		align-items: flex-start;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 10px 10px 10px 12px;
+	}
+	.title.problem {
+		border-color: var(--warn);
+	}
+	.num {
+		width: 44px;
 		flex: none;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1px;
+		padding-top: 2px;
 	}
-	.pick select:last-child {
+	.num .n {
+		font-size: 1.05rem;
+		font-weight: 600;
+	}
+	.num .t {
+		font-size: 0.72rem;
+		color: var(--muted);
+	}
+	.body {
 		flex: 1;
 		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding-top: 2px;
 	}
-	@media (max-width: 560px) {
-		/* The episode's name in full under the role, rather than cut off beside it. */
-		.pick select:last-child:not(:first-child) {
-			flex-basis: 100%;
-		}
-		.thumb {
-			width: 56px;
-		}
-		.thumb img,
-		.nothumb {
-			width: 52px;
-		}
+	.ep {
+		display: flex;
+		gap: 6px;
+		align-items: baseline;
+		flex-wrap: wrap;
+	}
+	.code {
+		font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+		font-size: 0.75rem;
+		background: var(--info-bg);
+		color: var(--info);
+		border-radius: 4px;
+		padding: 1px 5px;
+	}
+	.name {
+		font-weight: 500;
+		overflow-wrap: anywhere;
+	}
+	.guesses {
+		display: flex;
+		gap: 6px;
+		flex-wrap: wrap;
+	}
+	.guess {
+		min-height: 36px;
+		border-radius: 18px;
+		padding: 4px 12px;
+		font-size: 0.85rem;
+		text-align: left;
+	}
+	.warn-note .guess {
+		min-height: 30px;
+		padding: 2px 10px;
+		margin-left: 2px;
+	}
+	.edit {
+		width: 44px;
+		height: 44px;
+		min-height: 44px;
+		flex: none;
+		padding: 0;
+		justify-content: center;
+	}
+	.also ul {
+		list-style: none;
+		margin: 6px 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.also li {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-height: 36px;
+		color: var(--muted);
+	}
+	.tools > .stack {
+		margin-top: 10px;
+	}
+	summary {
+		cursor: pointer;
+		color: var(--muted);
+		min-height: 36px;
+		display: flex;
+		align-items: center;
+	}
+	.tools summary {
+		display: list-item;
+		line-height: 36px;
+	}
+	.checking {
+		background: var(--warn-bg);
+		border-radius: 9px;
+		padding: 8px 12px;
 	}
 	.problems {
 		margin: 0;
 		padding-left: 18px;
 		color: var(--warn);
 	}
-	.actions {
+	.bar {
 		display: flex;
-		flex-direction: column;
-		gap: 8px;
 		align-items: center;
+		gap: 12px;
+		padding-top: 12px;
+		border-top: 1px solid var(--border);
 	}
-	.confirm {
-		width: 100%;
-		justify-content: center;
-		min-height: 46px;
-		font-size: 1rem;
-	}
-	summary {
-		cursor: pointer;
+	.bar .status {
+		flex: 1;
+		min-width: 0;
 		color: var(--muted);
 	}
-	p {
-		margin: 0;
+	.bar .status.warn {
+		color: var(--warn);
+	}
+	.confirm {
+		min-height: 48px;
+		padding: 0 22px;
+		font-size: 1rem;
+		justify-content: center;
+	}
+	/* On a phone the bar stays in sight above the tabs while the card is on screen. */
+	@media (max-width: 759px) {
+		.bar {
+			position: sticky;
+			bottom: calc(56px + env(safe-area-inset-bottom));
+			z-index: 5;
+			margin: 0 -14px -14px;
+			padding: 12px 14px;
+			background: var(--surface);
+			border-radius: 0 0 var(--radius) var(--radius);
+		}
 	}
 </style>
