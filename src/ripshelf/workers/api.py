@@ -1,7 +1,7 @@
 """HTTP API for remote workers (controller side).
 
 Workers authenticate with a Bearer token, either their own (added in Settings → Workers;
-only its sha256 is stored, and it works for that worker id only) or the
+only its sha256 is stored, and it works for that worker id and its runs only) or the
 shared ``worker_token``. Off until either exists.
 """
 
@@ -125,6 +125,17 @@ def _known(request: Request, worker_id: str):
     return hub
 
 
+def _own_run(request: Request, worker_id: str, run_id: int):
+    """The hub, once it's sure ``run_id`` isn't another worker's. A worker's own token reaches
+    only that worker's runs, so it can't write lines, files or a result into another machine's
+    rip. A run the hub no longer has is left to the route, as before (it was given up on)."""
+    hub = _known(request, worker_id)
+    run = hub.runs.get(run_id)
+    if run is not None and run.worker != worker_id:
+        raise HTTPException(403, f"run {run_id} isn't worker {worker_id}'s")
+    return hub
+
+
 @router.get("", response_model=list[WorkerView])
 async def list_workers(request: Request):
     return [WorkerView(id=w.id, name=w.name, online=w.online, encoders=w.encoders,
@@ -165,13 +176,13 @@ async def poll(worker_id: str, request: Request):
 
 @router.post("/{worker_id}/runs/{run_id}/lines", dependencies=[Auth])
 async def lines(worker_id: str, run_id: int, body: LinesBody, request: Request):
-    _known(request, worker_id).lines(run_id, body.lines)
+    _own_run(request, worker_id, run_id).lines(run_id, body.lines)
     return {"ok": True}
 
 
 @router.put("/{worker_id}/runs/{run_id}/files/{name}", dependencies=[Auth])
 async def upload(worker_id: str, run_id: int, name: str, request: Request):
-    hub = _known(request, worker_id)
+    hub = _own_run(request, worker_id, run_id)
     try:
         target, run = hub.upload_target(run_id, name)
     except KeyError:
@@ -198,7 +209,7 @@ async def upload(worker_id: str, run_id: int, name: str, request: Request):
 
 @router.post("/{worker_id}/runs/{run_id}/finish", dependencies=[Auth])
 async def finish(worker_id: str, run_id: int, body: FinishBody, request: Request):
-    _known(request, worker_id).finish(run_id, body.returncode, body.timed_out, body.cancelled, body.error,
+    _own_run(request, worker_id, run_id).finish(run_id, body.returncode, body.timed_out, body.cancelled, body.error,
                                       body.files, body.stalled)
     return {"ok": True}
 
