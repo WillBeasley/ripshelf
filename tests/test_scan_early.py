@@ -163,3 +163,13 @@ async def test_a_scan_survives_a_save_from_an_older_copy(harness, settings):
         h.m._save(stale)
         now = h.db.get_job(job.id)
         assert len(now.scans) == 1 and now.disc.name == "changed by the pipeline"
+
+
+async def test_the_waiting_scans_list_is_saved_with_the_windows_retry(harness, settings, monkeypatch):
+    from ripshelf import library
+
+    real, replaced = library.replace, []
+    monkeypatch.setattr(library, "replace", lambda a, b: (replaced.append(b.name), real(a, b)))
+    async with harness() as h:
+        await h.m.add_pending(DRIVE, picture(), "back", "camera")
+    assert "index.json" in replaced

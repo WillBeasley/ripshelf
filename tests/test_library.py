@@ -292,3 +292,26 @@ async def test_finalise_shows_the_copy_then_the_check(harness, monkeypatch):
         phases = [p["phase"] for p in bars]
         assert "Copying to library" in phases and phases[-1] == "Verifying the copy"
         assert bars[-1]["fraction"] == 1 and bars[-1]["bytes_done"] == bars[-1]["bytes_total"]
+
+
+def test_replace_retries_on_windows_while_the_file_is_open(tmp_path, monkeypatch):
+    src, dst = tmp_path / "index.json.tmp", tmp_path / "index.json"
+    src.write_text("new")
+    real, calls = os.replace, []
+
+    def busy_twice(a, b):
+        calls.append(a)
+        if len(calls) < 3:
+            raise PermissionError("in use by another process")  # a virus scanner, say
+        real(a, b)
+
+    monkeypatch.setattr(library.os, "replace", busy_twice)
+    monkeypatch.setattr(library.time, "sleep", lambda s: None)
+    monkeypatch.setattr(library.sys, "platform", "win32")
+    library.replace(src, dst)
+    assert len(calls) == 3 and dst.read_text() == "new"
+    monkeypatch.setattr(library.sys, "platform", "linux")
+    calls.clear()
+    src.write_text("again")
+    with pytest.raises(PermissionError):
+        library.replace(src, dst)  # elsewhere a refusal is real

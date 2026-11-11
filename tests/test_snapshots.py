@@ -156,3 +156,20 @@ async def test_a_film_ejected_mid_rip_rips_again_when_it_is_back(harness, settin
         assert done.id == job.id and not done.rip.all_titles and Path(done.rip.file).exists()
         assert any("starts again when the disc is back" in e.message for e in h.db.events(job.id))
         await until(lambda: len(h.db.list_jobs()) == 1, what="no new job")
+
+
+async def test_a_frame_is_moved_into_place_with_the_windows_retry(tmp_path, monkeypatch):
+    from ripshelf import library, snapshots
+    from ripshelf.tv import verify
+
+    async def thumbnail(ffmpeg, src, out, at_s, width):
+        out.write_bytes(b"jpeg")
+        return True
+
+    replaced = []
+    real = library.replace
+    monkeypatch.setattr(verify, "thumbnail", thumbnail)
+    monkeypatch.setattr(library, "replace", lambda a, b: (replaced.append(b), real(a, b)))
+    out = tmp_path / "frame.jpg"
+    assert await snapshots.Grabber().frame("ffmpeg", tmp_path / "t00.mkv", 60.0, out) == out
+    assert replaced == [out] and out.read_bytes() == b"jpeg"
