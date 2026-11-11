@@ -69,7 +69,7 @@ Discs are identified from several sources, and each candidate gets a score and t
 - **Linux with Docker** (or Podman) on amd64 or arm64, such as a Raspberry Pi 5. [Windows](docs/windows.md) runs natively without Docker.
 - **One or more optical drives**, SATA or USB. For **UHD Blu-ray**, a [LibreDrive-capable drive](https://forum.makemkv.com/forum/viewtopic.php?f=16&t=19634) and its MakeMKV private data.
 - **A MakeMKV key**, either a [purchased licence](https://www.makemkv.com/buy/) (please support MakeMKV) or the current free beta key.
-- **A free TMDB API key** for identification; TheTVDB and OMDb keys are optional.
+- **A free TMDB API key** for identification (recommended; without one, TV still works through TVmaze or TheTVDB). TheTVDB and OMDb keys are optional.
 - **Scratch space**, about 100 GB free for a UHD rip.
 - **Optionally**, an Intel or AMD GPU for hardware transcoding.
 

@@ -34,7 +34,7 @@ There's no login on the UI, so keep it on your LAN or VPN.
 
 Everything is in Settings, and anything still missing shows as a yellow Setup box on the Overview page. Each connection has a Test button that tries the values as typed.
 
-- **Metadata providers.** You need a free TMDB v3 API key from themoviedb.org. Without it, every disc not in TheDiscDB goes to Review. TheTVDB and OMDb keys are optional. See [providers.md](providers.md).
+- **Metadata providers.** A free TMDB v3 API key from themoviedb.org is recommended. Without it, films not in TheDiscDB go to Review with no candidates, and TV shows are found through TVmaze (no key) or TheTVDB instead. TheTVDB and OMDb keys are optional. See [providers.md](providers.md).
 - **MakeMKV key.** Use a purchased key, or the current free beta key from the [MakeMKV forum](https://forum.makemkv.com/forum/viewtopic.php?t=1053). The beta key is a courtesy while MakeMKV is in beta, so if you use ripshelf, please [buy a licence](https://www.makemkv.com/buy/).
 - **Import MakeMKV private data.** This takes:
   - each UHD drive's `_private_data.tar` from an existing MakeMKV install (LibreDrive data)
