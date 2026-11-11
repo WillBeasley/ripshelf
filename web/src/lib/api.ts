@@ -108,6 +108,8 @@ export const api = {
 	checkDisc: (id: number, pauseRip = false) =>
 		call<Job>('POST', `/jobs/${id}/check-disc${pauseRip ? '?pause_rip=true' : ''}`),
 	identifyAgain: (id: number) => call<Job>('POST', `/jobs/${id}/identify-again`),
+	reidentify: (id: number) => call<Job>('POST', `/jobs/${id}/reidentify`),
+	keepIdentity: (id: number) => call<Job>('POST', `/jobs/${id}/reidentify/keep`),
 	cancel: (id: number) => call<Job>('POST', `/jobs/${id}/cancel`),
 	setMedia: (id: number, media: MediaKind) => call<Job>('POST', `/jobs/${id}/media`, { media }),
 	contribution: (id: number) => call<ContributionView>('GET', `/jobs/${id}/thediscdb`),

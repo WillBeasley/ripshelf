@@ -8,6 +8,7 @@
 	import Evidence from './Evidence.svelte';
 	import CoverScans from './CoverScans.svelte';
 	import Poster from './Poster.svelte';
+	import RefileBanner from './RefileBanner.svelte';
 	import Snapshots from './Snapshots.svelte';
 	import SplitTimeline from './SplitTimeline.svelte';
 	import WebSearch from './WebSearch.svelte';
@@ -268,7 +269,9 @@
 		<button class="link small" onclick={() => openJob(job.id)}>Details</button>
 	</header>
 
-	{#if job.media_evidence.length}
+	<RefileBanner {job} />
+
+	{#if job.media_evidence.length && !job.refile}
 		<p class="small muted">{job.media_evidence.slice(0, 3).join(' · ')}</p>
 	{/if}
 
@@ -374,7 +377,9 @@
 		<span class="badge bad">✗ {plan.order_note}</span>
 	{/if}
 
-	<SplitTimeline {job} />
+	{#if !job.refile}
+		<SplitTimeline {job} />
+	{/if}
 
 	<table class="map">
 		<tbody>
@@ -488,16 +493,18 @@
 	{/if}
 
 	<div class="actions">
-		{#if !checking}
+		{#if !checking && !job.refile}
 			<button disabled={act.busy} title="Open the tray to read the disc (episode numbers are often printed on it)"
 				onclick={ejectToCheck}>Eject to check</button>
 		{/if}
 		<button class="primary confirm" disabled={!canConfirm} onclick={confirm}>
-			Confirm {rows.filter((r) => r.role === 'episode').length} episodes{plan?.show ? ` of ${plan.show.name}` : ''}
+			{job.refile ? 'Move the files to' : 'Confirm'} {rows.filter((r) => r.role === 'episode').length} episodes{plan?.show ? ` of ${plan.show.name}` : ''}
 		</button>
-		<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.setMedia(job.id, 'movie'))}>
-			This is a film, not TV
-		</button>
+		{#if !job.refile}
+			<button class="link small" disabled={act.busy} onclick={() => act.run(() => api.setMedia(job.id, 'movie'))}>
+				This is a film, not TV
+			</button>
+		{/if}
 	</div>
 	{#if act.error}<p class="small error-text">{act.error}</p>{/if}
 </article>
