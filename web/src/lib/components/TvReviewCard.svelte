@@ -153,8 +153,14 @@
 		const picks = (job.scan_match?.matches ?? []).filter((x) => x.kind === 'episode' && x.episodes.length);
 		const bonus = (job.scan_match?.matches ?? []).filter((x) => x.bonus && x.confidence !== 'low');
 		const byTitle = new Map((plan?.mapping ?? []).map((r) => [r.title_index, r]));
+		// Every line placed, or, when the box lists more than the disc holds, every episode title.
+		const onDisc = (plan?.mapping ?? []).filter((r) => r.role === 'episode').map((r) => r.title_index);
+		const placed = new Set(picks.filter((x) => x.confidence !== 'low').map((x) => x.title_index));
+		const enough =
+			picks.length >= names.length ||
+			(names.length > onDisc.length && onDisc.length >= 2 && onDisc.every((i) => placed.has(i)));
 		const agrees =
-			picks.length >= names.length &&
+			enough &&
 			picks.every((x) => {
 				const r = byTitle.get(x.title_index);
 				return r?.role === 'episode' && JSON.stringify(r.episodes.map(epKey)) === JSON.stringify(x.episodes.map(epKey));
@@ -163,7 +169,7 @@
 		return {
 			title: l.details.title,
 			names,
-			picks: picks.length >= names.length ? picks : [],
+			picks: enough ? picks : [],
 			// A bonus episode of another show, as found in its episode list ("Guess with Jess
 			// S01E24 Where's My Feather Gone?"), or as the box gives it.
 			bonus: l.items
@@ -236,6 +242,13 @@
 			)
 		);
 	}
+
+	// Only the season's order put the episodes on these titles, and nothing checked it.
+	const orderGuess = $derived(
+		plan?.order_from === 'season' &&
+			plan.order_verified == null &&
+			(plan.mapping ?? []).filter((r) => r.role === 'episode').length >= 2
+	);
 
 	const skippedRoles = new Set(['play_all', 'duplicate']);
 	const roleLabel: Record<string, string> = {
@@ -372,6 +385,12 @@
 		<span class="badge ok">✓ Order verified against the play-all</span>
 	{:else if plan?.order_verified === false}
 		<span class="badge bad">✗ {plan.order_note}</span>
+	{:else if orderGuess}
+		<p class="small warn-note" role="note">
+			Which {plan?.split ? 'part' : 'title'} is which episode is a guess: they're given the season's episodes in
+			order{plan?.start_episode ? ` from episode ${plan.start_episode}` : ''}, and discs often hold them in
+			another order. Check them against the thumbnails, scan the box, or paste its run order.
+		</p>
 	{/if}
 
 	<SplitTimeline {job} />
@@ -503,6 +522,9 @@
 </article>
 
 <style>
+	.warn-note {
+		color: var(--warn);
+	}
 	.checking {
 		background: var(--warn-bg);
 		border-radius: 9px;

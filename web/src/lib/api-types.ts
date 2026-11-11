@@ -1198,6 +1198,10 @@ export interface TvPlan {
    * the show or episodes were set from the cover scan, so it's reviewed, not confirmed without review
    */
   from_scan: boolean;
+  /**
+   * what put the episodes on the titles in this order: the season's own order from the start episode (a guess), the cover scan's list, a pasted run order, or TheDiscDB
+   */
+  order_from: ("season" | "box" | "names" | "disc_db") | null;
   auto_confirmed: boolean;
   /**
    * why it was (or wasn't) confirmed without review
