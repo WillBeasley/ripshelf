@@ -34,7 +34,7 @@
 	const key = (e: EpisodeRef) => `${e.season}:${e.episode}`;
 	const code = (e: EpisodeRef) => `S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}`;
 	const rowName = (r: TitleMap) =>
-		r.part_of != null ? `Title ${r.part_of}, part ${(r.title_index % 1000) + 1}` : `Title ${r.title_index}`;
+		r.part_of != null ? `Title ${r.part_of}, part ${((r.title_index - 1000) % 100) + 1}` : `Title ${r.title_index}`;
 
 	let dialog = $state<HTMLDialogElement | null>(null);
 	let query = $state('');

@@ -1252,13 +1252,17 @@ export interface TvPlan {
    */
   auto_evidence: string[];
   /**
-   * a long title holding several episodes, split at chapters
+   * long titles each holding several episodes, split at chapters (in title order)
    */
-  split: TitleSplit | null;
+  splits: TitleSplit[];
   /**
-   * the user keeps the long title whole
+   * the user keeps every long title whole
    */
   split_off: boolean;
+  /**
+   * long titles the user keeps whole
+   */
+  whole: number[];
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1351,6 +1355,10 @@ export interface TitleSplit {
    * cuts changed by hand, so kept when the mapping is re-proposed
    */
   edited: boolean;
+  /**
+   * the title number its first part has in the mapping (1000, 1100, ...)
+   */
+  base: number;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -3081,6 +3089,10 @@ export interface TvSplitRequest {
    * true keeps the long title whole, false splits it again
    */
   off: boolean | null;
+  /**
+   * which long title (else the first)
+   */
+  title_index: number | null;
 }
 /**
  * One page from a web search (SearXNG), for identifying a disc by hand.
