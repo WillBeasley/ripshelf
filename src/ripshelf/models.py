@@ -59,7 +59,7 @@ TRANSITIONS: dict[JobState, set[JobState]] = {
     JobState.identifying: {JobState.review, JobState.ripping, JobState.transcoding, JobState.finalising,
                            JobState.clash},
     JobState.review: {JobState.ripping, JobState.transcoding, JobState.finalising, JobState.identifying,
-                      JobState.clash, JobState.checking},
+                      JobState.clash, JobState.checking, JobState.done},
     JobState.clash: {JobState.review, JobState.ripping, JobState.transcoding, JobState.finalising,
                      JobState.identifying, JobState.checking},
     JobState.checking: {JobState.review, JobState.clash},
@@ -67,9 +67,10 @@ TRANSITIONS: dict[JobState, set[JobState]] = {
                        JobState.clash},
     JobState.transcoding: {JobState.finalising, JobState.clash},
     JobState.finalising: {JobState.done, JobState.clash},
-    JobState.done: {JobState.identifying},
+    # A finished job identified again goes back to review, and back to done if kept as it was.
+    JobState.done: {JobState.identifying, JobState.review},
     JobState.failed: {JobState.detected, JobState.scanning, JobState.identifying, JobState.transcoding,
-                      JobState.finalising},
+                      JobState.finalising, JobState.done},
     JobState.cancelled: set(),
 }
 for _s in ACTIVE_STATES:
@@ -355,6 +356,28 @@ class ClashInfo(BaseModel):
     decision: ClashAction | None = None
     version: str | None = Field(None, description="with keep both chosen, the new film's file name (an Emby version)")
     keep_both_name: str | None = Field(None, description="the file name 'keep both' would use (films)")
+
+
+class RefileMove(BaseModel):
+    src: str
+    dst: str
+    done: bool = False
+
+
+class Refile(BaseModel):
+    """A finished job being identified again. Its files stay where they are in the library
+    until the new identity is confirmed, and are then moved (not ripped again) to its names."""
+
+    title: str = Field(description="what it was filed as, \"Moonlit Orchard (2004)\"")
+    identity: Candidate | None = Field(None, description="the identity it had, put back if kept as it was")
+    identity_source: Literal["auto", "user", "cache"] | None = None
+    destination: str | None = None
+    tv: TvPlan | None = None
+    candidates: list[Candidate] = []
+    finished_at: datetime | None = None
+    files: dict[int, str] = Field(default={}, description="title index -> its file in the library")
+    moves: list[RefileMove] = Field(default=[], description="planned once confirmed, each marked done once moved, "
+                                                           "so a move that failed half way can be retried")
 
 
 class ClashRequest(BaseModel):
@@ -737,6 +760,7 @@ class Job(BaseModel):
     scanner: ScannerRun | None = Field(None, description="a scan from the network scanner, under way or failed")
     listing: ScanListing | None = Field(None, description="what's on the disc, read from the scans")
     scan_match: ScanMatch | None = Field(None, description="the listing matched to the disc's titles")
+    refile: Refile | None = Field(None, description="finished, and being identified again")
 
 
 class ContributionTitle(BaseModel):

@@ -18,6 +18,7 @@ deleted.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -219,6 +220,66 @@ def copy_tree_verified(src: Path, dst: Path, on_progress: CopyProgress | None = 
         shutil.rmtree(partial, ignore_errors=True)
         raise
     return hashes
+
+
+def move_path(src: Path, dst: Path) -> None:
+    """Move a file or folder within the library, never over anything already at ``dst``.
+
+    A rename where it can be. Across filesystems (the films on one share and a folder
+    mounted from another), it's copied and verified, and only then is the original deleted.
+    Blocking.
+    """
+    if dst.exists():
+        raise FileExistsError(f"{dst} already exists")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.rename(src, dst)
+        return
+    except OSError as e:
+        if e.errno != errno.EXDEV:
+            raise
+    if src.is_dir():
+        copy_tree_verified(src, dst)
+        shutil.rmtree(src)
+    else:
+        copy_verified(src, dst)
+        src.unlink()
+
+
+# What a media server writes next to a film or show it scanned: artwork and .nfo files of
+# the old title. Once that title's files have moved away they describe nothing, so they go.
+SERVER_METADATA = re.compile(r"^(.*\.nfo|(poster|folder|fanart|backdrop|banner|logo|clearart|clearlogo|landscape|"
+                             r"thumb|disc|discart)(-\d+)?\.(jpg|jpeg|png|webp))$", re.I)
+VIDEO_SUFFIXES = {".mkv", ".mp4", ".m4v", ".avi", ".ts", ".m2ts", ".iso"}
+
+
+def prune_folder(folder: Path, root: Path) -> list[Path]:
+    """Remove ``folder`` and the folders above it (up to, not including, ``root``) when
+    nothing is left in them. A folder with no videos left keeps nothing but a media
+    server's artwork and .nfo files of the title that moved away, so they go first.
+    Returns what's left in ``folder`` (empty once it's gone). Blocking."""
+    try:
+        folder.resolve().relative_to(root.resolve())
+    except ValueError:
+        return []
+    if folder.resolve() == root.resolve() or not folder.is_dir():
+        return []
+    left = [p for p in folder.rglob("*") if p.is_file()]
+    if not any(p.suffix.lower() in VIDEO_SUFFIXES for p in left):
+        for p in left:
+            if p.parent == folder and SERVER_METADATA.match(p.name):
+                p.unlink(missing_ok=True)
+    for d in sorted((p for p in folder.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
+        if not any(d.iterdir()):
+            d.rmdir()
+    left = [p for p in folder.rglob("*") if p.is_file()]
+    if left:
+        return left
+    d = folder
+    while d.resolve() != root.resolve() and d.is_dir() and not any(d.iterdir()):
+        d.rmdir()
+        d = d.parent
+    return []
 
 
 def write_disc_folder(folder: Path, disc_json: dict, scan_log: Path | None, structure_dir: Path | None,

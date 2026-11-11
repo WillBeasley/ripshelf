@@ -301,6 +301,20 @@ async def identify_again(job_id: int, request: Request):
     return await _job_action(request, job_id, manager(request).identify_again)
 
 
+@api.post("/jobs/{job_id}/reidentify", response_model=Job)
+async def reidentify(job_id: int, request: Request):
+    """A finished job was given the wrong title: back to Review. Its files stay where they
+    are in the library until the right one is confirmed, then move to its names."""
+    return await _job_action(request, job_id, manager(request).reidentify)
+
+
+@api.post("/jobs/{job_id}/reidentify/keep", response_model=Job)
+async def keep_identity(job_id: int, request: Request):
+    """Not identified again after all: the job is done as it was, and any files already
+    moved go back."""
+    return await _job_action(request, job_id, manager(request).keep_identity)
+
+
 @api.post("/jobs/{job_id}/cancel", response_model=Job)
 async def cancel(job_id: int, request: Request):
     return await _job_action(request, job_id, manager(request).cancel)
