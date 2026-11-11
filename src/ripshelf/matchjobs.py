@@ -90,11 +90,15 @@ class MatchMixin:
         Blu-ray's play-all) among the rest, which stay in title order. The parts are
         alike, so their order is all that places the box's lines on them."""
         ordered = self._ordered_episode_titles(job)
-        parts = [t for t in ordered if tvsplit.is_part(t.index)]
-        src = job.tv.split.title_index if parts else None
+        parts: dict[int, list[TitleInfo]] = {}
+        for t in ordered:
+            if tvsplit.is_part(t.index) and (sp := job.tv.split_of(t.index)):
+                parts.setdefault(sp.title_index, []).append(t)
+        # A long title being split is matched through its parts (none until it's ripped).
+        srcs = {sp.title_index for sp in job.tv.splits}
         base: list[TitleInfo] = []
         for t in sorted(job.titles, key=lambda t: t.index):
-            base.extend(parts if t.index == src else [t])
+            base.extend(parts.get(t.index, [] if t.index in srcs else [t]))
         eps, it = {t.index for t in ordered}, iter(ordered)
         return [next(it) if t.index in eps else t for t in base]
 
@@ -340,7 +344,27 @@ class ShowFromScanMixin:
                     await tmdb.aclose()
         elif tmdb:
             await tmdb.aclose()
+        changed = await self.replan_splits(job_id) or changed
         return self.apply_scan_picks(job_id, asked) or changed
+
+    async def replan_splits(self, job_id: int) -> bool:
+        """Once the box is read, it says how many episodes there are and how long they run:
+        which long titles hold several (and how many) may change. True if it did."""
+        job = self.db.get_job(job_id)
+        plan = job.tv if job else None
+        if not plan or not plan.show or plan.split_off or any(sp.state == "split" for sp in plan.splits):
+            return False
+        before = [(sp.title_index, sp.expected) for sp in plan.splits]
+        self._plan_split(job, plan, plan.show, [])
+        if [(sp.title_index, sp.expected) for sp in plan.splits] == before:
+            return False
+        self._remap(job, plan)
+        self._check_plan(job)
+        self._save(job)
+        self._event(job, "info", "The box says how many episodes there are: "
+                    + "; ".join(f"title {sp.title_index} holds about {sp.expected}" for sp in plan.splits))
+        await self._analyse_split(job_id)  # those already ripped
+        return True
 
     async def use_scan(self, job_id: int) -> JobRecord:
         """The user's "Use this": the show, season and episodes the cover scan gives."""

@@ -81,6 +81,21 @@ def test_detection_needs_runtimes_and_picks_the_longest():
     assert split.detect([title(0, 91, 12), title(1, 30)], {}, eps(30, 28, 33)).title_index == 0
 
 
+def test_the_boxs_count_and_runtime_find_every_long_title():
+    """A box of 13 ten-minute episodes (the episode list says 12, the broadcast slot): 9
+    in title 0, 3 in title 2, and title 1 on its own. Without the box, only the longest
+    is found, and its count is off."""
+    titles = [title(0, 91.6, 10), title(1, 10.2, 2), title(2, 30.5, 4)]
+    slot = eps(*[12] * 13)
+    assert [(c.title_index, c.episodes) for c in split.detect_all(titles, {}, slot)] == [(0, 8)]
+    got = split.detect_all(titles, {}, slot, typical_s=600, count=13)
+    assert [(c.title_index, c.episodes) for c in got] == [(0, 9), (2, 3)]
+    assert "that's the box's 13" in got[0].reason
+    # A count that doesn't add up: the old rule, the longest alone, as long as there's
+    # no more than one title of one episode.
+    assert [c.title_index for c in split.detect_all(titles, {}, slot, typical_s=600, count=30)] == [0]
+
+
 # --- where to cut -------------------------------------------------------------------
 
 # Seagull Manor S01E01-03 run 30, 28 and 33 min; two chapters each.
@@ -451,18 +466,18 @@ async def test_split_api(settings, keyed, monkeypatch, mkv_script, tmp_path):
             import time
             for _ in range(300):
                 jobs = c.get("/api/jobs").json()
-                if jobs and jobs[0]["tv"] and jobs[0]["tv"]["show"] and jobs[0]["tv"]["split"]:
+                if jobs and jobs[0]["tv"] and jobs[0]["tv"]["show"] and jobs[0]["tv"]["splits"]:
                     break
                 time.sleep(0.1)
             jid, plan = jobs[0]["id"], jobs[0]["tv"]
-            assert plan["split"]["state"] == "waiting" and plan["split"]["expected"] == 3
+            assert [(sp["state"], sp["expected"]) for sp in plan["splits"]] == [("waiting", 3)]
             assert any("chapters are read once it's ripped" in p for p in plan["problems"])
             r = c.post(f"/api/jobs/{jid}/tv/split", json={"cuts": [2]})
             assert r.status_code == 409 and "no chapters" in r.json()["detail"]
             assert c.post(f"/api/jobs/{jid}/tv/split", json={"cuts": "x"}).status_code == 422
             assert c.get(f"/api/jobs/{jid}/split-thumbs/0/2.jpg").status_code == 404
             r = c.post(f"/api/jobs/{jid}/tv/split", json={"off": True})
-            assert r.status_code == 200 and r.json()["tv"]["split"] is None and r.json()["tv"]["split_off"]
+            assert r.status_code == 200 and r.json()["tv"]["splits"] == [] and r.json()["tv"]["split_off"]
             assert c.post("/api/jobs/999/tv/split", json={"off": True}).status_code == 409
 
 

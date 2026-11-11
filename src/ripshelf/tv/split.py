@@ -101,27 +101,52 @@ def detect(titles: list[TitleInfo], roles: dict[int, TitleRole], episodes: list[
     disc where fewer than two other titles are one episode long (with those, a long
     title is a play-all, or a feature-length extra). Without a chapter per episode it
     is searched for breaks instead, so chapters don't decide."""
-    runtimes = [e.runtime for e in episodes if e.runtime]
-    if not runtimes:
-        return None
-    typical = statistics.median(runtimes) * 60
-    # Within the runtimes, but near the typical one, as a whole show's (a compilation's) can span a lot.
-    lo = max(min(runtimes) * 60 * (1 - EPISODE_WINDOW), typical / 2)
-    hi = min(max(runtimes) * 60 * (1 + EPISODE_WINDOW), typical * 1.5)
-    usable = [t for t in titles if roles.get(t.index) not in (TitleRole.play_all, TitleRole.duplicate)]
-    long = [t for t in usable if t.duration_s >= LONG_FACTOR * typical]
-    if not long:
-        return None
-    t = max(long, key=lambda t: (t.duration_s, -t.index))
-    singles = [o for o in usable if o.index != t.index and lo <= o.duration_s <= hi]
-    if len(singles) >= 2:
-        return None
-    n = max(2, round(t.duration_s / typical))
-    marks = f"{t.chapters} chapters" if enough_chapters(t.chapters, n) else \
-        ("no chapters" if t.chapters <= 1 else f"only {t.chapters} chapters")
-    return Candidate(t.index, n, f"title {t.index} is {round(t.duration_s / 60)} min with {marks}, "
-                                 f"about {n} episodes of {round(typical / 60)} min, and no title is one episode")
+    found = detect_all(titles, roles, episodes)
+    return found[0] if found else None
 
+
+def detect_all(titles: list[TitleInfo], roles: dict[int, TitleRole], episodes: list[Episode],
+               typical_s: float | None = None, count: int | None = None) -> list[Candidate]:
+    """The titles holding several episodes back to back (see ``detect``).
+
+    With the box's word for it, ``count`` episodes running ``typical_s`` each, every
+    long title is one when they and the titles one episode long add up to the box's
+    count (a disc of 13 as 9 in one title, 3 in another and 1 on its own). The box's
+    runtime beats the episode list's, which is often the broadcast slot (12 minutes for
+    episodes that run 10). Without it, only the longest title is, as before."""
+    runtimes = [e.runtime for e in episodes if e.runtime]
+    if typical_s:
+        typical = typical_s
+        lo, hi = typical * (1 - 2 * EPISODE_WINDOW), typical * (1 + 2 * EPISODE_WINDOW)
+    elif runtimes:
+        typical = statistics.median(runtimes) * 60
+        # Within the runtimes, but near the typical one, as a whole show's (a compilation's) can span a lot.
+        lo = max(min(runtimes) * 60 * (1 - EPISODE_WINDOW), typical / 2)
+        hi = min(max(runtimes) * 60 * (1 + EPISODE_WINDOW), typical * 1.5)
+    else:
+        return []
+    usable = [t for t in titles if roles.get(t.index) not in (TitleRole.play_all, TitleRole.duplicate)]
+    long = sorted((t for t in usable if t.duration_s >= LONG_FACTOR * typical), key=lambda t: (-t.duration_s, t.index))
+    if not long:
+        return []
+    singles = [o for o in usable if lo <= o.duration_s <= hi]
+    held = {t.index: max(2, round(t.duration_s / typical)) for t in long}
+    if count and abs(sum(held.values()) + len(singles) - count) <= max(1, count // 10):
+        chosen = sorted(long, key=lambda t: t.index)
+        why = f"and with the {len(singles)} title{'' if len(singles) == 1 else 's'} one episode long, " \
+              f"that's the box's {count}" if len(chosen) > 1 or singles else "as the box says"
+    elif len(singles) < 2:
+        chosen, why = long[:1], "and no title is one episode"
+    else:
+        return []
+    out = []
+    for t in chosen:
+        n = held[t.index]
+        marks = f"{t.chapters} chapters" if enough_chapters(t.chapters, n) else \
+            ("no chapters" if t.chapters <= 1 else f"only {t.chapters} chapters")
+        out.append(Candidate(t.index, n, f"title {t.index} is {round(t.duration_s / 60)} min with {marks}, "
+                                         f"about {n} episodes of {round(typical / 60)} min, {why}"))
+    return out
 
 def enough_chapters(chapters: int, episodes: int) -> bool:
     """Whether a title's chapters can be where its episodes start (else it's searched for

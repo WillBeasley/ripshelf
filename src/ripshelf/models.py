@@ -289,6 +289,14 @@ class TitleSplit(BaseModel):
     confidence: float | None = Field(None, description="0..1, how well the proposed parts fit the runtimes")
     note: str | None = None
     edited: bool = Field(False, description="cuts changed by hand, so kept when the mapping is re-proposed")
+    base: int = Field(1000, description="the title number its first part has in the mapping (1000, 1100, ...)")
+
+    def part(self, k: int) -> int:
+        """The title number of its part ``k``."""
+        return self.base + k
+
+    def has_part(self, title_index: int) -> bool:
+        return self.base <= title_index < self.base + 100
 
 
 class TvPlan(BaseModel):
@@ -319,8 +327,30 @@ class TvPlan(BaseModel):
                           "the start episode (a guess), the cover scan's list, a pasted run order, or TheDiscDB")
     auto_confirmed: bool = False
     auto_evidence: list[str] = Field(default=[], description="why it was (or wasn't) confirmed without review")
-    split: TitleSplit | None = Field(None, description="a long title holding several episodes, split at chapters")
-    split_off: bool = Field(False, description="the user keeps the long title whole")
+    splits: list[TitleSplit] = Field(default=[], description="long titles each holding several episodes, split "
+                                                             "at chapters (in title order)")
+    split_off: bool = Field(False, description="the user keeps every long title whole")
+    whole: list[int] = Field(default=[], description="long titles the user keeps whole")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _one_split(cls, data):
+        # Plans saved before a disc could have more than one long title split.
+        if isinstance(data, dict) and "split" in data:
+            data = dict(data)
+            old = data.pop("split")
+            if old is not None and not data.get("splits"):
+                data["splits"] = [old]
+        return data
+
+    @property
+    def split(self) -> TitleSplit | None:
+        """The first long title split (most discs have one)."""
+        return self.splits[0] if self.splits else None
+
+    def split_of(self, title_index: int) -> TitleSplit | None:
+        """The split a title (the long one, or one of its parts) belongs to."""
+        return next((sp for sp in self.splits if sp.title_index == title_index or sp.has_part(title_index)), None)
 
 
 class Problem(BaseModel):
@@ -1235,6 +1265,7 @@ class TvSplitRequest(BaseModel):
     cuts: list[int] | None = Field(None, description="marks (0-based) where an episode starts")
     cut_at: float | None = Field(None, gt=0, description="also cut here (s), or at a break within 10 s of it")
     off: bool | None = Field(None, description="true keeps the long title whole, false splits it again")
+    title_index: int | None = Field(None, description="which long title (else the first)")
 
 
 class TvConfirmRequest(BaseModel):
