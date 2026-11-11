@@ -275,7 +275,7 @@ class MatchMixin:
             return
         if job.media == MediaKind.tv and job.tv and job.tv.show:
             # A show is proposed: the box may say it's another, and it has the picks.
-            if not job.tv.user_edited and job.id not in self._show_tasks:
+            if job.id not in self._show_tasks:
                 task = asyncio.create_task(self.fix_show_from_scan(job_id))
                 self._show_tasks[job_id] = task
                 task.add_done_callback(lambda _t, j=job_id: self._show_tasks.pop(j, None))
@@ -318,14 +318,14 @@ class ShowFromScanMixin:
     async def fix_show_from_scan(self, job_id: int, asked: bool = False) -> bool:
         """When the box's episode names are another show's (or another season's) than the
         one proposed, switch to it; then take the box's picks. True if anything changed.
-        A mapping changed by hand is left alone unless the user ``asked``."""
+        A show picked by hand is kept unless the user ``asked``."""
         job = self.db.get_job(job_id)
-        if not job or job.media != MediaKind.tv or not job.tv or job.state != JobState.review \
-                or job.identity or (job.tv.user_edited and not asked):
+        if not job or job.media != MediaKind.tv or not job.tv or job.state != JobState.review or job.identity:
             return False
         names = self._scan_episode_names(job)
         changed = False
-        if (tmdb := self._tmdb()):
+        # A show picked by hand stays; the box's picks still fill the titles not set by hand.
+        if (not job.tv.user_edited or asked) and (tmdb := self._tmdb()):
             try:
                 if len(names) >= 2:
                     changed = await self._switch_show(job_id, names, tmdb)
@@ -412,39 +412,45 @@ class ShowFromScanMixin:
         return True
 
     def apply_scan_picks(self, job_id: int, asked: bool = False) -> bool:
-        """Put the cover scan's episodes into the mapping, when every episode line it lists
-        matched a title (high or medium) with an episode of the show, or, when it lists
-        more than the disc holds, every episode title got one. Titles the mapping had as
-        episodes that the box doesn't list become extras. Review still confirms."""
+        """Put the cover scan's episodes into the mapping: each title it matched (high or
+        medium) with an episode of the show, unless the title was set by hand (or holds
+        an episode a title set by hand has); ``asked`` takes them all. The rest are left
+        for the review to pick. When the box placed every episode it lists (or every
+        episode title, listing more than the disc holds), titles mapped as episodes that
+        the box doesn't list become extras. Review still confirms."""
         job = self.db.get_job(job_id)
-        if not job or not job.tv or job.state != JobState.review or job.identity or (job.tv.user_edited and not asked):
+        if not job or not job.tv or job.state != JobState.review or job.identity:
             return False
         self.rematch(job_id)  # against the titles as they are now (a split title's parts)
         job = self.db.get_job(job_id)
+        plan = job.tv
         names = self._scan_episode_names(job)
         m = job.scan_match
         matches = m.matches if m else []
-        picks = {x.title_index: x for x in matches if x.kind == "episode" and x.episodes and x.confidence != "low"}
-        on_disc = {r.title_index for r in job.tv.mapping if r.role == TitleRole.episode}
-        every_title = len(names) > len(on_disc) >= 2 and on_disc <= set(picks)
-        if not names or (len(picks) < len(names) and not every_title):
-            picks = {}  # not every episode found: the mapping's own guess stands
+        hand = set() if asked else {r.title_index for r in plan.mapping if r.by_hand}
+        held = {(e.season, e.episode) for r in plan.mapping if r.title_index in hand for e in r.episodes}
+        picks = {x.title_index: x for x in matches if x.kind == "episode" and x.episodes and x.confidence != "low"
+                 and x.title_index not in hand and not {(e.season, e.episode) for e in x.episodes} & held}
+        on_disc = {r.title_index for r in plan.mapping if r.role == TitleRole.episode}
+        every_title = len(names) > len(on_disc) >= 2 and on_disc <= set(picks) | hand
+        whole = bool(names) and (len(picks) + len(hand & on_disc) >= len(names) or every_title)
         # A bonus episode of another show is ripped and filed, as an extra or in its show,
         # when its runtime agrees (high: an episode-length title isn't the 10-minute bonus).
-        bonus = {x.title_index: x for x in matches if x.bonus and x.confidence == "high" and x.title_index not in picks}
-        plan = job.tv
+        bonus = {x.title_index: x for x in matches if x.bonus and x.confidence == "high"
+                 and x.title_index not in picks and x.title_index not in hand}
         # When the box lists every episode (as many as it says it has), another title mapped
         # as one is something else; a listing that missed some leaves the rest alone.
         listing = self._listing_for(job)
         count = listing.details.episode_count if listing else None
-        complete = not count or len(names) >= count
+        complete = whole and (not count or len(names) >= count)
         stray = [r for r in plan.mapping if picks and complete and r.role == TitleRole.episode
-                 and r.title_index not in picks and r.title_index not in bonus]
-        # Short of some, a title the box didn't place keeps its guess, unless a title the
-        # box did place has that episode now: then it waits for one to be picked.
+                 and r.title_index not in picks and r.title_index not in bonus and r.title_index not in hand]
+        # A title the box didn't place keeps its guess, unless a title the box did place
+        # has that episode now: then it waits for one to be picked.
         claimed = {(e.season, e.episode) for x in picks.values() for e in x.episodes}
         taken = [r for r in plan.mapping if picks and not complete and r.role == TitleRole.episode
-                 and r.title_index not in picks and {(e.season, e.episode) for e in r.episodes} & claimed]
+                 and r.title_index not in picks and r.title_index not in hand
+                 and {(e.season, e.episode) for e in r.episodes} & claimed]
         todo = [r for r in plan.mapping if (r.title_index in picks and (r.role != TitleRole.episode
                 or r.episodes != picks[r.title_index].episodes))
                 or (r.title_index in bonus and (r.role != TitleRole.extra or r.episodes))]
@@ -454,6 +460,8 @@ class ShowFromScanMixin:
             if (x := picks.get(r.title_index)):
                 # The match says where it came from, beside the row.
                 r.role, r.episodes, r.note = TitleRole.episode, list(x.episodes), None
+                if asked:
+                    r.by_hand = False
             elif (x := bonus.get(r.title_index)):
                 b = x.bonus
                 r.role, r.episodes = TitleRole.extra, []
@@ -465,12 +473,14 @@ class ShowFromScanMixin:
         plan.from_scan = True
         if picks:
             plan.order_from = "box"
+        self._check_plan(job)
         self._save(job)
-        what = [f"{len(picks)} episodes"] if picks else []
+        what = [f"{len(picks)} episode{'' if len(picks) == 1 else 's'}"] if picks else []
         what += [f"the bonus episode {x.bonus.name}" for x in bonus.values()]
-        self._event(job, "info", f"Set {' and '.join(what) or 'the mapping'} from the cover scan; check and confirm")
+        left = len(names) - len(picks) - len(hand & on_disc) if names and not whole else 0
+        self._event(job, "info", f"Set {' and '.join(what) or 'the mapping'} from the cover scan"
+                    + (f"; {left} to pick by hand" if left > 0 else "") + "; check and confirm")
         self.rematch(job_id)
         return True
-
 
 MAX_SHOWS_CHECKED = 6
