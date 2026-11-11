@@ -30,6 +30,7 @@ from .identify import catalogue
 from .makemkv import files as mkfiles
 from .makemkv import runner
 from .models import (
+    TERMINAL_STATES,
     Candidate,
     ClashRequest,
     Collection,
@@ -47,6 +48,7 @@ from .models import (
     DriveNameUpdate,
     DriveStats,
     Filesystem,
+    FinishedPage,
     FolderRequest,
     FolderState,
     Hardware,
@@ -202,9 +204,20 @@ async def rescan(drive_id: str, request: Request):
 
 @api.get("/jobs", response_model=list[Job])
 async def list_jobs(request: Request, state: Annotated[list[JobState] | None, Query()] = None,
-                    limit: int = 100):
-    jobs = manager(request).db.list_jobs([s.value for s in state] if state else None, limit)
+                    limit: Annotated[int, Query(ge=1, le=1000)] = 100, before: int | None = None):
+    jobs = manager(request).db.list_jobs([s.value for s in state] if state else None, limit, before)
     return [j.public() for j in jobs]
+
+
+@api.get("/jobs/finished", response_model=FinishedPage)
+async def finished_jobs(request: Request, before: int | None = None,
+                        limit: Annotated[int, Query(ge=0, le=1000)] = 100):
+    """A page of the history older than job ``before``. A limit of 0 only counts them."""
+    db = manager(request).db
+    states = [s.value for s in TERMINAL_STATES]
+    jobs = db.list_jobs(states, limit, before) if limit else []
+    older = db.count_jobs(states, jobs[-1].id if jobs else before)
+    return FinishedPage(jobs=[j.public() for j in jobs], older=older)
 
 
 @api.post("/jobs/delete", response_model=DeleteJobsResult)

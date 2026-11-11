@@ -1534,6 +1534,12 @@ class DeleteJobsRequest(BaseModel):
                                                   "full disc backup's are kept)")
 
 
+class FinishedPage(BaseModel):
+    """Finished, failed and cancelled jobs, newest first, for paging back through the history."""
+    jobs: list[Job]
+    older: int = Field(description="finished jobs older than these (or than ``before``, if there are none)")
+
+
 class DeleteJobsResult(BaseModel):
     deleted: list[int]
     files_deleted: list[str] = Field(default=[], description="library files deleted with them")
