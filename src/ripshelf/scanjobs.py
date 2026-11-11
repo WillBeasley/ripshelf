@@ -91,27 +91,29 @@ class ScansMixin:
         p = self._scans_dir(job) / f"{sc.id}.{EXTS[sc.content_type]}"
         return (p, sc.content_type) if p.is_file() else None
 
-    async def scan_thumb(self, job_id: int, scan_id: str, large: bool = False) -> Path | None:
+    async def scan_thumb(self, job_id: int, scan_id: str, large: bool = False, whole: bool = False) -> Path | None:
         """A JPEG of the scan as it's used (trimmed and turned): a thumbnail, or a large
-        copy for looking at. Made when first asked for."""
+        copy for looking at, or with ``whole`` a large one not trimmed (to crop it by
+        hand). Made when first asked for."""
         found = self.scan_file(job_id, scan_id)
         if not found:
             return None
         job = self.db.get_job(job_id)
         sc = self._find(job, scan_id)
-        out = self._scans_dir(job) / f"{sc.id}.{'view' if large else 'thumb'}.jpg"
+        size = "whole" if whole else "view" if large else "thumb"
+        out = self._scans_dir(job) / f"{sc.id}.{size}.jpg"
         if not out.is_file():
-            await asyncio.to_thread(self._write_thumb, found[0], sc, out, large)
+            await asyncio.to_thread(self._write_thumb, found[0], sc, out, large or whole, whole)
         return out
 
     @staticmethod
-    def _write_thumb(src: Path, sc: CoverScan, out: Path, large: bool) -> None:
-        img = images.render(src.read_bytes(), sc.crop, sc.rotate)
+    def _write_thumb(src: Path, sc: CoverScan, out: Path, large: bool, whole: bool) -> None:
+        img = images.render(src.read_bytes(), None if whole else sc.crop, sc.rotate)
         out.write_bytes(images.thumbnail(img, images.VIEW_PX if large else images.THUMB_PX))
 
     def _forget_thumbs(self, job: JobRecord, sc: CoverScan) -> None:
         """The thumbnails made from the scan as it was trimmed and turned."""
-        for size in ("thumb", "view"):
+        for size in ("thumb", "view", "whole"):
             (self._scans_dir(job) / f"{sc.id}.{size}.jpg").unlink(missing_ok=True)
 
     # --- adding, changing and removing ----------------------------------------------
@@ -178,7 +180,10 @@ class ScansMixin:
             sc.page = body.page
         if body.rotate is not None:
             sc.rotate = body.rotate
-        if body.trim is not None:
+        if body.crop is not None:
+            sc.crop = images.crop_from_shown(body.crop, sc.width, sc.height, sc.rotate)
+            sc.crop_by_hand = True
+        elif body.trim is not None:
             if body.trim:
                 found = self.scan_file(job_id, scan_id)
                 if found:
@@ -186,8 +191,9 @@ class ScansMixin:
                     sc.crop = await asyncio.to_thread(lambda: images.trim_box(images.open_image(data)))
             else:
                 sc.crop = None
-        if sc.kind == "outside_full" and (sc.split is None or sc.split.auto) \
-                and (body.kind is not None or body.rotate is not None or body.trim is not None):
+            sc.crop_by_hand = False
+        if sc.kind == "outside_full" and (sc.split is None or sc.split.auto) and (
+                body.kind is not None or body.rotate is not None or body.trim is not None or body.crop is not None):
             sc.split = await self._find_spine(job_id, sc)
         self._forget_thumbs(job, sc)
         self._save_scans(job)

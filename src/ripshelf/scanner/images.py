@@ -135,6 +135,20 @@ def _out(fills: list[float], core: int) -> int:
     return edge
 
 
+def crop_from_shown(box: list[float], width: int, height: int, rotate: int) -> list[int]:
+    """A crop drawn on the whole scan as shown (turned clockwise by ``rotate``), as
+    fractions [left, top, right, bottom], in the original's pixels (``width`` by
+    ``height``, before the turn)."""
+    left, top, right, bottom = box
+    left, top, right, bottom = {
+        0: (left, top, right, bottom),
+        90: (top, 1 - right, bottom, 1 - left),
+        180: (1 - right, 1 - bottom, 1 - left, 1 - top),
+        270: (1 - bottom, left, 1 - top, right),
+    }[rotate]
+    return [round(left * width), round(top * height), round(right * width), round(bottom * height)]
+
+
 def render(data: bytes, crop: list[int] | None, rotate: int) -> Image.Image:
     img = open_image(data)
     if crop:
