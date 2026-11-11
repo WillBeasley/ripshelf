@@ -19,12 +19,12 @@ ripshelf only treats a disc as TV when its label looks like TV (a season or volu
 
 ## Reviewing the cuts
 
-The Review card (and the job's details) shows the title as a bar, with a tick at each chapter or break, the proposed cuts, and a frame from just after each cut.
+The Review card (under **More tools**, open while the cuts wait for a look) and the job's details show the title as a bar, with a tick at each chapter or break, the proposed cuts, and a frame from just after each cut.
 
 - **Click a tick** to cut there or not.
 - **Click anywhere else on the bar, or type a time** (like `25:10`) under it, to add a cut. It moves to the nearest black frames or silence within 10 seconds, or stays where you put it if there are none.
 - **Use these cuts** applies your changes. New cuts propose the episodes again, so get the cuts right first, then pick the episodes.
-- **Pick episodes** in the table as usual. The parts show as "Title 0, part 1", "part 2", and so on. Or paste the run order from the case, and the names go onto the parts in order. After you change the cuts the parts get the season's order again; **Use this** beside "The box says" puts the box's order back.
+- **Pick episodes** in the list as usual. The parts show where the title is, as "0.1", "0.2" and so on ("Title 0, part 1" in the picker). Or paste the run order from the case under **More tools**, and the names go onto the parts in order. After you change the cuts the parts get the season's order, and then the box's, when a cover scan lists the episodes.
 - **Keep it as one title** turns the split off, if the title really is one long episode.
 
 ## The split
