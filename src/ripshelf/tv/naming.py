@@ -23,11 +23,21 @@ def show_folder(tv: Path, show: Show) -> Path:
 
 
 def episode_path(tv: Path, show: Show, eps: list[Episode]) -> Path:
+    """One title's file. Several episodes in a run of one season get a range
+    (S01E04-E05), which media servers read as each of them; any others (a compilation's
+    S01E02 with S03E07) can't be said in a range, so the file takes the first one's code
+    and names the rest with theirs."""
+    eps = sorted(eps, key=lambda e: (e.season, e.episode))
     first = eps[0]
     code = f"S{first.season:02d}E{first.episode:02d}"
-    if len(eps) > 1:
+    run = all(b.season == first.season and b.episode == a.episode + 1 for a, b in zip(eps, eps[1:], strict=False))
+    if len(eps) > 1 and run:
         code += f"-E{eps[-1].episode:02d}"
-    names = " & ".join(e.name for e in eps if e.name)
+        names = " & ".join(e.name for e in eps if e.name)
+    else:
+        names = " & ".join(
+            [*([first.name] if first.name else []),
+             *(f"S{e.season:02d}E{e.episode:02d}" + (f" {e.name}" if e.name else "") for e in eps[1:])])
     stem = f"{show.name} - {code}" + (f" - {names}" if names else "")
     # Keep the S01E01 code even when a long name has to be cut.
     stem = safe_name(stem)
