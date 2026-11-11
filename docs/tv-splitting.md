@@ -6,6 +6,8 @@ Most TV discs have one title per episode. Some, mostly older DVDs, put every epi
 
 Once the show is known, ripshelf looks for one title that is at least **1.8 times** the season's typical episode runtime, on a disc where no other title is one episode long. If it finds one, that title is marked to be split, and the disc **always waits for review**: nothing is cut or copied until you confirm.
 
+**A [cover scan](cover-scans.md) says more.** The box gives how many episodes there are and how long they run (printed runtimes, or its total running time over its count), and episode lists often give the broadcast slot instead (12 minutes for episodes that run 10). Once the box is read, ripshelf goes by it: when the long titles, at the box's runtime, and the titles one episode long add up to the box's count, **every** long title is split. A whole series of 13 on one DVD, as 9 in one title, 1 on its own and 3 in a 30-minute title, is split into 9 and 3 parts. Past the longest, a long title needs a chapter per episode to count, so a 30-minute extra in one piece stays an extra.
+
 ripshelf only treats a disc as TV when its label looks like TV (a season or volume number) and it has a title of 40 minutes or more. Otherwise, use **This is a TV disc** on the Review card.
 
 ## How the cuts are found
@@ -16,6 +18,10 @@ ripshelf only treats a disc as TV when its label looks like TV (a season or volu
    - **A season disc** (a run of episodes): the parts are fitted in order, to the runtimes of the episodes starting at the disc's first one, and each part gets its episode.
 4. **Which part is which episode.** The parts usually run alike, so their runtimes can't tell them apart, and discs often hold the episodes in another order than the season's. When a [cover scan](cover-scans.md) lists the episodes, the parts take the box's order: the first part gets the first episode listed, and so on. A box listing more episodes than the disc holds (all 13 of the season for a disc of 10) lists the disc's first. Without a scan the parts keep the season's order, and the Review card says that's a guess: check the frames, scan the box, or paste its run order.
    - **A compilation** (episodes from anywhere in the show): each part is fitted to the show's typical runtime, and starts with no episode picked.
+
+## On the Review card
+
+Each long title being split has a panel at the top of the card: "Title 0 · 1:31:37 looks like 9 episodes in one." Until it's ripped the panel says so, with the rip's progress, and the box's names wait: they go on the parts, in the box's order, as soon as the parts are cut. Then the panel says how many parts it was cut into and how sure, with **Check the cuts** (open when it isn't sure), and the parts are rows in the list like any title, numbered by the title they're from (0.1, 0.2, ...). **Keep it as one title** keeps that title whole; the others are still split.
 
 ## Reviewing the cuts
 
