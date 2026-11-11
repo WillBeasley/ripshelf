@@ -1639,7 +1639,9 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 titles = json.loads((meta / "disc.json").read_text(encoding="utf-8")).get("titles", {})
             except (OSError, ValueError):
                 titles = {}
-            paths += [folder / t["file"] for t in titles.values() if isinstance(t, dict) and t.get("file")]
+            # Written with "/" (a record from a Windows install before that has "\\"), so either is read.
+            paths += [folder / t["file"].replace("\\", "/") for t in titles.values()
+                      if isinstance(t, dict) and t.get("file")]
             paths += [p for p in meta.rglob("*") if p.is_file()] if meta.is_dir() else []
         elif job.media == MediaKind.movie and job.mode != "backup" and job.destination:
             paths += [Path(job.destination), *(Path(p) for p in job.filed_extras.values())]

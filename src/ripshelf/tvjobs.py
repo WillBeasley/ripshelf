@@ -1269,7 +1269,7 @@ class TvMixin:
                                         actions=["retry"]))
                 return
             done_before += src.stat().st_size
-            copied[idx] = {"file": str(dest.relative_to(naming.show_folder(self.s.tv, plan.show))),
+            copied[idx] = {"file": dest.relative_to(naming.show_folder(self.s.tv, plan.show)).as_posix(),
                            "sha256": sha,
                            "episodes": [f"S{e.season:02d}E{e.episode:02d}" for e in eps] if eps else [],
                            "names": [e.name for e in eps] if eps else []}
