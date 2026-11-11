@@ -113,7 +113,7 @@ def score_show(show: Show, names: list[str], episode_s: float | None) -> Show:
         parts.append((W_RUNTIME, rt))
         ok = True if rt >= 0.99 else (None if rt > 0.5 else False)
         evidence.append(Evidence(ok=ok, text=f"Episodes on the disc are about {round(minutes)} min; "
-                                             f"TMDB says {show.episode_runtime} min"))
+                                             f"{providers.label(show.source)} says {show.episode_runtime} min"))
     score = sum(w * v for w, v in parts) / sum(w for w, _ in parts)
     reasons = []
     for t in filter(None, (show.name, show.original_name)):

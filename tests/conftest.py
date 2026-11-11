@@ -115,6 +115,10 @@ def settings(tmp_path: Path, monkeypatch) -> Settings:
         fake_hardware=True, makemkvcon=f"{sys.executable} -m ripshelf.dev.fake_makemkvcon",
         poll_interval_s=0.2, scan_timeout_s=30, tmdb_api_key=None, makemkv_key=None,
         thediscdb_contribute_url="https://discdb.test", setup_complete=True,
+        # TVmaze needs no key, so a test without a TMDB key would search the real site;
+        # tests that want TV found without TMDB switch it on (with respx).
+        metadata_providers={"tv": [{"name": "thediscdb", "enabled": True}, {"name": "tmdb", "enabled": True},
+                                   {"name": "tvdb", "enabled": True}, {"name": "tvmaze", "enabled": False}]},
     )
     for d in (s.data_dir, s.scratch_dir, s.library_dir, s.jobs_dir, s.makemkv_dir):
         d.mkdir(parents=True, exist_ok=True)

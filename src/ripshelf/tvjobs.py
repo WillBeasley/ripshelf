@@ -50,11 +50,12 @@ from .models import (
     TitleRole,
     TitleSplit,
     TvPlan,
+    parse_show_key,
 )
 from .providers import thediscdb
 from .providers.tvmaze import Tvmaze, TvmazeError
+from .tv import keyless, naming, shape, tmdb_tv, verify
 from .tv import mapping as tvmap
-from .tv import naming, shape, tmdb_tv, verify
 from .tv import split as tvsplit
 from .tv.labels import TvLabel, parse_tv_label, split_show_name
 from .tv.tvdb import Tvdb, TvdbError
@@ -63,6 +64,9 @@ if TYPE_CHECKING:
     from .db import JobRecord
 
 log = logging.getLogger(__name__)
+
+# What a show or episode lookup can fail with.
+LOOKUP_ERRORS = (TmdbError, TvdbError, TvmazeError)
 
 # When a compilation disc is named after an episode ("KITE_TRAM"), that episode
 # is usually the first title.
@@ -148,12 +152,20 @@ class TvMixin:
         return " / ".join(providers.label(n) for n in providers.enabled(self.s, "tv") if n != "thediscdb") \
             or "No show search"
 
-    async def _find_shows(self, tmdb: Tmdb, name: str, episode_s: float | None) -> list[Show]:
-        """Shows for ``name`` from the providers in Settings' "TV shows" list, in order."""
+    def _keyless_sources(self) -> list[str]:
+        """The show searches there are without a TMDB key (TheTVDB, TVmaze), in order."""
+        return [n for n in providers.enabled(self.s, "tv") if n in keyless.SOURCES]
+
+    async def _find_shows(self, tmdb: Tmdb | None, name: str, episode_s: float | None) -> list[Show]:
+        """Shows for ``name`` from the providers in Settings' "TV shows" list, in order.
+        Without a TMDB key, TheTVDB's or TVmaze's shows, keyed by their own ids."""
         sources = [n for n in providers.enabled(self.s, "tv") if n != "thediscdb"]
         tvdb = self._tvdb() if "tvdb" in sources else None
         maze = Tvmaze() if "tvmaze" in sources else None
         try:
+            if not tmdb:
+                return await keyless.find_shows(name, episode_s, sources=self._keyless_sources(), tvdb=tvdb,
+                                                tvmaze=maze)
             return await tmdb_tv.find_shows(tmdb, name, episode_s, tvdb=tvdb, sources=sources, tvmaze=maze) \
                 if sources else []
         finally:
@@ -161,14 +173,24 @@ class TvMixin:
                 if c:
                     await c.aclose()
 
-    async def _disc_match_show(self, tmdb: Tmdb, match: DiscMatch, episode_s: float | None) -> Show | None:
-        """The show a disc database says this disc is, from TMDB, scored as certain."""
-        tmdb_id = match.tmdb_id or await tmdb.find_id("tv", match.tvdb_id, match.imdb_id)
-        if not tmdb_id:
-            return None
-        show = tmdb_tv.score_show(tmdb_tv.to_show({**await tmdb.tv_show(tmdb_id), "id": tmdb_id}),
-                                  [match.title], episode_s)
-        show.excluded, show.score, show.providers = False, 1.0, ["thediscdb", "tmdb"]
+    async def _disc_match_show(self, tmdb: Tmdb | None, match: DiscMatch, episode_s: float | None) -> Show | None:
+        """The show a disc database says this disc is, from TMDB (or without a key, TVmaze
+        or TheTVDB), scored as certain."""
+        if tmdb:
+            tmdb_id = match.tmdb_id or await tmdb.find_id("tv", match.tvdb_id, match.imdb_id)
+            if not tmdb_id:
+                return None
+            show = tmdb_tv.to_show({**await tmdb.tv_show(tmdb_id), "id": tmdb_id})
+        else:
+            maze = Tvmaze()
+            try:
+                show = await keyless.disc_match_show(match, self._keyless_sources(), maze)
+            finally:
+                await maze.aclose()
+            if not show:
+                return None
+        show = tmdb_tv.score_show(show, [match.title], episode_s)
+        show.excluded, show.score, show.providers = False, 1.0, ["thediscdb", show.source]
         show.evidence.insert(0, Evidence(ok=True, text=f"TheDiscDB knows this disc as {thediscdb.summary(match)}"))
         return show
 
@@ -186,7 +208,8 @@ class TvMixin:
         if plan.season is None and named.season is not None:
             plan.season, plan.disc_number = named.season, plan.disc_number or named.disc or named.volume
         tmdb = self._tmdb()
-        found = await self._catalogue_lookup(job) if tmdb else None
+        searchable = bool(tmdb or self._keyless_sources())
+        found = await self._catalogue_lookup(job) if searchable else None
         if found and found.names:
             name = found.names[0]
         hints = await self.scan_hints(job)
@@ -195,8 +218,9 @@ class TvMixin:
             self._event(job, "info", f"Searching for the show the cover scan names: {name}")
         match = job.disc_match if job.disc_match and job.disc_match.media == MediaKind.tv \
             and "thediscdb" in providers.enabled(self.s, "tv") else None
-        if not tmdb:
-            self._event(job, "warning", "No TMDB API key set, so pick the show by hand")
+        if not searchable:
+            self._event(job, "warning", "No TV show search is on (a TMDB key, or TVmaze or TheTVDB in "
+                                        "Settings → Identify), so pick the show by hand")
         elif not name and not match:
             self._event(job, "warning", "The disc label is generic; search for the show by hand")
         else:
@@ -213,12 +237,13 @@ class TvMixin:
                 if match:
                     try:
                         known = await self._disc_match_show(tmdb, match, typical)
-                    except TmdbError as e:
-                        self._event(job, "warning", f"TheDiscDB's show could not be looked up on TMDB: {e}")
+                    except LOOKUP_ERRORS as e:
+                        self._event(job, "warning", f"TheDiscDB's show could not be looked up on "
+                                                    f"{'TMDB' if tmdb else 'TVmaze or TheTVDB'}: {e}")
                 job = self.db.get_job(job_id)  # the rip may have saved while TMDB answered
                 plan = job.tv or plan
                 if known:
-                    shows = [known, *(x for x in shows if x.tmdb_id != known.tmdb_id)]
+                    shows = [known, *(x for x in shows if x.key != known.key)]
                     seasons = [t.season for t in match.titles if t.kind == "episode" and t.season is not None]
                     if seasons:
                         plan.season = max(set(seasons), key=seasons.count)
@@ -230,10 +255,11 @@ class TvMixin:
                     await self._propose(job.id, best, plan.season, plan.disc_number, None, None, tmdb)
                     job = self.db.get_job(job_id)
                     plan = job.tv
-            except TmdbError as e:
+            except LOOKUP_ERRORS as e:
                 self._event(job, "warning", str(e))
             finally:
-                await tmdb.aclose()
+                if tmdb:
+                    await tmdb.aclose()
         job = self.db.get_job(job_id)
         job.tv = plan if job.tv is None else job.tv
         self._save(job)
@@ -247,7 +273,7 @@ class TvMixin:
 
         With the disc number known, only the disc just before it counts. Disc 1 ripped
         after disc 2 starts at episode 1, not after disc 2's episodes."""
-        c = self.db.collection_for_show(show.tmdb_id)
+        c = self.db.collection_for_show(show.key)
         if not c:
             return season, None, None
         # Only what's still in the library counts: files deleted by hand don't carry on.
@@ -271,7 +297,7 @@ class TvMixin:
         return last_season, disc_no, (max(mapped) + 1 if mapped else None)
 
     async def _propose(self, job_id: int, show: Show, season: int | None, disc_number: int | None,
-                       start_episode: int | None, compilation: bool | None, tmdb: Tmdb) -> None:
+                       start_episode: int | None, compilation: bool | None, tmdb: Tmdb | None) -> None:
         """Fill the job's TV plan for ``show``, with episodes and a proposed mapping."""
         job = self.db.get_job(job_id)
         plan = job.tv or TvPlan()
@@ -287,14 +313,14 @@ class TvMixin:
         if compilation is None:
             compilation = False
             if season is None and remainder:
-                every = await tmdb_tv.all_episodes(tmdb, show)
+                every = await self._all_episodes(show, tmdb)
                 hit = max(every, key=lambda e: title_similarity(remainder, e.name), default=None)
                 if hit and title_similarity(remainder, hit.name) >= COMPILATION_NAME_MIN:
                     compilation = True
                     notes.append(f"Disc is named after “{hit.name}” (S{hit.season:02d}E{hit.episode:02d}), "
                                  "with no season in the label, so a compilation")
         if compilation:
-            episodes = await tmdb_tv.all_episodes(tmdb, show)
+            episodes = await self._all_episodes(show, tmdb)
             plan.compilation, plan.season, plan.start_episode = True, None, None
             plan.season_poster_url = None
             plan.episodes = episodes
@@ -317,8 +343,8 @@ class TvMixin:
             s_guess, disc_guess, start_guess = self._next_for(show, season, disc_number, job_id)
             season = season if season is not None else (s_guess or 1)
             disc_number = disc_number or disc_guess
-            episodes, season_poster = await tmdb_tv.season_details(tmdb, show.tmdb_id, season)
-            episodes, source = await self._episode_list(show, season, episodes, tmdb)
+            episodes, season_poster, own = await self._season_details(show, season, tmdb)
+            episodes, source = await self._episode_list(show, season, episodes, tmdb, own)
             if source:
                 notes.append(source)
             if not episodes:
@@ -382,7 +408,7 @@ class TvMixin:
         match = job.disc_match
         if not (match and match.media == MediaKind.tv and "thediscdb" in providers.enabled(self.s, "tv")):
             return None
-        if show.tmdb_id != match.tmdb_id and not (match.tvdb_id and show.tvdb_id == match.tvdb_id):
+        if not _same_show(show, match):
             return None
         said = {t.scan_index: t for t in match.titles if t.scan_index is not None}
         if plan.split:  # mapped through its parts (see _plan_split)
@@ -429,7 +455,7 @@ class TvMixin:
         match = job.disc_match
         if not (match and match.media == MediaKind.tv and "thediscdb" in providers.enabled(self.s, "tv")):
             return {}
-        if show.tmdb_id != match.tmdb_id and not (match.tvdb_id and show.tvdb_id == match.tvdb_id):
+        if not _same_show(show, match):
             return {}
         return {t.scan_index: t for t in match.titles if t.scan_index is not None and t.kind == "episode"
                 and t.season == plan.season and t.episode}
@@ -690,18 +716,51 @@ class TvMixin:
         self._save(job)
         return True
 
+    async def _season_details(self, show: Show, season: int,
+                              tmdb: Tmdb | None) -> tuple[list[Episode], str | None, str | None]:
+        """(episodes, season poster, note on where they came from) from the show's own
+        provider. The note is None for TMDB."""
+        if show.source == "tmdb":
+            if not tmdb:
+                raise TmdbError("No TMDB API key set")
+            return (*await tmdb_tv.season_details(tmdb, show.tmdb_id, season), None)
+        tvdb, maze = self._tvdb(), Tvmaze()
+        try:
+            got, what = await keyless.season_episodes(show, season, tvdb, maze, self.s.tvdb_episode_order == "dvd")
+        finally:
+            for c in (tvdb, maze):
+                if c:
+                    await c.aclose()
+        return got, None, f"Episodes from {providers.label(show.source)}, {what}" if got else None
+
+    async def _all_episodes(self, show: Show, tmdb: Tmdb | None) -> list[Episode]:
+        """Every episode of the show, from its own provider (compilations)."""
+        if show.source == "tmdb":
+            if not tmdb:
+                raise TmdbError("No TMDB API key set")
+            return await tmdb_tv.all_episodes(tmdb, show)
+        tvdb, maze = self._tvdb(), Tvmaze()
+        try:
+            return await keyless.all_episodes(show, tvdb, maze, self.s.tvdb_episode_order == "dvd")
+        finally:
+            for c in (tvdb, maze):
+                if c:
+                    await c.aclose()
+
     async def _episode_list(self, show: Show, season: int, episodes: list[Episode],
-                            tmdb: Tmdb) -> tuple[list[Episode], str | None]:
+                            tmdb: Tmdb | None, own: str | None = None) -> tuple[list[Episode], str | None]:
         """The season's episodes from the first provider in Settings' "TV episodes" list
-        that has them; TMDB's ``episodes`` when none does. Returns the episodes and a note
-        on where they came from (None for TMDB, as asked)."""
+        that has them; ``episodes`` (from the show's own provider) when none does. Returns
+        the episodes and a note on where they came from (``own``, None for TMDB, as asked)."""
         notes: list[str] = []
-        # TMDB is in hand here (it found the show), whatever Settings says about its key.
+        # The show's own provider is in hand here (it found the show), whatever Settings says about its key.
         order = [r["name"] for r in providers.lists(self.s)["episodes"]
-                 if r["enabled"] and (r["name"] == "tmdb" or providers.configured(self.s, r["name"]))]
+                 if r["enabled"] and (r["name"] == show.source or providers.configured(self.s, r["name"]))]
         for name in order:
-            if name == "tmdb":
+            if name == show.source:
                 break
+            if name == "tmdb":
+                continue  # TMDB's episodes need a TMDB show
             try:
                 got, what = await (self._tvdb_episodes if name == "tvdb" else self._tvmaze_episodes)(
                     show, season, tmdb)
@@ -718,14 +777,17 @@ class TvMixin:
                     if e.runtime is None and e.episode in tm:
                         e.runtime = tm[e.episode].runtime
             return got, "; ".join([*notes, what])
-        return episodes, "; ".join([*notes, "using TMDB's episodes"]) if notes else None
+        if not notes:
+            return episodes, own
+        return episodes, "; ".join([*notes, own or f"using {providers.label(show.source)}'s episodes"])
 
-    async def _tvdb_episodes(self, show: Show, season: int, tmdb: Tmdb) -> tuple[list[Episode], str]:
+    async def _tvdb_episodes(self, show: Show, season: int, tmdb: Tmdb | None) -> tuple[list[Episode], str]:
         tvdb = self._tvdb()
         try:
             await self._external_ids(show, tmdb)
             if show.tvdb_id is None:
-                return [], "TheTVDB not used, because TMDB has no TheTVDB id for this show"
+                return [], (f"TheTVDB not used, because {providers.label(show.source)} has no TheTVDB id "
+                            "for this show")
             dvd = self.s.tvdb_episode_order == "dvd"
             what = "DVD order" if dvd else "aired order"
             got = await tvdb.episodes(show.tvdb_id, season, "dvd" if dvd else "default")
@@ -737,21 +799,24 @@ class TvMixin:
         finally:
             await tvdb.aclose()
 
-    async def _tvmaze_episodes(self, show: Show, season: int, tmdb: Tmdb) -> tuple[list[Episode], str]:
+    async def _tvmaze_episodes(self, show: Show, season: int, tmdb: Tmdb | None) -> tuple[list[Episode], str]:
         maze = Tvmaze()
         try:
-            await self._external_ids(show, tmdb)
-            found = await maze.lookup(show.tvdb_id, show.imdb_id)
-            if not found:
-                return [], "TVmaze doesn't have this show"
-            got = await maze.episodes(found["id"], season)
+            maze_id = show.tvmaze_id
+            if not maze_id:
+                await self._external_ids(show, tmdb)
+                found = await maze.lookup(show.tvdb_id, show.imdb_id)
+                if not found:
+                    return [], "TVmaze doesn't have this show"
+                maze_id = found["id"]
+            got = await maze.episodes(maze_id, season)
             return got, ("Episodes from TVmaze, aired order" if got else f"TVmaze has no season {season}")
         finally:
             await maze.aclose()
 
-    async def _external_ids(self, show: Show, tmdb: Tmdb) -> None:
-        """Fill in the show's TheTVDB and IMDb ids from TMDB, when there is no TheTVDB id."""
-        if show.tvdb_id is None:
+    async def _external_ids(self, show: Show, tmdb: Tmdb | None) -> None:
+        """Fill in a TMDB show's TheTVDB and IMDb ids from TMDB, when there is no TheTVDB id."""
+        if show.tvdb_id is None and show.tmdb_id and tmdb:
             known = tmdb_tv.to_show({**await tmdb.tv_show(show.tmdb_id), "id": show.tmdb_id})
             show.tvdb_id = show.tvdb_id or known.tvdb_id
             show.imdb_id = show.imdb_id or known.imdb_id
@@ -804,37 +869,62 @@ class TvMixin:
             raise ValueError("the episode mapping can only change while the job waits for review")
         return job
 
-    async def tv_propose(self, job_id: int, show_tmdb_id: int, season: int | None, disc_number: int | None,
+    async def tv_propose(self, job_id: int, show_key: str, season: int | None, disc_number: int | None,
                          start_episode: int | None, compilation: bool) -> JobRecord:
+        """Propose a mapping for the show with this key ("tmdb:1399", "tvmaze:82"; a bare
+        number is a TMDB id)."""
+        source, show_id = parse_show_key(str(show_key))
         job = self._tv_job(job_id)
         if job.media != MediaKind.tv:
             await self.set_media(job_id, MediaKind.tv)
         self._mark_edited(job_id)
         tmdb = self._tmdb()
-        if not tmdb:
+        if source == "tmdb" and not tmdb:
             raise ValueError("No TMDB API key set")
         try:
-            known = next((s for s in (job.tv.candidates if job.tv else []) if s.tmdb_id == show_tmdb_id), None)
-            show = tmdb_tv.to_show(await tmdb.tv_show(show_tmdb_id))
+            known = next((s for s in (job.tv.candidates if job.tv else []) if s.key == f"{source}:{show_id}"), None)
+            show = await self._show_by_id(source, show_id, tmdb)
             if known:
                 show.score, show.evidence, show.providers = known.score, known.evidence, known.providers
             await self._propose(job_id, show, season, disc_number, start_episode, compilation, tmdb)
-        except TmdbError as e:
+        except LOOKUP_ERRORS as e:
             raise ValueError(str(e)) from None
         finally:
-            await tmdb.aclose()
+            if tmdb:
+                await tmdb.aclose()
         return self.db.get_job(job_id)
+
+    async def _show_by_id(self, source: str, show_id: int, tmdb: Tmdb | None) -> Show:
+        if source == "tmdb":
+            return tmdb_tv.to_show(await tmdb.tv_show(show_id))
+        if source == "tvmaze":
+            maze = Tvmaze()
+            try:
+                found = await maze.show(show_id)
+            finally:
+                await maze.aclose()
+            if not found:
+                raise TvmazeError("TVmaze has no such show")
+            return keyless.tvmaze_show(found)
+        tvdb = self._tvdb()
+        if not tvdb:
+            raise TvdbError("No TheTVDB API key set")
+        try:
+            return keyless.tvdb_show(await tvdb.series(show_id), tvdb.language)
+        finally:
+            await tvdb.aclose()
 
     async def tv_search(self, query: str) -> list[Show]:
         tmdb = self._tmdb()
-        if not tmdb:
-            raise ValueError("No TMDB API key set")
+        if not tmdb and not self._keyless_sources():
+            raise ValueError("No TV show search is on: set a TMDB key, or switch TVmaze on in Settings → Identify")
         try:
             return await self._find_shows(tmdb, query, None)
-        except TmdbError as e:
+        except LOOKUP_ERRORS as e:
             raise ValueError(str(e)) from None
         finally:
-            await tmdb.aclose()
+            if tmdb:
+                await tmdb.aclose()
 
     async def tv_match_text(self, job_id: int, text: str) -> JobRecord:
         """Map titles, in disc order, to episodes named in pasted text (a case's run order)."""
@@ -849,14 +939,15 @@ class TvMixin:
         episodes = plan.episodes
         if not plan.compilation:
             tmdb = self._tmdb()
-            if not tmdb:
+            if not tmdb and plan.show.source == "tmdb":
                 raise ValueError("No TMDB API key set")
             try:
-                episodes = await tmdb_tv.all_episodes(tmdb, plan.show)
-            except TmdbError as e:
+                episodes = await self._all_episodes(plan.show, tmdb)
+            except LOOKUP_ERRORS as e:
                 raise ValueError(str(e)) from None
             finally:
-                await tmdb.aclose()
+                if tmdb:
+                    await tmdb.aclose()
         job = self.db.get_job(job_id)
         plan = job.tv
         matches = tvmap.match_names(names, episodes)
@@ -1004,7 +1095,7 @@ class TvMixin:
             job.checking_from = None
             self._set_state(job, JobState.review, "Confirmed with the disc out, because every title needed is ripped")
         show = plan.show
-        job.identity = Candidate(source="tmdb", tmdb_id=show.tmdb_id, title=show.name, year=show.year,
+        job.identity = Candidate(source=show.source, tmdb_id=show.tmdb_id, title=show.name, year=show.year,
                                  poster_url=show.poster_url, score=show.score)
         job.identity_source = source
         plan.auto_confirmed = source == "auto"
@@ -1077,7 +1168,7 @@ class TvMixin:
     async def _use_tv_preset(self, job: JobRecord, p: Preset) -> bool:
         """Map the episodes of the show (and season, disc) the user named before the scan finished."""
         tmdb = self._tmdb()
-        if not tmdb:
+        if not tmdb and p.show.source == "tmdb":
             self._event(job, "warning", f"No TMDB API key set, so {p.show.name}, the show you picked, can't be looked up")
             self._save(job)
             return False
@@ -1092,10 +1183,11 @@ class TvMixin:
         try:
             await self._propose(job.id, show, p.season, p.disc_number, p.start_episode,
                                 None if p.season is None else False, tmdb)
-        except TmdbError as e:
+        except LOOKUP_ERRORS as e:
             self._event(job, "warning", str(e))
         finally:
-            await tmdb.aclose()
+            if tmdb:
+                await tmdb.aclose()
         job = self.db.get_job(job.id)
         if job.tv.show and p.season is not None and (p.disc_number or p.start_episode):
             job.tv.label_placed = True  # placed by the user, which is as good as the label
@@ -1229,7 +1321,7 @@ class TvMixin:
         known = {(e.season, e.episode): e for e in plan.episodes}
         out = []
         specials_taken = {e.episode for e in plan.episodes if e.season == 0}
-        c = self.db.collection_for_show(show.tmdb_id)
+        c = self.db.collection_for_show(show.key)
         if c:
             specials_taken |= {e.episode for d in c.discs if d.job_id != job.id for e in d.episodes if e.season == 0}
         next_special = max(specials_taken, default=0) + 1
@@ -1347,7 +1439,8 @@ class TvMixin:
                       "name": self.s.drive_name(job.drive_id), "serial": d.hw.serial if d else None},
             "ripped_at": job.updated_at.isoformat(), "makemkv_version": job.makemkv_version,
             "ripshelf_version": __version__,
-            "show": {"tmdb_id": plan.show.tmdb_id, "name": plan.show.name, "year": plan.show.year},
+            "show": {"tmdb_id": plan.show.tmdb_id, "name": plan.show.name, "year": plan.show.year,
+                     **({} if plan.show.source == "tmdb" else {"key": plan.show.key})},
             "season": plan.season, "disc_number": plan.disc_number, "compilation": plan.compilation,
             "order_verified": plan.order_verified, "order_note": plan.order_note,
             "transcode": job.transcode.model_dump() if job.transcode else None,
@@ -1364,7 +1457,7 @@ class TvMixin:
 
     def _add_to_collection(self, job: JobRecord) -> None:
         plan = job.tv
-        c = self.db.collection_for_show(plan.show.tmdb_id) or Collection(id=0, show=plan.show, updated_at=job.updated_at)
+        c = self.db.collection_for_show(plan.show.key) or Collection(id=0, show=plan.show, updated_at=job.updated_at)
         c.show = plan.show
         c.discs = [d for d in c.discs if d.job_id != job.id]
         c.discs.append(CollectionDisc(
@@ -1454,6 +1547,16 @@ class TvMixin:
 
 VIDEO_EXTS = {".mkv", ".mp4", ".m4v", ".avi", ".ts", ".m2ts"}
 EPISODE_CODE = re.compile(r"S(\d{1,3})E(\d{1,4})(?:-?E(\d{1,4}))?", re.I)
+
+
+def _same_show(show: Show, match: DiscMatch) -> bool:
+    """Is the disc database's show this one? By TMDB or TheTVDB id, or for a show found
+    without TMDB, by IMDb id too."""
+    if show.tmdb_id is not None and show.tmdb_id == match.tmdb_id:
+        return True
+    if match.tvdb_id and show.tvdb_id == match.tvdb_id:
+        return True
+    return bool(show.source != "tmdb" and match.imdb_id and show.imdb_id == match.imdb_id)
 
 
 def _label_remainder(label_show: str, show_name: str) -> str | None:

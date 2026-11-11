@@ -76,6 +76,7 @@ def keyed(settings):
 
 
 def test_default_lists_and_what_is_used(settings):
+    settings.metadata_providers = {}  # the defaults, not the tests' (TVmaze off)
     lists = providers.lists(settings)
     assert [r["name"] for r in lists["movie"]] == ["thediscdb", "tmdb", "omdb"]
     assert [r["name"] for r in lists["tv"]] == ["thediscdb", "tmdb", "tvdb", "tvmaze"]

@@ -1,8 +1,9 @@
 """TheTVDB (v4 API), a second source for shows and episodes.
 
-TMDB stays the show's identity (collections and the library are keyed by its
-id). TheTVDB adds two things, shows TMDB's search misses (TheTVDB results carry
-their TMDB id), and episode lists in aired or DVD order. DVD order follows the
+With a TMDB key, TMDB stays the show's identity (collections and the library are
+keyed by its id). TheTVDB adds two things, shows TMDB's search misses (TheTVDB
+results carry their TMDB id), and episode lists in aired or DVD order. Without
+a TMDB key, a show found here is keyed by its TheTVDB id (see tv/keyless.py). DVD order follows the
 discs, but Emby names episodes in aired order unless the library is set to DVD
 order, so aired is the default.
 """
@@ -92,6 +93,22 @@ class Tvdb:
         data = (await self._get("/search", query=query, type="series")).get("data")
         return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
 
+    async def series(self, series_id: int) -> dict:
+        """A series' record, shaped like a search result (its name in the TMDB language
+        when TheTVDB has a translation)."""
+        data = (await self._get(f"/series/{series_id}")).get("data")
+        if not isinstance(data, dict):
+            raise TvdbError("TheTVDB has no such series")
+        out = {"tvdb_id": series_id, "name": data.get("name"), "year": data.get("year") or data.get("firstAired"),
+               "image_url": data.get("image")}
+        try:
+            tr = (await self._get(f"/series/{series_id}/translations/{self.language}")).get("data")
+            if isinstance(tr, dict) and isinstance(tr.get("name"), str):
+                out["translations"] = {self.language: tr["name"]}
+        except TvdbError:
+            pass
+        return out
+
     async def episodes(self, series_id: int, season: int, order: str = "default") -> list[Episode]:
         """A season's episodes in ``order`` ("default" is aired order, or "dvd"), named in
         the TMDB language when TheTVDB has a translation."""
@@ -103,10 +120,22 @@ class Tvdb:
             raw = await self._episode_pages(f"/series/{series_id}/episodes/{order}", season)
         return to_episodes(raw, season)
 
-    async def _episode_pages(self, path: str, season: int) -> list[dict]:
+    async def all_episodes(self, series_id: int, order: str = "default") -> list[Episode]:
+        """Every numbered episode of every season, specials last (for compilations)."""
+        try:
+            raw = await self._episode_pages(f"/series/{series_id}/episodes/{order}/{self.language}", None)
+        except TvdbError:
+            raw = []
+        if not raw:
+            raw = await self._episode_pages(f"/series/{series_id}/episodes/{order}", None)
+        seasons = {e.get("seasonNumber") for e in raw if isinstance(e.get("seasonNumber"), int)}
+        out = [e for s in seasons for e in to_episodes(raw, s)]
+        return sorted(out, key=lambda e: (e.season == 0, e.season, e.episode))
+
+    async def _episode_pages(self, path: str, season: int | None) -> list[dict]:
         out: list[dict] = []
         for page in range(MAX_PAGES):
-            data = await self._get(path, season=season, page=page)
+            data = await self._get(path, **({} if season is None else {"season": season}), page=page)
             body = data.get("data")
             eps = body.get("episodes") if isinstance(body, dict) else None
             out.extend(e for e in eps or [] if isinstance(e, dict))

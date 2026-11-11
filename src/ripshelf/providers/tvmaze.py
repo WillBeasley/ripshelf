@@ -1,7 +1,8 @@
 """TVmaze (api.tvmaze.com) has shows and episode lists, free and without a key.
 
 Its shows carry TheTVDB and IMDb ids, which is how a show found here is looked
-up on TMDB, and how a TMDB show is found here for its episodes. The API allows
+up on TMDB, and how a TMDB show is found here for its episodes. Without a TMDB
+key, a show found here is keyed by its TVmaze id (see tv/keyless.py). The API allows
 20 requests per 10 seconds; a 429 is waited out like TMDB's.
 """
 
@@ -67,11 +68,22 @@ class Tvmaze:
                     return got
         return None
 
+    async def show(self, show_id: int) -> dict | None:
+        got = await self._get(f"/shows/{show_id}")
+        return got if isinstance(got, dict) and isinstance(got.get("id"), int) else None
+
     async def episodes(self, show_id: int, season: int) -> list[Episode]:
         """A season's numbered episodes (TVmaze keeps specials unnumbered in their season,
         so it has no season 0)."""
         got = await self._get(f"/shows/{show_id}/episodes")
         return to_episodes(got if isinstance(got, list) else [], season)
+
+    async def all_episodes(self, show_id: int) -> list[Episode]:
+        """Every numbered episode of every season (for compilations)."""
+        got = await self._get(f"/shows/{show_id}/episodes")
+        raw = got if isinstance(got, list) else []
+        seasons = {e.get("season") for e in raw if isinstance(e, dict) and isinstance(e.get("season"), int)}
+        return sorted((e for s in seasons for e in to_episodes(raw, s)), key=lambda e: (e.season, e.episode))
 
     async def aclose(self) -> None:
         await self._client.aclose()

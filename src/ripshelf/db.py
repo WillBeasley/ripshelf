@@ -54,9 +54,11 @@ CREATE TABLE IF NOT EXISTS fingerprints (
     job_id INTEGER,
     confirmed_at TEXT NOT NULL
 );
+-- A TV show's discs, one row per show. show_key is the show's provider and id
+-- ("tmdb:1399", or "tvmaze:82" for a show found without a TMDB key).
 CREATE TABLE IF NOT EXISTS collections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    show_tmdb_id INTEGER NOT NULL UNIQUE,
+    show_key TEXT NOT NULL UNIQUE,
     updated_at TEXT NOT NULL,
     data TEXT NOT NULL
 );
@@ -154,8 +156,30 @@ class Database:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
+        self._key_collections()
         self.conn.executescript(SCHEMA)
         self.backfill_stats()
+
+    def _key_collections(self) -> None:
+        """Collections used to be keyed by the show's TMDB id (show_tmdb_id). They are
+        keyed by "tmdb:<id>" now, so shows found without TMDB can have one too."""
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(collections)")}
+        if "show_tmdb_id" not in cols:
+            return
+        self.conn.executescript("""
+            BEGIN;
+            CREATE TABLE collections_keyed (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                show_key TEXT NOT NULL UNIQUE,
+                updated_at TEXT NOT NULL,
+                data TEXT NOT NULL
+            );
+            INSERT INTO collections_keyed (id, show_key, updated_at, data)
+                SELECT id, 'tmdb:' || show_tmdb_id, updated_at, data FROM collections;
+            DROP TABLE collections;
+            ALTER TABLE collections_keyed RENAME TO collections;
+            COMMIT;
+        """)
 
     def close(self) -> None:
         self.conn.close()
@@ -444,8 +468,11 @@ class Database:
         row = self.conn.execute("SELECT id, data FROM collections WHERE id=?", (collection_id,)).fetchone()
         return self._collection(row) if row else None
 
-    def collection_for_show(self, tmdb_id: int) -> Collection | None:
-        row = self.conn.execute("SELECT id, data FROM collections WHERE show_tmdb_id=?", (tmdb_id,)).fetchone()
+    def collection_for_show(self, show_key: str | int) -> Collection | None:
+        """The show's collection, by its key ("tvmaze:82"; a bare number is a TMDB id)."""
+        if isinstance(show_key, int):
+            show_key = f"tmdb:{show_key}"
+        row = self.conn.execute("SELECT id, data FROM collections WHERE show_key=?", (show_key,)).fetchone()
         return self._collection(row) if row else None
 
     def collections(self) -> list[Collection]:
@@ -462,7 +489,7 @@ class Database:
                               (c.updated_at.isoformat(), c.model_dump_json(), c.id))
         else:
             cur = self.conn.execute(
-                "INSERT INTO collections (show_tmdb_id, updated_at, data) VALUES (?,?,?)",
-                (c.show.tmdb_id, c.updated_at.isoformat(), c.model_dump_json()))
+                "INSERT INTO collections (show_key, updated_at, data) VALUES (?,?,?)",
+                (c.show.key, c.updated_at.isoformat(), c.model_dump_json()))
             c.id = cur.lastrowid
         return c
