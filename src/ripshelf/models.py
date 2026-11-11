@@ -422,6 +422,7 @@ class CoverScan(BaseModel):
     rotate: ScanRotate = Field(0, description="turned clockwise by this much when shown or used")
     crop: list[int] | None = Field(None, description="the picture within the scan, [left, top, right, "
                                                      "bottom] in the original's pixels, when trimmed")
+    crop_by_hand: bool = Field(False, description="the crop was set by hand, not found by trimming")
     split: ScanSplit | None = Field(None, description="the cut last used for the covers, for a whole sheet")
     vision: Literal["queued", "reading", "done", "failed"] | None = Field(
         None, description="reading it with the vision model")
@@ -804,7 +805,22 @@ class ScanUpdate(BaseModel):
     kind: ScanKind | None = None
     page: int | None = Field(None, ge=1, le=999)
     rotate: ScanRotate | None = None
-    trim: bool | None = Field(None, description="cut away the scanner's empty glass around the picture")
+    trim: bool | None = Field(None, description="cut away the scanner's empty glass around the picture "
+                                                "(found again), or with false keep the whole scan")
+    crop: list[float] | None = Field(None, min_length=4, max_length=4, description=(
+        "crop by hand: [left, top, right, bottom] as fractions of the whole scan as shown (turned, "
+        "not trimmed)"))
+
+    @field_validator("crop", mode="after")
+    @classmethod
+    def _crop_box(cls, v: list[float] | None) -> list[float] | None:
+        if v is not None:
+            left, top, right, bottom = v
+            if not (0 <= left < right <= 1 and 0 <= top < bottom <= 1):
+                raise ValueError("the crop must be [left, top, right, bottom] within 0 to 1")
+            if right - left < 0.05 or bottom - top < 0.05:
+                raise ValueError("the crop leaves too little of the scan")
+        return v
 
 
 class ScannerScanRequest(BaseModel):

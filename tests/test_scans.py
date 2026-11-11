@@ -250,6 +250,23 @@ def test_trim_keeps_the_corners_of_a_sleeve_laid_askew():
     assert right <= cw + 0.0175 * ch + 20 and bottom <= ch + 0.0175 * cw + 20
 
 
+@pytest.mark.parametrize("rotate, shown, original", [
+    (0, [0.1, 0.2, 0.6, 0.9], [30, 40, 180, 180]),
+    (90, [0.1, 0.2, 0.6, 0.9], [60, 80, 270, 180]),  # the top of the turned picture is its left
+    (180, [0.1, 0.2, 0.6, 0.9], [120, 20, 270, 160]),
+    (270, [0.1, 0.2, 0.6, 0.9], [30, 20, 240, 120]),
+])
+def test_a_crop_drawn_on_the_turned_scan_is_kept_in_the_originals_pixels(rotate, shown, original):
+    assert images.crop_from_shown(shown, 300, 200, rotate) == original
+    # Cropping then turning gives the part that was drawn on.
+    img = Image.new("RGB", (300, 200), (255, 255, 255))
+    img.paste((255, 0, 0), tuple(original))
+    turned = img.rotate(-rotate, expand=True)
+    w, h = turned.size
+    box = (round(shown[0] * w), round(shown[1] * h), round(shown[2] * w) - 1, round(shown[3] * h) - 1)
+    assert turned.getpixel(box[:2]) == turned.getpixel(box[2:]) == (255, 0, 0)
+
+
 def test_halves_of_a_sheet():
     img = images.render(sheet(), None, 0)
     front, back = images.halves(img, ScanSplit())
@@ -286,6 +303,36 @@ async def test_uploads_are_kept_numbered_and_checked(harness, settings):
         assert [s.id for s in h.db.get_job(job.id).scans] == [b.id] and not path.exists()
         with pytest.raises(KeyError):
             await h.m.delete_scan(job.id, a.id)
+
+
+async def test_a_scan_is_cropped_by_hand_and_trimmed_again(harness, settings):
+    async with harness() as h:
+        job = put(h, heron_job())
+        data, (cw, ch) = flatbed(600, 860)
+        sc = await h.m.add_scan(job.id, data, "front", "upload")
+        auto = sc.crop
+        assert auto and not sc.crop_by_hand
+        await h.m.update_scan(job.id, sc.id, ScanUpdate(rotate=90))
+        # Drawn on the scan as shown, turned: its left half, all the way down.
+        sc = await h.m.update_scan(job.id, sc.id, ScanUpdate(crop=[0, 0, 0.5, 1]))
+        assert sc.crop == [0, 430, 600, 860] and sc.crop_by_hand  # the original's bottom half
+        thumb = Image.open(await h.m.scan_thumb(job.id, sc.id, large=True))
+        assert thumb.size == (430, 600)
+        whole = Image.open(await h.m.scan_thumb(job.id, sc.id, whole=True))
+        assert whole.size == (860, 600)  # turned, not cropped
+        sc = await h.m.update_scan(job.id, sc.id, ScanUpdate(rotate=0))
+        assert sc.crop == [0, 430, 600, 860]  # turning keeps the crop
+        assert not (h.m._scans_dir(h.db.get_job(job.id)) / f"{sc.id}.whole.jpg").exists()
+        sc = await h.m.update_scan(job.id, sc.id, ScanUpdate(trim=True))
+        assert sc.crop == auto and not sc.crop_by_hand
+        sc = await h.m.update_scan(job.id, sc.id, ScanUpdate(trim=False))
+        assert sc.crop is None
+
+
+@pytest.mark.parametrize("crop", [[0.5, 0, 0.4, 1], [0, 0, 1.2, 1], [0, 0, 0.02, 1], [0, 0, 1]])
+def test_a_crop_by_hand_must_leave_some_of_the_scan(crop):
+    with pytest.raises(ValueError):
+        ScanUpdate(crop=crop)
 
 
 async def test_front_and_back_scans_become_the_covers(harness, settings):
@@ -478,6 +525,10 @@ def test_api(client):
     assert thumb.headers["content-type"] == "image/jpeg"
     r = client.patch(f"{url}/{sc['id']}", json={"rotate": 90})
     assert r.json()["rotate"] == 90
+    r = client.patch(f"{url}/{sc['id']}", json={"crop": [0, 0.1, 1, 0.9]})
+    assert r.json()["crop"] == [60, 0, 540, 300] and r.json()["crop_by_hand"]  # turned: its top is the left
+    assert client.patch(f"{url}/{sc['id']}", json={"crop": [0, 0, 2, 1]}).status_code == 422
+    assert client.get(f"{url}/{sc['id']}/thumb", params={"whole": True}).status_code == 200
     assert client.post(f"{url}/{sc['id']}/covers", json={}).status_code == 409  # contributing is off
     client.put("/api/settings", json={"thediscdb_contribute": "ask", "thediscdb_contribute_url": BASE})
     view = client.post(f"{url}/{sc['id']}/covers", json={"position": 0.5, "spine": 0.04, "swap": False}).json()

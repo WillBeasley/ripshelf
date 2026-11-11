@@ -467,9 +467,10 @@ async def scan_image(job_id: int, scan_id: str, request: Request):
 
 
 @api.get("/jobs/{job_id}/scans/{scan_id}/thumb")
-async def scan_thumb(job_id: int, scan_id: str, request: Request, large: bool = False):
-    """A JPEG trimmed and turned as the scan says: small, or up to 1600 pixels with ``large``."""
-    p = await manager(request).scan_thumb(job_id, scan_id, large)
+async def scan_thumb(job_id: int, scan_id: str, request: Request, large: bool = False, whole: bool = False):
+    """A JPEG trimmed and turned as the scan says: small, or up to 1600 pixels with ``large``.
+    With ``whole``, a large one turned but not trimmed, to crop by hand."""
+    p = await manager(request).scan_thumb(job_id, scan_id, large, whole)
     if not p:
         raise HTTPException(404)
     return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
@@ -477,7 +478,7 @@ async def scan_thumb(job_id: int, scan_id: str, request: Request, large: bool = 
 
 @api.patch("/jobs/{job_id}/scans/{scan_id}", response_model=CoverScan)
 async def scan_update(job_id: int, scan_id: str, body: ScanUpdate, request: Request):
-    """Change what the picture is of, its page, its turn or its trim."""
+    """Change what the picture is of, its page, its turn, or its trim or crop."""
     return await _contribution_call(lambda: manager(request).update_scan(job_id, scan_id, body))
 
 

@@ -647,6 +647,10 @@ export interface CoverScan {
    */
   crop: number[] | null;
   /**
+   * the crop was set by hand, not found by trimming
+   */
+  crop_by_hand: boolean;
+  /**
    * the cut last used for the covers, for a whole sheet
    */
   split: ScanSplit | null;
@@ -1924,6 +1928,10 @@ export interface PendingScan {
    */
   crop: number[] | null;
   /**
+   * the crop was set by hand, not found by trimming
+   */
+  crop_by_hand: boolean;
+  /**
    * the cut last used for the covers, for a whole sheet
    */
   split: ScanSplit | null;
@@ -2203,9 +2211,13 @@ export interface ScanUpdate {
   page?: number | null;
   rotate?: (0 | 90 | 180 | 270) | null;
   /**
-   * cut away the scanner's empty glass around the picture
+   * cut away the scanner's empty glass around the picture (found again), or with false keep the whole scan
    */
   trim?: boolean | null;
+  /**
+   * crop by hand: [left, top, right, bottom] as fractions of the whole scan as shown (turned, not trimmed)
+   */
+  crop?: [number, number, number, number] | null;
 }
 /**
  * The network scanner, as it describes itself.
