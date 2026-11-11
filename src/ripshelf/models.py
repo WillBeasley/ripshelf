@@ -235,6 +235,7 @@ class TitleMap(BaseModel):
     same_as: int | None = Field(None, description="duplicate of this title")
     part_of: int | None = Field(None, description="a part of this title, split at its chapters")
     start_s: float | None = Field(None, description="where the part starts in that title")
+    by_hand: bool = Field(False, description="set in the review by hand, so the cover scan's picks leave it alone")
 
 
 class TitleSplit(BaseModel):
