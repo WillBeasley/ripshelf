@@ -111,7 +111,8 @@ def detect_all(titles: list[TitleInfo], roles: dict[int, TitleRole], episodes: l
 
     With the box's word for it, ``count`` episodes running ``typical_s`` each, every
     long title is one when they and the titles one episode long add up to the box's
-    count (a disc of 13 as 9 in one title, 3 in another and 1 on its own). The box's
+    count (a disc of 13 as 9 in one title, 3 in another and 1 on its own); past the
+    longest, a title needs a chapter per episode to count. The box's
     runtime beats the episode list's, which is often the broadcast slot (12 minutes for
     episodes that run 10). Without it, only the longest title is, as before."""
     runtimes = [e.runtime for e in episodes if e.runtime]
@@ -129,6 +130,9 @@ def detect_all(titles: list[TitleInfo], roles: dict[int, TitleRole], episodes: l
     long = sorted((t for t in usable if t.duration_s >= LONG_FACTOR * typical), key=lambda t: (-t.duration_s, t.index))
     if not long:
         return []
+    # Past the longest, a long title only counts with a chapter per episode it would hold:
+    # a 30-minute title in one piece is more likely a feature-length extra.
+    long = long[:1] + [t for t in long[1:] if enough_chapters(t.chapters, round(t.duration_s / typical))]
     singles = [o for o in usable if lo <= o.duration_s <= hi]
     held = {t.index: max(2, round(t.duration_s / typical)) for t in long}
     if count and abs(sum(held.values()) + len(singles) - count) <= max(1, count // 10):

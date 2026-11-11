@@ -70,6 +70,11 @@ class MatchMixin:
         if not listing or not job.titles or not (listing.items or listing.details.feature_runtime_min):
             return None
         tv = job.tv if job.media == MediaKind.tv else None
+        if tv and any(sp.state == "waiting" for sp in tv.splits):
+            # Alike titles are told apart by their place on the box, and the long titles'
+            # parts aren't there to count until they're ripped and cut.
+            return ScanMatch(notes=["The box is matched once the long titles are ripped and cut into episodes"],
+                             unmatched_items=[i for i, it in enumerate(listing.items) if it.kind == "episode"])
         pal = job.disc.kind == DiscKind.dvd and any((t.resolution or "").endswith("576") for t in job.titles)
         disc = (tv.disc_number if tv else None) or (job.contribution.disc_number if job.contribution else None)
         listing, bonus = self._with_bonus(listing, tv.bonus if tv else [])

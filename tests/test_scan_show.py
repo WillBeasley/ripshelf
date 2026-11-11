@@ -563,7 +563,7 @@ async def test_a_box_of_thirteen_in_two_long_titles(harness, settings, monkeypat
         assert [(sp.title_index, sp.expected, sp.base) for sp in job.tv.splits] == [(0, 9, 1000), (2, 3, 1100)]
         rows = {m.title_index: m for m in job.tv.mapping}
         assert rows[0].role == rows[2].role == TitleRole.skip and not rows[0].episodes
-        assert {x.title_index for x in job.scan_match.matches} <= {1}  # nothing on the long titles
+        assert job.scan_match.matches == []  # nothing placed until the parts are there to count
         with pytest.raises(ValueError, match="split into parts"):
             await h.m.tv_set_mapping(job.id, [TitleMapUpdate(title_index=0, role=TitleRole.episode,
                                                              episodes=[EpisodeRef(season=1, episode=4)])])
