@@ -12,7 +12,7 @@ from typing import Annotated, Any, get_args
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from . import applog, art, checks, integrations, proc, providers, scanjobs, system
+from . import applog, art, checks, integrations, proc, providers, scanjobs, system, transcode
 from .bus import next_item
 from .config import EDITABLE, FOLDERS, REQUIRED_FOLDERS, SECRETS, Settings
 from .identify import catalogue
@@ -800,6 +800,8 @@ async def put_settings(body: SettingsUpdate, request: Request):
     plain = _plain_update(body)
     if "metadata_providers" in plain:
         plain["metadata_providers"] = providers.normalise(plain["metadata_providers"], s.tv_episode_order)
+    if "transcode_encoder" in plain and not transcode.available(plain["transcode_encoder"]):
+        raise HTTPException(400, f"{transcode.ENCODER_NAMES[plain['transcode_encoder']]} is Linux only")
     if "transcode_codecs" in plain:
         plain["transcode_codecs"] = [c.lower() for c in plain["transcode_codecs"]]
     if "thediscdb_contribute_url" in plain:

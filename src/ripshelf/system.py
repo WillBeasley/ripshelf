@@ -15,7 +15,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import transcode
+from . import proc, transcode
 from .models import Filesystem, Hardware, HwDevice, HwEncoder, StorageFolder
 
 # Fewer than this many bytes free on the scratch disk is too little for a UHD rip.
@@ -176,7 +176,12 @@ async def hardware(s, dev_root: Path = Path("/dev"), sys_root: Path = Path("/sys
     vendors = {d.vendor for d in devs}
     tests, skipped = [], []
     for codec, method, desc in parse_encoders(out.decode(errors="replace")):
-        if method in NODE_METHODS:
+        if not transcode.available(method):
+            skipped.append(_skipped(codec, method, desc, "Linux only"))
+        elif proc.WINDOWS:
+            # Windows has no /dev to list GPUs from, so the test encode tells.
+            tests.append(_test(s.ffmpeg, codec, method, desc, None))
+        elif method in NODE_METHODS:
             # One test per GPU, because each render node is a separate device.
             mine = [d.path for d in devs if "renderD" in d.path
                     and METHOD_VENDOR.get(method, d.vendor) == d.vendor]
@@ -194,14 +199,20 @@ async def hardware(s, dev_root: Path = Path("/dev"), sys_root: Path = Path("/sys
     chosen = await transcode.pick_encoder(s.ffmpeg, s)
     for e in encoders:
         e.used_by_ripshelf = e.name == f"hevc_{chosen}" and e.device in (None, s.vaapi_device)
-    where = f", {s.vaapi_device}" if chosen in NODE_METHODS else ""
+    if s.transcode_encoder != "auto" and not transcode.available(s.transcode_encoder):
+        note_why = f"{transcode.ENCODER_NAMES[s.transcode_encoder]} is Linux only"
+    else:
+        note_why = None
+    where = f", {s.vaapi_device}" if chosen in NODE_METHODS and not proc.WINDOWS else ""
     note = f"H.265 ({transcode.ENCODER_NAMES[chosen]}{where})"
-    if s.transcode_encoder != "auto":
+    if note_why:
+        note += f", because {note_why}"
+    elif s.transcode_encoder != "auto":
         note += ", chosen in Settings"
     elif chosen == "x265":
         note += ", because no GPU encoder worked"
     return Hardware(devices=devs, encoders=encoders, ffmpeg_found=True, encoder=chosen, encoder_note=note,
-                    checked_at=time.time())
+                    checked_at=time.time(), windows=proc.WINDOWS)
 
 
 class HardwareCache:

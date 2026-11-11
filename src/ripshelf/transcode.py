@@ -213,12 +213,22 @@ AUTO_ORDER = ("qsv", "vaapi", "nvenc")
 ENCODERS = (*AUTO_ORDER, "x265")
 ENCODER_NAMES = {"qsv": "GPU, Intel Quick Sync", "vaapi": "GPU, VAAPI", "nvenc": "GPU, NVIDIA NVENC",
                  "x265": "CPU, x265"}
+# VAAPI is Linux's. On Windows Quick Sync opens the GPU through Direct3D instead.
+LINUX_ONLY = {"vaapi"}
+
+
+def available(encoder: str) -> bool:
+    """Whether ``encoder`` can be used on this system at all."""
+    return not (procs.WINDOWS and encoder in LINUX_ONLY)
 
 
 def hw_args(encoder: str, device: str) -> list[str]:
-    """The options before -i that open the GPU. QSV goes through VAAPI so it uses the chosen render node."""
+    """The options before -i that open the GPU. On Linux QSV goes through VAAPI so it uses the
+    chosen render node; on Windows ffmpeg opens it through Direct3D."""
     if encoder == "vaapi":
         return ["-init_hw_device", f"vaapi=va:{device}", "-filter_hw_device", "va"]
+    if encoder == "qsv" and procs.WINDOWS:
+        return ["-init_hw_device", "qsv=qs", "-filter_hw_device", "qs"]
     if encoder == "qsv":
         return ["-init_hw_device", f"vaapi=va:{device}", "-init_hw_device", "qsv=qs@va", "-filter_hw_device", "qs"]
     return []
@@ -255,6 +265,8 @@ def trial_command(ffmpeg: str, encoder: str, device: str | None, codec: str = "h
 
 
 def _usable(encoder: str, device: str) -> bool:
+    if procs.WINDOWS:
+        return available(encoder)  # no device files to look at, so the test encode decides
     if encoder == "nvenc":
         return bool(glob.glob("/dev/nvidia[0-9]*"))
     return os.path.exists(device)
@@ -262,7 +274,7 @@ def _usable(encoder: str, device: str) -> bool:
 
 async def pick_encoder(ffmpeg: str, s) -> str:
     """The encoder chosen in Settings, or with auto the first in AUTO_ORDER whose test encode works."""
-    if s.transcode_encoder != "auto":
+    if s.transcode_encoder != "auto" and available(s.transcode_encoder):
         return s.transcode_encoder
     for enc in AUTO_ORDER:
         if _usable(enc, s.vaapi_device):

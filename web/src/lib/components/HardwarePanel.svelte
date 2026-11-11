@@ -50,6 +50,8 @@
 					</li>
 				{/each}
 			</ul>
+		{:else if hw.windows}
+			<p class="small muted">On Windows the GPUs aren't listed; the test encodes below show which encoders work.</p>
 		{:else}
 			<p class="small muted">No GPU found. Pass <code>/dev/dri</code> (Intel/AMD) or an NVIDIA GPU into the container to use one.</p>
 		{/if}

@@ -149,6 +149,19 @@ def test_setting_fields_describe_every_editable_setting(client):
     assert all(f["title"] for f in fields.values() if f["section"] and not f["name"].endswith("_path"))
 
 
+def test_windows_settings_offer_no_vaapi(client, monkeypatch):
+    from ripshelf import proc
+
+    monkeypatch.setattr(proc, "WINDOWS", True)
+    fields = {f["name"]: f for f in client.get("/api/settings/fields").json()}
+    assert "vaapi_device" not in fields  # a /dev/dri render node
+    choices = fields["transcode_encoder"]["choices"]
+    assert [c["value"] for c in choices] == ["auto", "qsv", "nvenc", "x265"] and "VAAPI" not in choices[0]["label"]
+    r = client.put("/api/settings", json={"transcode_encoder": "vaapi"})
+    assert r.status_code == 400 and "Linux only" in r.json()["detail"]
+    assert client.put("/api/settings", json={"transcode_encoder": "qsv"}).status_code == 200
+
+
 def test_settings_json_with_values_out_of_range(tmp_path, monkeypatch, caplog):
     from ripshelf.config import Settings, load_settings
     data = tmp_path / "data"
