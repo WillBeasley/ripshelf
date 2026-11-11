@@ -942,6 +942,7 @@ class TvMixin:
         finally:
             if tmdb:
                 await tmdb.aclose()
+        await self._analyse_split(job_id)  # long titles already ripped are cut now
         return self.db.get_job(job_id)
 
     async def _show_by_id(self, source: str, show_id: int, tmdb: Tmdb | None) -> Show:
@@ -1111,7 +1112,7 @@ class TvMixin:
             m = by_index.get(u.title_index)
             if m is None:
                 raise ValueError(f"title {u.title_index} is not on this disc")
-            if any(sp.title_index == u.title_index for sp in plan.splits) and u.role == TitleRole.episode:
+            if any(sp.title_index == u.title_index for sp in plan.splits):
                 raise ValueError(f"title {u.title_index} is split into parts: pick the parts' episodes, or keep "
                                  "it whole first")
             m.role, m.episodes = u.role, list(u.episodes) if u.role == TitleRole.episode else []
@@ -1381,7 +1382,10 @@ class TvMixin:
         named = self.named_extras(job) if self.s.extras_emby_folders else {}
         bonus = {i: x.bonus for i, x in self.named_extras(job).items() if x.bonus}
         placed: set[Path] = set()
+        cut = {sp.title_index for sp in plan.splits}  # copied as its parts, never whole
         for m in plan.mapping:
+            if m.title_index in cut:
+                continue
             if m.role == TitleRole.episode:
                 eps = [known.get(episode_key(e)) or Episode(season=e.season, episode=e.episode) for e in m.episodes]
                 out.append((m.title_index, naming.episode_path(self.s.tv, show, eps), eps))

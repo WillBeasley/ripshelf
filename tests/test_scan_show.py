@@ -596,3 +596,8 @@ async def test_a_box_of_thirteen_in_two_long_titles(harness, settings, monkeypat
         assert [rows[i].episodes[0].episode for i in order] == [*DISC_ORDER, 11, 12, 13]
         assert {rows[i].part_of for i in range(1100, 1103)} == {2}
         assert job.tv.order_from == "box" and not job.tv.problems
+        # The long titles are copied as their parts, never whole, whatever role they had.
+        rows[0].role = TitleRole.extra
+        assert {i for i, _, _ in h.m._tv_targets(job)} == {*range(1000, 1009), 1, *range(1100, 1103)}
+        with pytest.raises(ValueError, match="split into parts"):
+            await h.m.tv_set_mapping(job.id, [TitleMapUpdate(title_index=2, role=TitleRole.extra)])
