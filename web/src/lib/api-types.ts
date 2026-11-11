@@ -85,6 +85,7 @@ export interface Api {
   DriveStatus?: DriveStatus;
   DriveUpdated?: DriveUpdated;
   Episode?: Episode;
+  EpisodeGuess?: EpisodeGuess;
   EpisodeRef?: EpisodeRef;
   Evidence?: Evidence;
   Filesystem?: Filesystem;
@@ -919,6 +920,26 @@ export interface DriveUpdated {
   drive: Drive;
 }
 /**
+ * An episode a box's line may be, for the review to offer.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "EpisodeGuess".
+ */
+export interface EpisodeGuess {
+  season: number;
+  episode: number;
+  name: string;
+  /**
+   * minutes
+   */
+  runtime: number | null;
+  air_date: string | null;
+  /**
+   * how well the name, and the title's length, fit it (0-1)
+   */
+  score: number;
+}
+/**
  * One disk (filesystem) and the ripshelf folders on it. Sizes in bytes; none when not found.
  *
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1225,7 +1246,7 @@ export interface TitleMap {
   duration_s: number;
   role: TitleRole;
   /**
-   * two for a double-length (two-part) title
+   * the episodes it holds: two for a two-part story, or any from the show
    */
   episodes: EpisodeRef[];
   /**
@@ -1248,6 +1269,10 @@ export interface TitleMap {
    * where the part starts in that title
    */
   start_s: number | null;
+  /**
+   * set in the review by hand, so the cover scan's picks leave it alone
+   */
+  by_hand: boolean;
 }
 /**
  * One long title holding several episodes, to be split at its chapter marks, or at
@@ -1661,6 +1686,10 @@ export interface TitleMatch {
    * a bonus episode of another show, found in its episode list
    */
   bonus: BonusEpisode | null;
+  /**
+   * for an episode line, the episodes its name and the title's length fit best, best first
+   */
+  guesses: EpisodeGuess[];
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

@@ -8,7 +8,8 @@
 	import ScanListing from './ScanListing.svelte';
 	import ScanMatchView from './ScanMatchView.svelte';
 
-	let { job, open = false }: { job: Job; open?: boolean } = $props();
+	// ``auto``: open by itself once the job has scans (off where it's tucked away).
+	let { job, open = false, auto = true }: { job: Job; open?: boolean; auto?: boolean } = $props();
 	const act = new Action();
 
 	const KINDS: [ScanKind, string][] = [
@@ -42,7 +43,7 @@
 	const feeder = $derived(scanner?.sources.includes('feeder') ?? false);
 
 	$effect(() => {
-		if (open || (job.scans ?? []).length) shown = true;
+		if (open || (auto && (job.scans ?? []).length)) shown = true;
 	});
 
 	$effect(() => {
