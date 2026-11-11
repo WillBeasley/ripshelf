@@ -88,6 +88,7 @@ from .pendingscans import PendingMixin
 from .proc import WINDOWS
 from .providers import films, thediscdb
 from .readjobs import ReadingMixin
+from .refilejobs import RefileMixin
 from .scanjobs import ScansMixin
 from .transcodejobs import TranscodeMixin
 from .tv import naming, verify
@@ -155,7 +156,8 @@ class DriveRuntime:
     tasks: set[asyncio.Task] = field(default_factory=set)
 
 
-class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin, MatchMixin, VisionMixin, PendingMixin, ShowFromScanMixin):
+class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin, MatchMixin, VisionMixin, PendingMixin, ShowFromScanMixin,
+              RefileMixin):
     def __init__(self, settings: Settings, db: Database, backend: DriveBackend, bus: EventBus):
         self.s = settings
         self.db = db
@@ -1678,6 +1680,9 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 "destination_exists", "copy_failed"):
             raise ValueError("job has failed; retry it first")
         cand = cand.model_copy(update={"source": cand.source if cand.source != "cache" else "tmdb"})
+        if job.refile:  # finished already, so its files move to the new title's names
+            job.identity, job.identity_source, job.clash = cand, "user", None
+            return await self._refile(job)
         if job.state == JobState.failed:
             job.problem = None
             self._set_state(job, JobState.identifying, "Re-identified by hand")
@@ -1714,6 +1719,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         job = self.db.get_job(job_id)
         if job is None or job.state in (JobState.done, JobState.cancelled, JobState.finalising, JobState.checking):
             raise ValueError("cannot re-identify this job now")
+        self._refiling(job, "be identified from the disc again; search for the title instead")
         if job.state == JobState.failed and job.rip.state != RipState.done:
             raise ValueError("retry the job first")
         job.identity = None
@@ -1739,6 +1745,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
 
     async def cancel(self, job_id: int) -> JobRecord:
         job = self.db.get_job(job_id)
+        if job and job.refile and job.state == JobState.review:
+            return await self.keep_identity(job_id)  # its files are in the library, so it stays done
         if job is None or job.state not in ACTIVE_STATES:
             raise ValueError("job is not active")
         if job.state == JobState.finalising:
@@ -1758,6 +1766,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         job = self.db.get_job(job_id)
         if job is None or job.state != JobState.failed:
             raise ValueError("only failed jobs can be retried")
+        if job.refile:
+            return await self._refile_retry(job)
         d = self.drives[job.drive_id]
         job.problem = None
         ripped = job.rip.files.values() if job.rip.all_titles else ([job.rip.file] if job.rip.file else [])
@@ -1817,6 +1827,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         job = self.db.get_job(job_id)
         if job is None or job.state not in (JobState.review, JobState.clash):
             raise ValueError("only a job waiting for review or a decision can be ejected to check")
+        self._refiling(job, "be ejected to check")
         d = self.drives.get(job.drive_id)
         if not d or d.job_id != job.id:
             raise ValueError("this job's disc is no longer in its drive")
