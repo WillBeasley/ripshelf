@@ -194,3 +194,22 @@ def test_titles_by_number_unless_in_the_discs_order():
     titles = [title(1000, 10), title(1001, 10), title(1, 10)]
     assert [t.index for t in match._candidates(titles, [])] == [1, 1000, 1001]
     assert [t.index for t in match._candidates(titles, [], in_order=True)] == [1000, 1001, 1]
+
+
+def test_guesses_for_a_name_the_episode_list_spells_otherwise():
+    """A misread name is closest to one episode by name, but its runtime doesn't fit the
+    title: the match stays unsure, and the guesses offer the close names, the one whose
+    runtime fits first."""
+    eps = [Episode(season=1, episode=3, name="Seagull Snow Day", runtime=11),
+           Episode(season=3, episode=8, name="Snow Day Surprise", runtime=22),
+           Episode(season=2, episode=9, name="Snowy Day Surprise", runtime=11),
+           Episode(season=2, episode=1, name="Puddle Dash", runtime=11)]
+    titles = [title(1, 11.1), title(2, 11.0)]
+    listing = Listing(items=[ep("Puddle Dash"), ep("Snow Days Suprise")])
+    m = by_title(match.match(titles, listing, media="tv", episodes=eps))
+    assert m[2].confidence != "high" and m[2].name == "Snow Days Suprise"
+    codes = [(g.season, g.episode) for g in m[2].guesses]
+    assert codes[0] == (2, 9) and (3, 8) in codes and (2, 1) not in codes
+    assert len(m[2].guesses) <= 3 and m[2].guesses[0].name == "Snowy Day Surprise"
+    # A name that matched still lists itself first.
+    assert (m[1].guesses[0].season, m[1].guesses[0].episode) == (2, 1)
