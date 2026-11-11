@@ -20,6 +20,7 @@ from ripshelf.models import (
     Show,
     TitleInfo,
     TitleMap,
+    TitleMapUpdate,
     TitleRole,
     TitleSplit,
     TvPlan,
@@ -81,7 +82,7 @@ def fake_tmdb(monkeypatch, h):
             pass
 
     async def all_episodes(tmdb, show):
-        return EPISODES[show.tmdb_id]
+        return EPISODES.get(show.tmdb_id, [])
 
     async def find_shows(tmdb, name, runtime, *a, **k):
         return [KITE] if "kite" in name.lower() else []
@@ -459,3 +460,65 @@ async def test_the_box_read_after_the_split(harness, settings, monkeypatch):
         assert any(x.agrees is False for x in job.scan_match.matches)  # the box says otherwise
         job = await h.m.use_scan(job.id)
         assert episodes_in_disc_order(job) == DISC_ORDER and job.tv.order_from == "box"
+
+
+# --- some of the box placed, the rest picked by hand ----------------------------------
+
+
+def kite_compilation(box) -> JobRecord:
+    """A Kite Post compilation: the show is known, no title has an episode yet."""
+    job = disc_job(box)
+    job.tv = job.tv.model_copy(update={"show": KITE, "season": None, "compilation": True, "candidates": [KITE],
+                                       "episodes": EPISODES[KITE.tmdb_id]})
+    for r in job.tv.mapping[:3]:
+        r.episodes = []
+    return job
+
+
+async def test_the_names_the_box_places_are_set_and_the_rest_left(harness, settings, monkeypatch):
+    """Two of the box's three names are found; those two are set, the third title waits
+    for a pick, with the closest names as guesses."""
+    async with harness() as h:
+        fake_tmdb(monkeypatch, h)
+        job = put(h, kite_compilation(["Kite Post: Big Parcel", "Kite Post: Lost Kite", "Kite Post: Silver Bells Ring"]))
+        assert await h.m.fix_show_from_scan(job.id)
+        job = h.db.get_job(job.id)
+        eps = {m.title_index: [e.episode for e in m.episodes] for m in job.tv.mapping if m.role == TitleRole.episode}
+        assert eps == {0: [4], 1: [1], 2: []}
+        assert job.tv.from_scan and job.identity is None
+        third = next(x for x in job.scan_match.matches if x.title_index == 2)
+        assert third.episodes == [] and third.guesses[0].episode == 6
+        assert any("1 to pick by hand" in e.message for e in h.db.events(job.id))
+
+
+async def test_titles_set_by_hand_are_left_alone(harness, settings, monkeypatch):
+    """Title 0 was given an episode by hand: the box's picks fill the others, never that
+    one, nor take the episode it holds."""
+    async with harness() as h:
+        fake_tmdb(monkeypatch, h)
+        job = put(h, kite_compilation(BOX))
+        job = await h.m.tv_set_mapping(job.id, [TitleMapUpdate(title_index=0, role=TitleRole.episode,
+                                                                episodes=[EpisodeRef(season=1, episode=1)])])
+        assert job.tv.user_edited and job.tv.mapping[0].by_hand
+        assert await h.m.fix_show_from_scan(job.id)
+        job = h.db.get_job(job.id)
+        eps = {m.title_index: [e.episode for e in m.episodes] for m in job.tv.mapping if m.role == TitleRole.episode}
+        # The box puts S01E04 on title 0 and S01E01 on title 1; title 0 keeps S01E01, so
+        # title 1 is left to pick, and title 2 takes the box's S01E06.
+        assert eps == {0: [1], 1: [], 2: [6]}
+        assert h.m._auto_check(job)[0] is False
+
+
+async def test_a_title_set_by_hand_can_hold_episodes_from_anywhere(harness, settings, monkeypatch):
+    async with harness() as h:
+        fake_tmdb(monkeypatch, h)
+        job = put(h, kite_compilation(BOX))
+        job = await h.m.tv_set_mapping(job.id, [
+            TitleMapUpdate(title_index=0, role=TitleRole.episode,
+                           episodes=[EpisodeRef(season=1, episode=2), EpisodeRef(season=1, episode=5)]),
+            TitleMapUpdate(title_index=1, role=TitleRole.skip, episodes=[EpisodeRef(season=1, episode=3)])])
+        rows = {r.title_index: r for r in job.tv.mapping}
+        assert [e.episode for e in rows[0].episodes] == [2, 5] and rows[1].episodes == []
+        assert not any("title 0" in p for p in job.tv.problems)
+        with pytest.raises(ValueError, match="not on this disc"):
+            await h.m.tv_set_mapping(job.id, [TitleMapUpdate(title_index=9, role=TitleRole.skip)])

@@ -696,6 +696,14 @@ async def tv_confirm(job_id: int, body: TvConfirmRequest, request: Request):
     return await _job_action(request, job_id, lambda i: m.tv_confirm(i, body.mapping))
 
 
+@api.put("/jobs/{job_id}/tv/mapping", response_model=Job)
+async def tv_set_mapping(job_id: int, body: TvConfirmRequest, request: Request):
+    """Titles changed by hand in the review, kept (unconfirmed) so the cover scan's picks
+    leave them alone."""
+    m = manager(request)
+    return await _job_action(request, job_id, lambda i: m.tv_set_mapping(i, body.mapping))
+
+
 @api.post("/jobs/{job_id}/tv/split", response_model=Job)
 async def tv_split(job_id: int, body: TvSplitRequest, request: Request):
     """Where the long title holding the episodes is cut (chapters), or keep it whole."""

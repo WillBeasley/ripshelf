@@ -865,6 +865,7 @@ class TvMixin:
             if ep:
                 m.episodes = [EpisodeRef(season=ep.season, episode=ep.episode)]
                 m.note = f"“{name}” matches “{ep.name}”" + (f" ({sim:.0%})" if sim < 0.99 else "")
+                m.by_hand = True  # the run order given is the user's, over the box's picks
             else:
                 m.episodes = []
                 m.note = f"no episode called “{name}”"
@@ -953,6 +954,26 @@ class TvMixin:
         elif "waiting for the order check" not in why or job.rip.state in ("done", "failed"):
             # Final, so a human is needed (the review notification was held back until now).
             self._spawn_notify(self.db.get_job(job_id), "review")
+
+    async def tv_set_mapping(self, job_id: int, updates: list[TitleMapUpdate]) -> JobRecord:
+        """Titles changed by hand in the review, kept before it's confirmed (on any device):
+        the cover scan's picks leave them alone from now on."""
+        job = self._tv_job(job_id)
+        plan = job.tv
+        if not plan or not plan.show:
+            raise ValueError("pick the show first")
+        by_index = {m.title_index: m for m in plan.mapping}
+        for u in updates:
+            m = by_index.get(u.title_index)
+            if m is None:
+                raise ValueError(f"title {u.title_index} is not on this disc")
+            m.role, m.episodes = u.role, list(u.episodes) if u.role == TitleRole.episode else []
+            m.by_hand, m.note = True, None
+        plan.user_edited = True
+        self._check_plan(job)
+        self._save(job)
+        self.rematch(job_id)
+        return self.db.get_job(job_id)
 
     async def tv_confirm(self, job_id: int, updates: list[TitleMapUpdate], source: str = "user") -> JobRecord:
         job = self._tv_job(job_id)
