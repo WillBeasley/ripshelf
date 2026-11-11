@@ -38,7 +38,7 @@ from .db import SCAN_FIELDS, Database, JobRecord, now
 from .hw.drives import DiscIdentity, DriveHw
 from .identify import catalogue, scoring
 from .identify.label import clean_bdmt_title, name_differs_from_label, parse_label
-from .makemkv import runner
+from .makemkv import runner, selection
 from .makemkv.diagnose import diagnose
 from .makemkv.files import SupportFiles
 from .makemkv.parse import (
@@ -1265,11 +1265,12 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         home = self._home(d)
         d.rip = self._runner(d)
         log_path = self.work_dir(job) / "rip.log"
+        tracks = selection.conf(self.s)  # which audio and subtitle tracks are kept
         started = time.monotonic()
         saved_ok = True
         try:
             for run_args in runs:  # one run, or one per unfinished title after a pause
-                res = await d.rip.run(run_args, home, log_path, on_line=on_line)
+                res = await d.rip.run(run_args, home, log_path, on_line=on_line, conf=tracks)
                 job = self.db.get_job(job_id)
                 if job.state == JobState.cancelled or res.cancelled or job.rip.paused:
                     return
@@ -1284,7 +1285,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 for i in late:
                     self._event(job, "rip", f"Ripping title {i}, an extra the cover scan names")
                     late_res = await d.rip.run([*args[:4], str(i), str(out_dir)], home,
-                                               self.work_dir(job) / "rip-extras.log")
+                                               self.work_dir(job) / "rip-extras.log", conf=tracks)
                     if late_res.cancelled:
                         return
                 extras = [*extras, *late]

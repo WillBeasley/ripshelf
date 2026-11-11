@@ -24,6 +24,7 @@ from . import library
 from .db import now
 from .identify.scoring import title_similarity
 from .identify.tmdb import TmdbError
+from .makemkv import selection
 from .models import (
     BonusEpisode,
     DiscKind,
@@ -191,7 +192,7 @@ class MatchMixin:
         try:
             for idx in indices:
                 res = await d.rip.run(["-r", "--progress=-same", "mkv", f"dev:{d.hw.device}", str(idx), str(out_dir)],
-                                      home, log_path)
+                                      home, log_path, conf=selection.conf(self.s))
                 if res.cancelled:
                     return
                 if res.returncode != 0:

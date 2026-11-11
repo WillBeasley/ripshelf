@@ -122,13 +122,17 @@ async def test_shared_scratch_skips_the_upload(controller, tmp_path, monkeypatch
         return await real_put(self, u, *a, **k)
 
     monkeypatch.setattr(httpx.AsyncClient, "put", counting_put)
-    agent = Agent(worker_settings(tmp_path, url, shared=app.state.settings.scratch_dir), FakeDrives(present={PM}))
+    app.state.settings.track_selection = True  # the controller's track rule goes with the run
+    ws = worker_settings(tmp_path, url, shared=app.state.settings.scratch_dir)
+    agent = Agent(ws, FakeDrives(present={PM}))
     task = asyncio.create_task(agent.run_forever())
     try:
         job = await asyncio.to_thread(wait_http, lambda: next(
             (j for j in api(url, "/api/jobs") if j["rip"]["state"] == "done"), None))
         assert job["rip"]["file"] and Path(job["rip"]["file"]).exists()
         assert uploads == []
+        conf = (ws.makemkv_dir / "fake-ihas122" / ".MakeMKV" / "settings.conf").read_text()
+        assert "app_DefaultSelectionString = \"+sel:all," in conf
     finally:
         task.cancel()
 

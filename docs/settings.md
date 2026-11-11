@@ -16,7 +16,7 @@ Settings has nine sections, each at its own address (`/settings/identify` and so
 | Section | What's in it |
 |---|---|
 | **Identify** | the metadata providers and their order, the TMDB, TheTVDB and OMDb keys, when a match is confirmed without review, web search (SearXNG and catalogue numbers), contributing to TheDiscDB |
-| **Drives and ripping** | the MakeMKV key, what to rip, ejecting, each drive (grouped by the machine it's on), MakeMKV private data. Advanced: scan time limits, the poll interval, UHD drive models |
+| **Drives and ripping** | the MakeMKV key, what to rip, ejecting, [which audio and subtitle tracks are kept](#which-audio-and-subtitle-tracks-are-kept), each drive (grouped by the machine it's on), MakeMKV private data. Advanced: scan time limits, the poll interval, UHD drive models, MakeMKV's own selection rule |
 | **Scanner and covers** | the network scanner, reading the box (Tesseract and a vision model), copying scans to the library. Advanced: text languages |
 | **Library and filing** | the library, films and TV folders, how TV extras and the extras a box names are filed. Advanced: the scratch and disc backups folders |
 | **Media servers** | Emby, Jellyfin and Plex, one at a time |
@@ -31,6 +31,19 @@ Settings has nine sections, each at its own address (`/settings/identify` and so
 - **Saved straight away.** MakeMKV private data and remote workers have their own buttons, and act at once.
 - **This machine only.** Settings tagged so (UHD drive models, the encoder, transcodes at once, the GPU) are used by this machine and not sent to remote workers. A worker reads its own from its environment, such as `RIPSHELF_UHD_MODELS`.
 - **Limits.** The server checks each setting's limits (the ranges and choices on the page), and a value in settings.json outside them is ignored, with a warning in the log, in favour of the default.
+
+## Which audio and subtitle tracks are kept
+
+makemkvcon has no option for picking tracks, but it follows MakeMKV's default selection rule (the app's "Default selection rule", in expert mode). With **Choose which audio and subtitle tracks are kept** on, ripshelf writes a rule into each drive's MakeMKV home before every rip, on remote workers too:
+
+- **Languages.** Three-letter codes, such as `eng, jpn`. Languages with two codes (`fre` and `fra`, `ger` and `deu`) match either.
+- **Audio.** In these languages, or every track. A disc's only audio track, and one with no language given, is kept either way. A stereo track with a surround one in the same language is dropped, as MakeMKV does by default.
+- **Subtitles.** None, forced subtitles only, in these languages, or every track.
+- **Keep commentary tracks.** Off drops the tracks MakeMKV marks as commentary.
+
+Video is kept apart from a 3D disc's second view, as MakeMKV does. Under Advanced, **MakeMKV selection rule** takes a rule in MakeMKV's own syntax instead of the choices. Off leaves MakeMKV's own rule (its preferred language, English, and untagged tracks). A full disc backup keeps every track whatever is set. Transcoding copies the tracks the rip kept.
+
+The choice is for every disc: a rip starts as soon as the scan is done, before there's a chance to pick tracks for one disc.
 
 ## Settings that aren't on the Settings page
 
@@ -96,6 +109,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_FILM_UNNAMED_EXTRAS` | `skip` | a film's titles the box doesn't name: `skip`, or `extras` to rip them into extras/ as "Title N" |
 | `RIPSHELF_TV_BONUS_EPISODES` | `extra` | a TV box's bonus episode of another show: `extra` files it in this show's `extras/` as "Other show - Episode", `own_show` in the other show's season folder ([cover-scans.md](cover-scans.md#bonus-episodes-of-other-shows)) |
 | `RIPSHELF_AUTO_EJECT` | on | |
+| `RIPSHELF_TRACK_SELECTION` | off | choose which audio and subtitle tracks are kept, with `TRACK_LANGUAGES` (`["eng"]`), `TRACK_AUDIO` (`languages` or `all`), `TRACK_SUBTITLES` (`none`, `forced`, `languages` or `all`), `TRACK_COMMENTARY` (on) and `TRACK_RULE` (MakeMKV's own syntax, used instead) ([above](#which-audio-and-subtitle-tracks-are-kept)) |
 | `RIPSHELF_SCAN_TIMEOUT_S` / `SCAN_MAX_S` | 300 / 7200 | stop a scan once MakeMKV has said nothing for this long, and in any case after the limit. Settings takes 30 to 3600 and 300 to 43200 |
 | `RIPSHELF_POLL_INTERVAL_S` | 3 | how often drives are checked for a disc. Settings takes 1 to 60 |
 | `RIPSHELF_RIP_MODE` / `DRIVE_MODES` | `titles` / `{}` | `titles` or `backup` (a whole Blu-ray or UHD, decrypted). `DRIVE_MODES` sets it per drive id, for example `{"pioneer-...": "backup"}` ([backup.md](backup.md)) |

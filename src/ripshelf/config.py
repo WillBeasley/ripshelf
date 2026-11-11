@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, get_args
 
-from pydantic import Field, SecretStr, ValidationError
+from pydantic import AfterValidator, Field, SecretStr, ValidationError
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -91,6 +91,14 @@ def ui_of(field: FieldInfo) -> UI | None:
 
 def is_secret(field: FieldInfo) -> bool:
     return SecretStr in get_args(field.annotation) or field.annotation is SecretStr
+
+
+def _languages(codes: list[str]) -> list[str]:
+    """ISO 639-2 codes, as MakeMKV names a track's language ("eng")."""
+    out = [c.strip().lower() for c in codes if c.strip()]
+    if bad := [c for c in out if not (len(c) == 3 and c.isascii() and c.isalpha())]:
+        raise ValueError(f"not a three-letter language code: {', '.join(bad)}")
+    return list(dict.fromkeys(out))
 
 
 class Settings(BaseSettings):
@@ -243,6 +251,28 @@ class Settings(BaseSettings):
     # drive id -> a name given in the UI ("Top bay"), shown instead of the model.
     drive_names: Annotated[dict[str, str], UI(None, update=False)] = {}
     auto_eject: Annotated[bool, UI("drives", "Eject when the rip finishes")] = True
+    # Which audio and subtitle tracks MakeMKV keeps, as its default selection rule
+    # (makemkv.selection). Off leaves MakeMKV's own rule. A full backup keeps everything.
+    track_selection: Annotated[bool, UI(
+        "drives", "Choose which audio and subtitle tracks are kept",
+        "Off keeps MakeMKV's own choice. Full disc backups keep every track.",
+        keywords="audio subtitles language commentary streams")] = False
+    track_languages: Annotated[list[str], AfterValidator(_languages), UI(
+        "drives", "Languages", "Three-letter codes, comma separated, such as eng, fre.",
+        placeholder="eng", keywords="audio subtitles")] = ["eng"]
+    track_audio: Annotated[Literal["languages", "all"], UI(
+        "drives", "Audio", "A disc's only audio track is always kept.",
+        choices=(("languages", "In these languages"), ("all", "Every audio track")))] = "languages"
+    track_commentary: Annotated[bool, UI("drives", "Keep commentary tracks")] = True
+    track_subtitles: Annotated[Literal["none", "forced", "languages", "all"], UI(
+        "drives", "Subtitles", choices=(("none", "None"), ("forced", "Forced only, in these languages"),
+                                        ("languages", "In these languages"), ("all", "Every subtitle track")))
+    ] = "languages"
+    # MakeMKV's own rule syntax, used instead of the choices above when set.
+    track_rule: Annotated[str | None, Field(max_length=500, pattern=r'^[^"\n]*$'), UI(
+        "drives", "MakeMKV selection rule", "Used instead of the choices above. MakeMKV's own syntax.",
+        advanced=True, placeholder="-sel:all,+sel:(favlang|nolang|single),-sel:mvcvideo",
+        keywords="app_DefaultSelectionString")] = None
     # A scan is stopped once MakeMKV has written nothing for scan_timeout_s, and in any
     # case after scan_max_s. A damaged disc keeps MakeMKV busy (read retries, slow
     # AACS) for far longer than a healthy one, but it keeps reporting while it does.
