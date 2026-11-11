@@ -13,7 +13,7 @@ import pytest
 import respx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from ripshelf import scanjobs
 from ripshelf.dev.fake import FakeDrives
@@ -189,6 +189,65 @@ def test_trim_leaves_a_full_picture_alone():
 def test_render_turns_after_trimming():
     img = images.render(picture(300, 200), [0, 0, 100, 50], 90)
     assert img.size == (50, 100)
+
+
+def flatbed(w: int = 1200, h: int = 1720, *, edge_lines: bool = True, askew: float = 0.0,
+            pale_foot: bool = False, specks: bool = False) -> tuple[bytes, tuple[int, int]]:
+    """A made-up sleeve in the top-left corner of an off-white glass, the way a flatbed
+    scans it: the sleeve fills 90% of the width and 93% of the height, the empty glass
+    is to its right and below it, saved as a JPEG. With ``edge_lines`` the glass's far
+    edges have the thin grey shadow a scanner's lid often leaves. Returns the scan and
+    the sleeve's size."""
+    glass = Image.new("RGB", (w, h), (247, 246, 243))
+    cw, ch = round(w * 0.9), round(h * 0.93)
+    sleeve = Image.new("RGB", (cw, ch), (40, 70, 140))
+    d = ImageDraw.Draw(sleeve)
+    d.rectangle((cw * 0.1, ch * 0.5, cw * 0.9, ch * 0.8), fill=(220, 200, 60))
+    if pale_foot:  # a white foot to the sleeve with only small grey print on it
+        d.rectangle((0, ch * 0.85, cw, ch), fill=(246, 245, 242))
+        for i in range(3):
+            d.text((cw * 0.1, ch * (0.9 + 0.025 * i)), "Lanternfish Pictures presents a made-up film",
+                   fill=(90, 90, 90), font=ImageFont.load_default(ch // 70))
+    if askew:
+        sleeve = sleeve.convert("RGBA").rotate(askew, expand=True, resample=Image.Resampling.BICUBIC)
+        glass.paste(sleeve, (0, 0), sleeve)
+    else:
+        glass.paste(sleeve, (0, 0))
+    d = ImageDraw.Draw(glass)
+    if edge_lines:
+        d.line([(w - 3, 0), (w - 3, h)], fill=(150, 150, 150), width=2)
+        d.line([(0, h - 3), (w, h - 3)], fill=(160, 160, 160), width=2)
+    if specks:
+        for x, y in ((0.95, 0.3), (0.5, 0.97), (0.98, 0.6)):
+            d.ellipse((w * x, h * y, w * x + 4, h * y + 4), fill=(60, 60, 60))
+    out = io.BytesIO()
+    glass.save(out, "JPEG", quality=80)
+    return out.getvalue(), (cw, ch)
+
+
+@pytest.mark.parametrize("kw", [{}, {"edge_lines": False}, {"specks": True}])
+def test_trim_cuts_each_side_to_the_sleeve(kw):
+    data, (cw, ch) = flatbed(**kw)
+    left, top, right, bottom = images.trim_box(images.open_image(data))
+    # The sleeve is flush with the top and left; right and bottom are cut to within a
+    # small margin of it, past the shadow along the glass's edges and any dust.
+    assert (left, top) == (0, 0)
+    assert cw <= right <= cw + 20 and ch <= bottom <= ch + 20
+
+
+def test_trim_keeps_a_pale_sleeves_small_print():
+    data, (cw, ch) = flatbed(pale_foot=True)
+    _, _, right, bottom = images.trim_box(images.open_image(data))
+    assert cw <= right <= cw + 20
+    assert bottom >= ch * (0.9 + 0.05) + ch // 70  # below the last line of print
+
+
+def test_trim_keeps_the_corners_of_a_sleeve_laid_askew():
+    data, (cw, ch) = flatbed(askew=1.0)
+    _, _, right, bottom = images.trim_box(images.open_image(data))
+    # Turned by a degree, its corners reach out past its sides by sin(1°) of them.
+    assert right >= cw + 0.017 * ch and bottom >= ch + 0.017 * cw - 2
+    assert right <= cw + 0.0175 * ch + 20 and bottom <= ch + 0.0175 * cw + 20
 
 
 def test_halves_of_a_sheet():
