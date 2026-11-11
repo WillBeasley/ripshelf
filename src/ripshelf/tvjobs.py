@@ -311,6 +311,7 @@ class TvMixin:
                     mapping[0].episodes = [EpisodeRef(season=hit.season, episode=hit.episode)]
                     mapping[0].note = f"the disc is named “{hit.name}”"
             plan.mapping = sorted([*mapping, *others.values()], key=lambda m: m.title_index)
+            plan.order_from = None
             self._label_parts(plan)
         else:
             s_guess, disc_guess, start_guess = self._next_for(show, season, disc_number, job_id)
@@ -352,11 +353,13 @@ class TvMixin:
                 others = {m.title_index: m.model_copy(update={"episodes": []}) for m in plan.mapping
                           if m.role != TitleRole.episode}
             plan.mapping = tvmap.propose(ordered, others, episodes, plan.start_episode, pal)
+            plan.order_from = "season"
             self._label_parts(plan)
             plan.disc_db = False
             mapped = self._disc_match_mapping(job, plan, show)
             if mapped:
                 notes.append(mapped)
+                plan.order_from = "disc_db"
         # Everything from TMDB is in hand, so apply it to the job as it is now (the rip
         # task saves to it while we wait on the network).
         fresh = self.db.get_job(job_id)
@@ -508,6 +511,7 @@ class TvMixin:
         else:
             pal = any(t.framerate == "25" for t in job.titles)
             plan.mapping = tvmap.propose(ordered, others, plan.episodes, plan.start_episode, pal)
+            plan.order_from = "season"
         self._label_parts(plan)
 
     @staticmethod
@@ -571,6 +575,10 @@ class TvMixin:
                         f"episodes: {sp.note}; confidence {sp.confidence:.0%}")
         self._check_plan(job)
         self._save(job)
+        if sp.state == "ready":
+            # The parts were given the season's episodes in order; the box's list says which is which.
+            self.rematch(job_id)
+            self.apply_scan_picks(job_id)
 
     def _mark_thumb(self, job: JobRecord, title_index: int, at: float) -> Path:
         # By time, not mark number, as a cut put in by hand renumbers the marks after it.
@@ -643,7 +651,8 @@ class TvMixin:
         self._remap(job, plan)
         self._check_plan(job)
         self._save(job)
-        return job
+        self.rematch(job_id)  # the box against the parts as they are now
+        return self.db.get_job(job_id)
 
     async def _split_title(self, job_id: int) -> bool:
         """Split the long title into one file per part (mkvmerge, no re-encoding). False if it failed."""
@@ -865,6 +874,7 @@ class TvMixin:
         plan.episodes = episodes if plan.compilation else [e for e in episodes if e.season in seasons]
         if not plan.compilation and seasons:
             plan.season = seasons.pop()
+        plan.order_from = "names"
         self._event(job, "info", f"Matched {len(matches) - len(unmatched)} of {len(names)} names to episodes"
                     + (f"; no match for {', '.join(unmatched[:3])}" if unmatched else ""))
         if len(names) != len(ordered):

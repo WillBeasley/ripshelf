@@ -31,11 +31,13 @@ from .models import (
     JobState,
     MediaKind,
     ScanMatch,
+    TitleInfo,
     TitleMatch,
     TitleRole,
 )
 from .providers import release_info
 from .scanner import match as matcher
+from .tv import split as tvsplit
 from .tv import tmdb_tv
 
 if TYPE_CHECKING:
@@ -69,14 +71,30 @@ class MatchMixin:
         pal = job.disc.kind == DiscKind.dvd and any((t.resolution or "").endswith("576") for t in job.titles)
         disc = (tv.disc_number if tv else None) or (job.contribution.disc_number if job.contribution else None)
         listing, bonus = self._with_bonus(listing, tv.bonus if tv else [])
-        m = matcher.match(job.titles, listing, media=job.media.value, episodes=tv.episodes if tv else [],
+        titles = self._titles_in_disc_order(job) if tv else job.titles
+        m = matcher.match(titles, listing, media=job.media.value, episodes=tv.episodes if tv else [],
                           season=tv.season if tv else None, mapping=tv.mapping if tv else [],
                           main_title=job.main_title.index if job.main_title and job.media == MediaKind.movie
-                          else None, disc=disc, claimed=self._claimed(job, listing), pal=pal)
+                          else None, disc=disc, claimed=self._claimed(job, listing), pal=pal,
+                          in_order=bool(tv))
         for x in m.matches:
             x.bonus = bonus.get(x.item) if x.item is not None else None
         m.made_at = now()
         return m
+
+    def _titles_in_disc_order(self, job: JobRecord) -> list[TitleInfo]:
+        """A TV disc's titles as the box is matched against them: a split title's parts
+        in its place, and the episode titles in the order the disc plays them (a
+        Blu-ray's play-all) among the rest, which stay in title order. The parts are
+        alike, so their order is all that places the box's lines on them."""
+        ordered = self._ordered_episode_titles(job)
+        parts = [t for t in ordered if tvsplit.is_part(t.index)]
+        src = job.tv.split.title_index if parts else None
+        base: list[TitleInfo] = []
+        for t in sorted(job.titles, key=lambda t: t.index):
+            base.extend(parts if t.index == src else [t])
+        eps, it = {t.index for t in ordered}, iter(ordered)
+        return [next(it) if t.index in eps else t for t in base]
 
     @staticmethod
     def _with_bonus(listing, found: list[BonusEpisode]):
@@ -395,16 +413,21 @@ class ShowFromScanMixin:
 
     def apply_scan_picks(self, job_id: int, asked: bool = False) -> bool:
         """Put the cover scan's episodes into the mapping, when every episode line it lists
-        matched a title (high or medium) with an episode of the show. Titles the mapping had
-        as episodes that the box doesn't list become extras. Review still confirms."""
+        matched a title (high or medium) with an episode of the show, or, when it lists
+        more than the disc holds, every episode title got one. Titles the mapping had as
+        episodes that the box doesn't list become extras. Review still confirms."""
         job = self.db.get_job(job_id)
         if not job or not job.tv or job.state != JobState.review or job.identity or (job.tv.user_edited and not asked):
             return False
+        self.rematch(job_id)  # against the titles as they are now (a split title's parts)
+        job = self.db.get_job(job_id)
         names = self._scan_episode_names(job)
         m = job.scan_match
         matches = m.matches if m else []
         picks = {x.title_index: x for x in matches if x.kind == "episode" and x.episodes and x.confidence != "low"}
-        if not names or len(picks) < len(names):
+        on_disc = {r.title_index for r in job.tv.mapping if r.role == TitleRole.episode}
+        every_title = len(names) > len(on_disc) >= 2 and on_disc <= set(picks)
+        if not names or (len(picks) < len(names) and not every_title):
             picks = {}  # not every episode found: the mapping's own guess stands
         # A bonus episode of another show is ripped and filed, as an extra or in its show,
         # when its runtime agrees (high: an episode-length title isn't the 10-minute bonus).
@@ -440,6 +463,8 @@ class ShowFromScanMixin:
             elif r in taken:
                 r.episodes, r.note = [], "its episode is on a title the box placed; pick which this is"
         plan.from_scan = True
+        if picks:
+            plan.order_from = "box"
         self._save(job)
         what = [f"{len(picks)} episodes"] if picks else []
         what += [f"the bonus episode {x.bonus.name}" for x in bonus.values()]

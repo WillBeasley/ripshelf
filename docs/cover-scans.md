@@ -155,7 +155,7 @@ ripshelf matches each line of the listing to one of the disc's titles. **Matched
 What decides a match:
 - **Episode names.** A name found in the season's episode list (from TMDB, TheTVDB or TVmaze) gives its SxxEyy, wherever it is on the disc. "Part 1" and "Pt. One" are the same.
 - **Runtimes.** Printed runtimes are rounded, so within about 10% or 2 minutes counts as agreeing, and PAL's 4% speed-up is allowed for. An extra with no printed runtime is judged by what its type usually runs to: a trailer a couple of minutes, a featurette twenty.
-- **Order.** Boxes usually list things in disc order. This only tips the balance, as some discs scramble their playlists. When titles are alike and the box lists fewer than the disc has, the match says that only the order on the box placed it, and is never high.
+- **Order.** Boxes usually list things in disc order. This only tips the balance, as some discs scramble their playlists, but it is all that tells alike titles apart, such as the parts of [one long title split into episodes](tv-splitting.md): those are matched as titles of their own, in the disc's order. When the box lists more or fewer than the disc has, places are counted from the start of the list, and a match that only the order on the box placed is never high.
 - **The main feature.** For a film, it is picked from the long titles by the printed running time, the printed audio languages, and a commentary track.
 - **What ripshelf already thinks.** If the TV mapping or the film's main title agrees, the match is more sure. If it disagrees, the match is shown with what ripshelf has instead, for you to settle.
 - **Box sets.** Discs of one TheDiscDB release share the set's listing. A disc only takes the lines that no other disc of the set took, and only lines printed for its own disc number.
@@ -163,7 +163,7 @@ What decides a match:
 The play-all, duplicates and a Blu-ray's loose clips are left out. Lines and titles nothing matched are listed underneath.
 
 How the matches are used:
-- **TV review.** When every episode the box lists is matched (high or medium), the mapping is set from the box, and a title still mapped as an episode becomes an extra. The card starts with "The box says: … S01E18 Treehouse, S01E24 Giant Cake …", with **Use this** when the mapping says otherwise (a mapping you changed by hand is only changed by Use this). A mapping set from the scan is never confirmed on its own: you press Confirm.
+- **TV review.** When every episode the box lists is matched (high or medium), or the box lists more than the disc holds and every episode title is matched, the mapping is set from the box, and a title still mapped as an episode becomes an extra. The card starts with "The box says: … S01E18 Treehouse, S01E24 Giant Cake …", with **Use this** when the mapping says otherwise (a mapping you changed by hand is only changed by Use this). A mapping set from the scan is never confirmed on its own: you press Confirm.
 - **TheDiscDB.** The naming list for extras starts from the names and types the scan gives.
 - **The library.** Matched extras are filed by name (below). Low matches aren't used for names.
 
