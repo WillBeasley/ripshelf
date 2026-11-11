@@ -14,7 +14,17 @@ export default defineConfig({
 			adapter: adapter({ fallback: 'index.html' })
 		})
 	],
-	server: { proxy: { '/api': { target: backend, changeOrigin: true } } },
+	// The backend refuses changes from pages on other addresses (origins.py), so the
+	// proxied requests say they come from the backend's own.
+	server: {
+		proxy: {
+			'/api': {
+				target: backend,
+				changeOrigin: true,
+				configure: (proxy) => proxy.on('proxyReq', (req) => req.setHeader('origin', backend))
+			}
+		}
+	},
 	// `npm test`: the UI's logic, without a browser. The browser tests are test/e2e (Playwright).
 	test: { include: ['test/unit/**/*.test.ts'] },
 	// Svelte's browser build in tests, so $state and $derived react as they do in the page.

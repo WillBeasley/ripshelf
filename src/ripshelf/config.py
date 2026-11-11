@@ -118,6 +118,9 @@ class Settings(BaseSettings):
         advanced=True, keywords="bdmv folder")] = None
     host: str = "0.0.0.0"
     port: int = 8380
+    # More names the UI is reached by, besides addresses, plain and local names and the
+    # public URL's (origins.py): comma separated, ".example.com" for any name under it.
+    allowed_hosts: str = ""
     makemkvcon: str = "makemkvcon"
     # MakeMKV's licence, where ripshelf installed MakeMKV itself (the image sets the file). Until
     # accept_makemkv_eula is set (RIPSHELF_ACCEPT_MAKEMKV_EULA=yes), MakeMKV is not run and discs wait.

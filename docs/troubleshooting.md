@@ -83,6 +83,12 @@ The container restarted mid-rip, because of an update, Watchtower or a reboot. R
 
 Settings → Transcoding lists the GPUs and the ffmpeg hardware encoders that work in the container, each tested with a short encode. For an Intel or AMD GPU, pass `/dev/dri` into the container and add the host's render group (`getent group render`) to `group_add`. A job's Transcode log has the ffmpeg command and its errors. With several GPUs, pick the one for Quick Sync and VAAPI under Settings → Transcoding; Auto tries Quick Sync, then VAAPI, then NVENC on it and uses the first that works. If Quick Sync fails with `unsupported (-3)` on a 12th gen or newer Intel CPU, the image is older than the one that added the oneVPL runtime (`libmfx-gen1.2`); pull a newer one.
 
+## "ripshelf isn't served at ..."
+
+ripshelf only answers to the names a LAN uses: IP addresses, `localhost`, names with no dots (`hestia`), and names under `.local`, `.lan`, `.home`, `.home.arpa` and `.internal`. That stops a web page on a name someone points at your server's address (DNS rebinding) from using it. If you open the UI by another name, such as through a reverse proxy or a `ts.net` Tailscale name, set that address as this UI's address in Settings → System (open it by IP to get there), or add the name to `RIPSHELF_ALLOWED_HOSTS`, for example `RIPSHELF_ALLOWED_HOSTS=rip.example.com` or `.example.com` for every name under it. Remote workers aren't affected.
+
+"Refused a change sent from another web page" means a page that wasn't the ripshelf UI tried to eject, cancel or change something, through your browser. If it was the UI itself behind a reverse proxy that changes the `Host` header, set the public address in Settings → System.
+
 ## Still stuck?
 
 Open an issue with the job's MakeMKV log (from its panel) and the relevant lines from the Logs page. Check them for anything you'd rather not share first.
