@@ -1000,7 +1000,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                     JobState.identifying, JobState.review, JobState.ripping, JobState.clash):
                 if preset.media == MediaKind.movie:
                     return await self.confirm(job_id, preset.candidate)
-                return await self.tv_propose(job_id, preset.show.tmdb_id, preset.season, preset.disc_number,
+                return await self.tv_propose(job_id, preset.show.key, preset.season, preset.disc_number,
                                              preset.start_episode, False)
             raise ValueError("the scan has finished, so identify the disc in Review")
         self._presets[job_id] = job.preset = preset
@@ -2118,8 +2118,12 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                         "(or RIPSHELF_ACCEPT_MAKEMKV_EULA=yes in an env file) and restart it",
                 command='RIPSHELF_ACCEPT_MAKEMKV_EULA: "yes"'))
         if not self.s.secret("tmdb_api_key"):
-            out.append(SetupProblem(code="tmdb_key", message="No TMDB API key, so TV discs can't be identified, and "
-                                                              "films only when TheDiscDB knows the disc"))
+            tv = [providers.label(n) for n in providers.enabled(self.s, "tv") if n in ("tvdb", "tvmaze")]
+            out.append(SetupProblem(code="tmdb_key", message=(
+                f"No TMDB API key, so TV shows come from {' and '.join(tv)} without posters from TMDB, and "
+                "films are identified only when TheDiscDB knows the disc" if tv else
+                "No TMDB API key, so TV discs can't be identified (switch TVmaze on, or set a TheTVDB key, to "
+                "identify them without one), and films only when TheDiscDB knows the disc")))
         for root, what in self.s.output_roots():
             try:
                 library.check_library(root, what)

@@ -110,8 +110,10 @@ def eligibility(s: Settings, job: JobRecord, log_path: Path) -> tuple[bool, str 
         return False, "A full disc backup has no episodes to describe", False
     if job.disc.kind not in CONTENT_TYPES:
         return False, "Only DVDs, Blu-rays and UHD Blu-rays can be added", False
-    if not job.identity or not job.identity.tmdb_id:
+    if not job.identity:
         return False, "Confirm what the disc is first", False
+    if not job.identity.tmdb_id:
+        return False, "TheDiscDB needs the show's or film's TMDB id, and this disc was identified without TMDB", False
     if job.media == MediaKind.tv and not (job.tv and job.tv.show and job.tv.mapping):
         return False, "Confirm the episodes first", False
     if job.media == MediaKind.movie and not job.main_title:

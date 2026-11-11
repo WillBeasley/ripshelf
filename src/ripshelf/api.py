@@ -696,7 +696,7 @@ async def tv_search(request: Request, q: Annotated[str, Query(min_length=1, max_
 async def tv_propose(job_id: int, body: TvProposeRequest, request: Request):
     m = manager(request)
     return await _job_action(request, job_id, lambda i: m.tv_propose(
-        i, body.show_tmdb_id, body.season, body.disc_number, body.start_episode, body.compilation))
+        i, body.show_key, body.season, body.disc_number, body.start_episode, body.compilation))
 
 
 @api.post("/jobs/{job_id}/tv/match-text", response_model=Job)

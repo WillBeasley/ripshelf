@@ -98,7 +98,7 @@ class Evidence(BaseModel):
 
 
 class Candidate(BaseModel):
-    source: Literal["tmdb", "cache", "manual", "omdb", "thediscdb"] = "tmdb"
+    source: Literal["tmdb", "cache", "manual", "omdb", "thediscdb", "tvdb", "tvmaze"] = "tmdb"
     tmdb_id: int | None = None
     imdb_id: str | None = None
     providers: list[str] = Field(default=[], description="metadata providers that found it, best first")
@@ -168,15 +168,24 @@ class Episode(EpisodeRef):
     air_date: str | None = None
 
 
+ShowSource = Literal["tmdb", "tvdb", "tvmaze"]
+
+
 class Show(BaseModel):
-    tmdb_id: int
+    """A TV series. ``source`` is the provider whose id names it: TMDB when there is a
+    TMDB key, else TheTVDB or TVmaze. ``key`` ("tmdb:1399") is that provider and id."""
+
+    source: ShowSource = "tmdb"
+    key: str = Field("", description="the source and its id, \"tvmaze:82\"; set from them")
+    tmdb_id: int | None = None
     tvdb_id: int | None = None
     imdb_id: str | None = None
+    tvmaze_id: int | None = None
     name: str
     original_name: str | None = None
     year: int | None = None
     poster_url: str | None = None
-    episode_runtime: int | None = Field(None, description="typical minutes, from TMDB")
+    episode_runtime: int | None = Field(None, description="typical minutes, from the show's source")
     seasons: dict[int, int] = Field(default={}, description="season number -> episode count")
     genre_ids: list[int] = []
     vote_count: int | None = None
@@ -184,6 +193,23 @@ class Show(BaseModel):
     excluded: bool = False
     score: float = 0.0
     evidence: list[Evidence] = []
+
+    @model_validator(mode="after")
+    def _keyed(self) -> Show:
+        id_ = getattr(self, f"{self.source}_id")
+        if not id_:
+            raise ValueError(f"a show from {self.source} needs its {self.source}_id")
+        self.key = f"{self.source}:{id_}"
+        return self
+
+
+def parse_show_key(key: str) -> tuple[ShowSource, int]:
+    """("tvmaze", 82) from "tvmaze:82"; a bare number is a TMDB id."""
+    source, _, id_ = key.rpartition(":")
+    source = source or "tmdb"
+    if source not in get_args(ShowSource) or not id_.isdigit() or int(id_) <= 0:
+        raise ValueError(f"not a show: {key!r}")
+    return source, int(id_)  # type: ignore[return-value]
 
 
 class DiscMatchTitle(BaseModel):
@@ -1178,11 +1204,21 @@ class ServerLibrariesRequest(BaseModel):
 
 
 class TvProposeRequest(BaseModel):
-    show_tmdb_id: int
+    show_key: str | None = Field(None, description="the show's key (\"tmdb:1399\", \"tvmaze:82\")")
+    show_tmdb_id: int | None = Field(None, description="older clients: a TMDB id, in place of show_key")
     season: int | None = Field(None, ge=0)
     disc_number: int | None = Field(None, ge=1)
     start_episode: int | None = Field(None, ge=1)
     compilation: bool = False
+
+    @model_validator(mode="after")
+    def _show(self) -> TvProposeRequest:
+        if self.show_key is None:
+            if self.show_tmdb_id is None:
+                raise ValueError("pick the show")
+            self.show_key = f"tmdb:{self.show_tmdb_id}"
+        parse_show_key(self.show_key)
+        return self
 
 
 class TvMatchTextRequest(BaseModel):

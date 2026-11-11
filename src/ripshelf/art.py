@@ -1,8 +1,9 @@
 """Poster cache for the Drives screen (and anything else that shows a disc's art).
 
-Posters come from TMDB's image server only, because a candidate's poster URL can be
-typed in by hand (manual confirm), and the server must not be talked into
-fetching arbitrary addresses. Each poster is downloaded into ``<data>/art/<key>.jpg``
+Posters come from TMDB's image server only (and TVmaze's and TheTVDB's, for shows
+found without a TMDB key), because a candidate's poster URL can be typed in by
+hand (manual confirm), and the server must not be talked into fetching arbitrary
+addresses. Each poster is downloaded into ``<data>/art/<key>.jpg``
 and kept for at most MAX_AGE_S. TMDB's terms allow caching its content for up to six
 months, so an older copy is downloaded again when it's next shown, and prune()
 deletes copies nobody has shown for that long.
@@ -21,7 +22,7 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-ALLOWED_PREFIX = "https://image.tmdb.org/"
+ALLOWED_PREFIXES = ("https://image.tmdb.org/", "https://static.tvmaze.com/", "https://artworks.thetvdb.com/")
 MAX_BYTES = 5 * 1024 * 1024
 MAX_AGE_S = 90 * 24 * 3600
 _locks: dict[str, asyncio.Lock] = {}
@@ -33,7 +34,7 @@ def key(url: str) -> str:
 
 async def cached(art_dir: Path, url: str, client: httpx.AsyncClient | None = None) -> Path | None:
     """The poster as a local file, downloading it the first time. None if it can't be had."""
-    if not url.startswith(ALLOWED_PREFIX):
+    if not url.startswith(ALLOWED_PREFIXES):
         return None
     k = key(url)
     path = art_dir / f"{k}.jpg"

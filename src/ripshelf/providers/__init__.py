@@ -7,8 +7,10 @@ ordered list of providers, each switched on or off in Settings:
             searches. Every enabled search is asked and the results merged; a
             film found by several providers says so.
   tv        TV shows: asked in order until one finds the show (a later one is a
-            fallback). TMDB stays the show's identity, so hits from TheTVDB or
-            TVmaze are looked up on TMDB through their TMDB, TheTVDB or IMDb ids.
+            fallback). With a TMDB key, TMDB stays the show's identity, so hits
+            from TheTVDB or TVmaze are looked up on TMDB through their TMDB,
+            TheTVDB or IMDb ids. Without one, TheTVDB's or TVmaze's show is used,
+            keyed by its own id.
   episodes  a season's episode list: the first provider that has the season.
 
 A provider that needs a key is skipped until the key is set. Keys and other
@@ -43,14 +45,15 @@ PROVIDERS: dict[str, Provider] = {p.name: p for p in (
              "the film or which episode. Free, no key.",
              ("movie", "tv"), site="https://thediscdb.com", check="thediscdb"),
     Provider("tmdb", "TMDB",
-             "The Movie Database, for films, shows and episodes. Names everything ripshelf files, so it is needed "
-             "for TV.", ("movie", "tv", "episodes"), keys=("tmdb_api_key",),
+             "The Movie Database, for films, shows and episodes. Names everything ripshelf files when its key is "
+             "set; without it, TV shows come from TheTVDB or TVmaze.", ("movie", "tv", "episodes"), keys=("tmdb_api_key",),
              site="https://www.themoviedb.org/settings/api", check="tmdb"),
     Provider("tvdb", "TheTVDB",
              "Shows and episodes, in aired or DVD order. Finds shows TMDB's search misses.",
              ("tv", "episodes"), keys=("tvdb_api_key",), site="https://thetvdb.com/api-information", check="tvdb"),
     Provider("tvmaze", "TVmaze",
-             "Shows and episodes. Free, with no key, as a fallback when there is no TheTVDB key.",
+             "Shows and episodes. Free, with no key: a fallback when there is no TheTVDB key, and the show search "
+             "when there is no TMDB key either.",
              ("tv", "episodes"), site="https://www.tvmaze.com/api", check="tvmaze"),
     Provider("omdb", "OMDb",
              "IMDb's titles, years and runtimes, for a second film search and a cross-check of TMDB's.",

@@ -36,9 +36,11 @@ from .models import (
     TitleRole,
 )
 from .providers import release_info
+from .providers.tvmaze import TvmazeError
 from .scanner import match as matcher
 from .tv import split as tvsplit
 from .tv import tmdb_tv
+from .tv.tvdb import TvdbError
 
 if TYPE_CHECKING:
     from .db import JobRecord
@@ -325,15 +327,19 @@ class ShowFromScanMixin:
         names = self._scan_episode_names(job)
         changed = False
         # A show picked by hand stays; the box's picks still fill the titles not set by hand.
-        if (not job.tv.user_edited or asked) and (tmdb := self._tmdb()):
+        tmdb = self._tmdb()
+        if (not job.tv.user_edited or asked) and (tmdb or self._keyless_sources()):
             try:
                 if len(names) >= 2:
                     changed = await self._switch_show(job_id, names, tmdb)
                 changed = await self._find_bonus(job_id, tmdb) or changed
-            except (TmdbError, httpx.HTTPError) as e:
+            except (TmdbError, TvdbError, TvmazeError, httpx.HTTPError) as e:
                 log.info("no show from the cover scan for job %s: %s", job_id, e)
             finally:
-                await tmdb.aclose()
+                if tmdb:
+                    await tmdb.aclose()
+        elif tmdb:
+            await tmdb.aclose()
         return self.apply_scan_picks(job_id, asked) or changed
 
     async def use_scan(self, job_id: int) -> JobRecord:
@@ -356,8 +362,8 @@ class ShowFromScanMixin:
         wanted = {(it.show, it.title) for it in (listing.items if listing else []) if it.kind == "extra" and it.show}
         have = {(b.box_show, b.box_title): b for b in job.tv.bonus if (b.box_show, b.box_title) in wanted}
         for box_show, box_title in sorted(wanted - set(have)):
-            for show in (await tmdb_tv.find_shows(tmdb, box_show, None))[:3]:
-                ep = matcher.episode_for(box_title, await tmdb_tv.all_episodes(tmdb, show), None)[0]
+            for show in (await self._scan_shows(tmdb, box_show))[:3]:
+                ep = matcher.episode_for(box_title, await self._all_episodes(show, tmdb), None)[0]
                 if ep:
                     have[(box_show, box_title)] = BonusEpisode(box_show=box_show, box_title=box_title,
                                                                show=show, episode=ep)
@@ -375,19 +381,23 @@ class ShowFromScanMixin:
         self.rematch(job_id)
         return True
 
+    async def _scan_shows(self, tmdb, name: str) -> list:
+        """Shows for a name the box gives: TMDB's, or without a key TheTVDB's or TVmaze's."""
+        return await tmdb_tv.find_shows(tmdb, name, None) if tmdb else await self._find_shows(None, name, None)
+
     async def _switch_show(self, job_id: int, names: list[str], tmdb) -> bool:
         job = self.db.get_job(job_id)
         plan = job.tv
-        shows = {s.tmdb_id: s for s in ([plan.show] if plan.show else []) + list(plan.candidates or [])}
+        shows = {s.key: s for s in ([plan.show] if plan.show else []) + list(plan.candidates or [])}
         hints = await self.scan_hints(job)
         for n in hints.names[:2]:
-            for s in (await tmdb_tv.find_shows(tmdb, n, None))[:3]:
-                shows.setdefault(s.tmdb_id, s)
+            for s in (await self._scan_shows(tmdb, n))[:3]:
+                shows.setdefault(s.key, s)
         box_prefix = matcher.shared_prefix(names)
         need = max(2, -(-len(names) * 3 // 5))  # three in five of the names, and two at least
         best, best_hits, best_season = None, 0, None
         for show in list(shows.values())[:MAX_SHOWS_CHECKED]:
-            episodes = await tmdb_tv.all_episodes(tmdb, show)
+            episodes = await self._all_episodes(show, tmdb)
             show_prefix = matcher.shared_prefix([e.name for e in episodes])
             hits = [e for n in names
                     if (e := matcher.episode_for(n, episodes, None, box_prefix, show_prefix)[0])]
@@ -396,7 +406,7 @@ class ShowFromScanMixin:
                 best, best_hits, best_season = show, len(hits), seasons.most_common(1)[0][0]
         if not best or best_hits < need:
             return False
-        if plan.show and plan.show.tmdb_id == best.tmdb_id and plan.season == best_season:
+        if plan.show and plan.show.key == best.key and plan.season == best_season:
             return False
         was = f"{plan.show.name} season {plan.season}" if plan.show else "no show"
         await self._propose(job_id, best, best_season, None, None, None, tmdb)
@@ -404,7 +414,7 @@ class ShowFromScanMixin:
         best = best.model_copy(update={"evidence": [*best.evidence, Evidence(
             ok=True, text=f"{best_hits} of the {len(names)} episodes the cover scan lists are this show's")]})
         job.tv.show, job.tv.from_scan = best, True
-        job.tv.candidates = [best, *[c for c in job.tv.candidates if c.tmdb_id != best.tmdb_id]]
+        job.tv.candidates = [best, *[c for c in job.tv.candidates if c.key != best.key]]
         self._save(job)
         self._event(job, "info", f"The cover scan's episodes are {best.name} season {best_season} "
                                  f"({best_hits} of {len(names)}), not {was}: proposed that instead")
