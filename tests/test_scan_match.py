@@ -154,9 +154,43 @@ def test_tracks_from_makemkv():
 
 def test_alike_titles_placed_by_the_box_alone_are_not_sure():
     """Three names listed for ten titles of the same length: the names say which
-    episodes, but only their places on the box which titles."""
+    episodes, but only their places on the box which titles. (No runtimes are known:
+    a 7-minute title for a 22-minute episode would be low.)"""
     titles = [title(i, 7) for i in range(1, 11)]
-    m = match.match(titles, Listing(items=[ep("Low Tide"), ep("The Gull Who Stayed"), ep("A Storm in a Teacup")]),
-                    media="tv", episodes=SEASON, season=2)
+    listing = Listing(items=[ep("Low Tide"), ep("The Gull Who Stayed"), ep("A Storm in a Teacup")])
+    unknown = [e.model_copy(update={"runtime": None}) for e in SEASON]
+    m = match.match(titles, listing, media="tv", episodes=unknown, season=2)
     assert len(m.matches) == 3 and {x.confidence for x in m.matches} == {"medium"}
     assert "its place on the box decided" in m.matches[0].reason
+    m = match.match(titles, listing, media="tv", episodes=SEASON, season=2)
+    assert {x.confidence for x in m.matches} == {"low"}
+
+
+# A season of thirteen alike ten-minute episodes, and a disc holding ten of them in its
+# own order (not the season's): nine in one long title split into parts, and one title.
+TUGBOAT = [Episode(season=1, episode=n, name=name, runtime=10) for n, name in enumerate([
+    "Tilly Takes the Tow", "Rusty's Rope", "Fog on the Estuary", "Captain Pim's Pennant", "Barnacle Bay",
+    "The Lost Lifebuoy", "Tilly's Horn", "Night Lights", "The Big Regatta", "Pim's Birthday",
+    "Mudflat Morning", "The Gull Thief", "Home to Harbour"], 1)]
+DISC_ORDER = [4, 5, 1, 8, 6, 3, 7, 10, 2, 9]  # the box lists these first, then 11, 12, 13
+
+
+def tugboat_box() -> Listing:
+    order = [*DISC_ORDER, 11, 12, 13]
+    return Listing(items=[ep(TUGBOAT[n - 1].name) for n in order], details=ListingDetails(episode_count=13))
+
+
+def test_a_box_listing_more_episodes_than_the_disc_places_them_from_the_start():
+    """Ten alike titles in the disc's order, and a box listing thirteen: the disc's ten
+    are the box's first ten, not ten spread over the whole list."""
+    titles = [title(1000 + k, 10.2) for k in range(9)] + [title(1, 10.2)]
+    m = match.match(titles, tugboat_box(), media="tv", episodes=TUGBOAT, season=1, in_order=True)
+    got = {x.title_index: x.episodes[0].episode for x in m.matches}
+    assert [got[t.index] for t in titles] == DISC_ORDER
+    assert m.unmatched_items == [10, 11, 12]
+
+
+def test_titles_by_number_unless_in_the_discs_order():
+    titles = [title(1000, 10), title(1001, 10), title(1, 10)]
+    assert [t.index for t in match._candidates(titles, [])] == [1, 1000, 1001]
+    assert [t.index for t in match._candidates(titles, [], in_order=True)] == [1000, 1001, 1]

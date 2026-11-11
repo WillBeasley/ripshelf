@@ -14,6 +14,7 @@ ripshelf only treats a disc as TV when its label looks like TV (a season or volu
 2. **Otherwise, a search.** With fewer chapters than episodes, often none, ripshelf searches the whole title for black frames and silence, and those breaks are where it can be cut. This decodes the entire title: about half a minute to a few minutes for a DVD, longer for a Blu-ray.
 3. **Fit to the runtimes.** From the possible cut points, ripshelf picks the ones that best match the episode runtimes from TMDB, TheTVDB or TVmaze. A break with both black and silence beats one with only one of them. The proposal comes with a confidence score.
    - **A season disc** (a run of episodes): the parts are fitted in order, to the runtimes of the episodes starting at the disc's first one, and each part gets its episode.
+4. **Which part is which episode.** The parts usually run alike, so their runtimes can't tell them apart, and discs often hold the episodes in another order than the season's. When a [cover scan](cover-scans.md) lists the episodes, the parts take the box's order: the first part gets the first episode listed, and so on. A box listing more episodes than the disc holds (all 13 of the season for a disc of 10) lists the disc's first. Without a scan the parts keep the season's order, and the Review card says that's a guess: check the frames, scan the box, or paste its run order.
    - **A compilation** (episodes from anywhere in the show): each part is fitted to the show's typical runtime, and starts with no episode picked.
 
 ## Reviewing the cuts
@@ -23,7 +24,7 @@ The Review card (and the job's details) shows the title as a bar, with a tick at
 - **Click a tick** to cut there or not.
 - **Click anywhere else on the bar, or type a time** (like `25:10`) under it, to add a cut. It moves to the nearest black frames or silence within 10 seconds, or stays where you put it if there are none.
 - **Use these cuts** applies your changes. New cuts propose the episodes again, so get the cuts right first, then pick the episodes.
-- **Pick episodes** in the table as usual. The parts show as "Title 0, part 1", "part 2", and so on. For a compilation, paste the run order from the case and the names go onto the parts in order.
+- **Pick episodes** in the table as usual. The parts show as "Title 0, part 1", "part 2", and so on. Or paste the run order from the case, and the names go onto the parts in order. After you change the cuts the parts get the season's order again; **Use this** beside "The box says" puts the box's order back.
 - **Keep it as one title** turns the split off, if the title really is one long episode.
 
 ## The split

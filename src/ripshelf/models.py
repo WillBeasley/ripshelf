@@ -287,6 +287,9 @@ class TvPlan(BaseModel):
                                                          "as found in those shows' episode lists")
     from_scan: bool = Field(False, description="the show or episodes were set from the cover scan, so it's "
                                                "reviewed, not confirmed without review")
+    order_from: Literal["season", "box", "names", "disc_db"] | None = Field(
+        None, description="what put the episodes on the titles in this order: the season's own order from "
+                          "the start episode (a guess), the cover scan's list, a pasted run order, or TheDiscDB")
     auto_confirmed: bool = False
     auto_evidence: list[str] = Field(default=[], description="why it was (or wasn't) confirmed without review")
     split: TitleSplit | None = Field(None, description="a long title holding several episodes, split at chapters")

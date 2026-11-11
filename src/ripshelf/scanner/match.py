@@ -10,7 +10,9 @@ optimal assignment over a score made of:
   is scored on what its type usually runs to (a trailer two minutes, a featurette
   twenty).
 - **Order.** Boxes usually list things in the disc's order: a weak prior, as some
-  discs scramble their playlists.
+  discs scramble their playlists. It is all that tells alike titles apart, such as
+  the parts of one long title split into episodes, so the titles are given in the
+  disc's order (the parts in place of the title they come from).
 - **Tracks.** The main feature carries the audio languages and subtitles the box
   prints; extras usually have fewer tracks.
 
@@ -94,10 +96,16 @@ def type_fit(title_s: float, extra_type: str | None) -> float:
 
 
 def order_fit(rank: int, count: int, title_rank: int, title_count: int) -> float:
-    """1 when the line and the title sit at the same place in their lists."""
+    """1 when the line and the title sit at the same place in their lists: the same
+    share of the way down when there are as many lines as titles, else the same place
+    counted from the start. A box listing more than the disc holds (13 episodes for a
+    disc of 10) lists the disc's first, so stretching the disc over the whole list
+    would skip lines."""
     if count <= 1 or title_count <= 1:
         return 0.5
-    return max(0.0, 1 - abs(rank / (count - 1) - title_rank / (title_count - 1)) * 1.5)
+    if count == title_count:
+        return max(0.0, 1 - abs(rank / (count - 1) - title_rank / (title_count - 1)) * 1.5)
+    return max(0.0, 1 - abs(rank - title_rank) / (max(count, title_count) - 1) * 1.5)
 
 
 def hungarian(cost: list[list[float]]) -> list[int]:
@@ -242,13 +250,13 @@ def _bluray(t: TitleInfo) -> bool:
     return bool(t.source_file and t.source_file.lower().endswith((".mpls", ".m2ts")))
 
 
-def _candidates(titles: list[TitleInfo], mapping: list[TitleMap]) -> list[TitleInfo]:
+def _candidates(titles: list[TitleInfo], mapping: list[TitleMap], in_order: bool = False) -> list[TitleInfo]:
     """Titles worth matching: not play-alls or duplicates (by the TV mapping, the same
     clips as an earlier Blu-ray playlist, or one title as long as several others
-    together), and not tiny."""
+    together), and not tiny. By title number, unless ``in_order`` (the disc's order)."""
     skip = {m.title_index for m in mapping if m.role in (TitleRole.play_all, TitleRole.duplicate)}
     out, seen = [], set()
-    for t in sorted(titles, key=lambda t: t.index):
+    for t in titles if in_order else sorted(titles, key=lambda t: t.index):
         key = (t.duration_s, t.segments_map)
         if t.index in skip or t.duration_s < 20 or (_bluray(t) and t.segments_map and key in seen):
             continue
@@ -300,11 +308,13 @@ def _feature(cands: list[TitleInfo], listing: Listing, pal: bool) -> tuple[Title
 
 def match(titles: list[TitleInfo], listing: Listing, *, media: str = "movie", episodes: list[Episode] = (),
           season: int | None = None, mapping: list[TitleMap] = (), main_title: int | None = None,
-          disc: int | None = None, claimed: set[int] = frozenset(), pal: bool = False) -> ScanMatch:
+          disc: int | None = None, claimed: set[int] = frozenset(), pal: bool = False,
+          in_order: bool = False) -> ScanMatch:
     """The listing's lines matched to the titles. ``claimed`` are listing items other
-    discs of the release already took."""
+    discs of the release already took. ``in_order``: the titles are in the disc's
+    order already, else they're taken by title number."""
     out = ScanMatch(claimed=sorted(claimed))
-    cands = _candidates(titles, list(mapping))
+    cands = _candidates(titles, list(mapping), in_order)
     current = {m.title_index: m for m in mapping}
 
     feature = None
@@ -347,14 +357,17 @@ def _assign(out: ScanMatch, items: list[tuple[int, ListingItem]], cands: list[Ti
 
     scores: list[list[float]] = []
     reasons: list[list[str]] = []
+    fits: list[list[float | None]] = []  # how well the runtime agrees, when there's one to go by
+    bases: list[list[float]] = []  # the score leaving the order out
     for i, it in items:
-        row, why_row = [], []
+        row, why_row, fit_row, base_row = [], [], [], []
         same = eps_items if it.kind == "episode" else ext_items
         rank = next(n for n, (j, _) in enumerate(same) if j == i)
         pool = ep_titles if it.kind == "episode" else cands
         for t in cands:
             parts: list[tuple[float, float]] = []
             why: list[str] = []
+            fit = None
             if it.runtime_min:
                 fit = runtime_fit(t.duration_s, it.runtime_min, pal=pal)
                 parts.append((0.5, fit))
@@ -365,13 +378,15 @@ def _assign(out: ScanMatch, items: list[tuple[int, ListingItem]], cands: list[Ti
                 if ref:
                     # The episode's own runtime is a whole number of minutes, not a guess.
                     exact = bool(ep and ep.runtime)
-                    parts.append((0.3, runtime_fit(t.duration_s, ref, approx=not exact, pal=pal)))
+                    fit = runtime_fit(t.duration_s, ref, approx=not exact, pal=pal)
+                    parts.append((0.3, fit))
                     why.append(f"runs {minutes(t.duration_s)}, an episode is about {ref:g} min")
                 elif t not in ep_titles:
                     parts.append((0.3, 0.2))
             else:
                 parts.append((0.35, type_fit(t.duration_s, it.extra_type)))
                 why.append(f"runs {minutes(t.duration_s)}, {_type_words(it.extra_type)}")
+            base_row.append(sum(w * v for w, v in parts) / sum(w for w, _ in parts) if parts else 0.0)
             if t in pool:
                 o = order_fit(rank, len(same), pool.index(t), len(pool))
                 parts.append((0.15, o))
@@ -383,8 +398,11 @@ def _assign(out: ScanMatch, items: list[tuple[int, ListingItem]], cands: list[Ti
                 parts.append((0.15, 1.0))  # the name is known: sure it's an episode
             row.append(sum(w * v for w, v in parts) / sum(w for w, _ in parts))
             why_row.append("; ".join(why))
+            fit_row.append(fit)
         scores.append(row)
         reasons.append(why_row)
+        fits.append(fit_row)
+        bases.append(base_row)
 
     # Square it up with "no title" columns, so a poor fit stays unmatched.
     n, m = len(items), len(cands)
@@ -402,12 +420,18 @@ def _assign(out: ScanMatch, items: list[tuple[int, ListingItem]], cands: list[Ti
             score = min(1.0, score + 0.12)  # no other title comes close
         same = eps_items if it.kind == "episode" else ext_items
         pool = ep_titles if it.kind == "episode" else cands
-        guess = bool(others) and score - others[0] < 0.05 and len(same) != len(pool)
+        # Another title fits as well but for its place, and the box lists fewer (or more)
+        # than the disc has, so places on the box and the disc needn't line up.
+        alike = any(bases[r][c] - b < 0.05 for j, b in enumerate(bases[r]) if j != c and cands[j] in pool)
+        guess = alike and len(same) != len(pool)
         eps: list[EpisodeRef] = []
         ep, name_score = named.get(i, (None, 0.0))
         if ep:
             eps = [EpisodeRef(season=ep.season, episode=ep.episode)]
-            score = min(1.0, 0.55 + 0.45 * name_score) if score >= 0.35 else score
+            # The name says which episode, not that it's this title: one far too long or
+            # short for it (a 30-minute title for a 10-minute episode) stays unsure.
+            if score >= 0.35 and (fits[r][c] is None or fits[r][c] >= 0.5):
+                score = min(1.0, 0.55 + 0.45 * name_score)
             reason = f"“{it.title}” is {_code(ep)} “{ep.name}”" + (f"; {reason}" if reason else "")
         if guess:
             # Titles alike, and the box lists fewer (or more) than the disc has: only the

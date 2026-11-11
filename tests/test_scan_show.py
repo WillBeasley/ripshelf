@@ -21,12 +21,15 @@ from ripshelf.models import (
     TitleInfo,
     TitleMap,
     TitleRole,
+    TitleSplit,
     TvPlan,
 )
 from ripshelf.scanner import listing, match, vision
 from ripshelf.tv import naming
+from ripshelf.tv import split as tvsplit
 
 from .test_contribute import put
+from .test_scan_match import DISC_ORDER, TUGBOAT, tugboat_box
 
 GOOSE = Show(tmdb_id=61990, name="Pippa & Goose", year=2013, seasons={1: 4}, score=0.8)
 KITE = Show(tmdb_id=70001, name="Pippa & Goose: Kite Post", year=2019, seasons={1: 6}, score=0.4)
@@ -355,3 +358,104 @@ def test_scraps_misread_off_a_picture_are_not_extras():
     assert "ae" not in got and "Making the Kite Tram" in got
     low = lines("Special features", "Making the Kite Tram", "GE woth", conf=49)
     assert listing.build([low]).items == []
+
+
+# --- a long title split into episodes, in the box's order -----------------------------
+
+TUG = Show(tmdb_id=70002, name="Tilly the Tugboat", year=1998, seasons={1: 13}, score=0.9)
+CHAPTERS = [0.0, 611.0, 1222.0, 1833.0, 2444.0, 3055.0, 3666.0, 4277.0, 4887.0]
+LENGTH = 5497.5
+
+
+def split_job(box: bool = True) -> JobRecord:
+    """Nine episodes in title 0, cut at its chapters once it's ripped, a tenth in title 1
+    and a 30-minute title 2; the box lists the season's thirteen, the disc's ten first."""
+    titles = [TitleInfo(index=i, duration_s=s, size_bytes=1, chapters=c)
+              for i, s, c in [(0, 5498, 10), (1, 611, 1), (2, 1830, 1)]]
+    mapping = [TitleMap(title_index=0, duration_s=5498, role=TitleRole.skip),
+               TitleMap(title_index=1, duration_s=611, role=TitleRole.episode),
+               TitleMap(title_index=2, duration_s=1830, role=TitleRole.skip)]
+    split = TitleSplit(title_index=0, duration_s=5498, expected=9, reason="title 0 is long")
+    job = JobRecord(id=7, drive_id="fake-ihas122", state=JobState.review, created_at=now(), updated_at=now(),
+                    titles=titles, media=MediaKind.tv,
+                    tv=TvPlan(show=TUG, season=1, start_episode=1, mapping=mapping, candidates=[TUG],
+                              episodes=TUGBOAT, split=split, order_from="season"))
+    job.disc.label, job.disc.kind = "TILLY_SERIES_1", DiscKind.dvd
+    job.rip.files = {0: "/nowhere/title_t00.mkv", 1: "/nowhere/title_t01.mkv"}
+    if box:
+        job.listing = ScanListing(state="done", found=tugboat_box())
+    return job
+
+
+def fake_chapters(monkeypatch, h):
+    async def chapters(ffprobe, path):
+        return CHAPTERS
+
+    async def break_score(ffmpeg, path, at):
+        return 1.0
+
+    async def duration(ffprobe, path):
+        return LENGTH
+
+    async def grab(*a):
+        return None
+
+    monkeypatch.setattr(tvsplit, "read_chapters", chapters)
+    monkeypatch.setattr(tvsplit, "break_score", break_score)
+    monkeypatch.setattr("ripshelf.tvjobs.verify.duration", duration)
+    monkeypatch.setattr(h.m, "_grab_mark", grab)
+
+
+def episodes_in_disc_order(job) -> list[int]:
+    rows = {m.title_index: m for m in job.tv.mapping}
+    order = [tvsplit.part_index(k) for k in range(9)] + [1]
+    return [rows[i].episodes[0].episode if rows[i].episodes else None for i in order]
+
+
+async def test_split_parts_take_the_boxs_order(harness, settings, monkeypatch):
+    """The parts are alike, so only the box's order says which episode each is: they get
+    the box's list, not the season's order (which put most of them on the wrong part)."""
+    async with harness() as h:
+        fake_chapters(monkeypatch, h)
+        job = put(h, split_job())
+        await h.m._analyse_split(job.id)
+        job = h.db.get_job(job.id)
+        assert job.tv.split.state == "ready" and len(job.tv.split.cuts) == 8
+        assert episodes_in_disc_order(job) == DISC_ORDER
+        assert job.tv.order_from == "box" and job.tv.from_scan
+        assert next(m for m in job.tv.mapping if m.title_index == 2).role == TitleRole.skip
+        m = {x.title_index: x for x in job.scan_match.matches}
+        assert all(m[tvsplit.part_index(k)].agrees for k in range(9)) and 0 not in m
+        assert h.m._auto_check(job)[0] is False  # reviewed, all the same
+
+
+async def test_split_parts_without_a_box_are_a_guess(harness, settings, monkeypatch):
+    async with harness() as h:
+        fake_chapters(monkeypatch, h)
+        job = put(h, split_job(box=False))
+        await h.m._analyse_split(job.id)
+        job = h.db.get_job(job.id)
+        assert episodes_in_disc_order(job) == list(range(1, 11))  # the season's order
+        assert job.tv.order_from == "season" and not job.tv.from_scan
+
+
+async def test_the_box_read_after_the_split(harness, settings, monkeypatch):
+    """The box scanned once the parts are mapped: its order is taken then, and Use this
+    takes it again after the cuts were changed by hand."""
+    async with harness() as h:
+        fake_chapters(monkeypatch, h)
+        proposed = fake_tmdb(monkeypatch, h)
+        job = put(h, split_job(box=False))
+        await h.m._analyse_split(job.id)
+        job = h.db.get_job(job.id)
+        job.listing = ScanListing(state="done", found=tugboat_box())
+        h.db.save_job(job)
+        assert await h.m.fix_show_from_scan(job.id)
+        assert proposed == [] and episodes_in_disc_order(h.db.get_job(job.id)) == DISC_ORDER
+
+        job = await h.m.tv_split(job.id, list(range(1, 9)), None)  # the same cuts, by hand
+        assert job.tv.user_edited and job.tv.order_from == "season"
+        assert episodes_in_disc_order(job) == list(range(1, 11))
+        assert any(x.agrees is False for x in job.scan_match.matches)  # the box says otherwise
+        job = await h.m.use_scan(job.id)
+        assert episodes_in_disc_order(job) == DISC_ORDER and job.tv.order_from == "box"
