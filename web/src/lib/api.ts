@@ -186,6 +186,9 @@ export const api = {
 	tvMatchText: (id: number, text: string) => call<Job>('POST', `/jobs/${id}/tv/match-text`, { text }),
 	tvConfirm: (id: number, mapping: TitleMapUpdate[]) =>
 		call<Job>('POST', `/jobs/${id}/tv/confirm`, { mapping }),
+	// Titles changed by hand, kept unconfirmed (the box's picks leave them alone).
+	tvSetMapping: (id: number, mapping: TitleMapUpdate[]) =>
+		call<Job>('PUT', `/jobs/${id}/tv/mapping`, { mapping }),
 	tvSplit: (id: number, body: TvSplitRequest) => call<Job>('POST', `/jobs/${id}/tv/split`, body),
 	thumbUrl: (id: number, title: number) => `/api/jobs/${id}/thumbs/${title}.jpg`,
 	// ``at`` (s) keeps the browser's copy right when a cut by hand renumbers the marks.
