@@ -2,7 +2,7 @@
 
 Run the tests and publish multi-arch images to GHCR with GitHub Actions.
 
-There are two workflows in `.github/workflows/`:
+There are three workflows in `.github/workflows/`:
 - **`test.yml`** runs on pushes to `main`, on `v*` tags and on pull requests. It runs ruff, pytest (12 at a time, with pytest-xdist) and svelte-check, with Node 22. It runs in the image's base, `python:3.12-slim-bookworm`, so the tests use the same Python and the same Debian ffmpeg the image transcodes with, and pytest runs as a normal user so the file-permission tests aren't skipped. Changes only to `docs/` or Markdown files don't start it, and a newer push to the same branch or pull request cancels a run still going. A second job, `ui`, runs the UI's unit tests and its browser tests (Playwright, Chromium) against the backend on the simulated drives, directly on the Ubuntu runner, and keeps the Playwright report when they fail. Run it by hand from Actions → test → Run workflow.
 - **`images.yml`** builds the image for `linux/amd64` and `linux/arm64` and pushes it to the GitHub Container Registry as `ghcr.io/willbeasley/ripshelf`. It runs only for release tags, so pushes to `main` and pull requests build no image. The tags are:
 
@@ -14,6 +14,9 @@ There are two workflows in `.github/workflows/`:
   | run by hand from a branch | nothing (the jobs are skipped) |
 
   Running it by hand from a tag rebuilds that release in place, for example to pick up a new MakeMKV. In Actions → images → Run workflow, set "Use workflow from" to the tag.
+- **`audit.yml`** checks the Python lock files with [pip-audit](https://pypi.org/project/pip-audit/) against the Python advisory database, every Monday and on any push or pull request that changes them. It fails when a locked package has a known vulnerability; `scripts/lock-deps.sh --upgrade` usually fixes it.
+
+Dependabot covers the rest (`.github/dependabot.yml`): one grouped pull request a week at most for each of the UI's npm packages, the actions these workflows use, and the Dockerfile's base images, which are pinned by digest. Its security updates are switched on in Settings → Code security and open a pull request as soon as an advisory affects a UI package.
 
 ## How the image is built
 

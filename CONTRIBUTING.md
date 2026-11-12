@@ -45,6 +45,8 @@ After changing the dependencies in `pyproject.toml`, run `scripts/lock-deps.sh` 
 
 The UI's packages are pinned in `web/package-lock.json`, and `npm ci` installs exactly those.
 
+Dependabot (`.github/dependabot.yml`) opens a pull request each week for newer UI packages, GitHub Actions and Dockerfile base images, which are pinned by digest. It doesn't read the Python locks, so refresh those with `scripts/lock-deps.sh --upgrade` from time to time; the `audit` workflow checks them against the Python advisory database every week and on any change to them.
+
 ## Code layout
 
 | Path | What's there |
