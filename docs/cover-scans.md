@@ -6,6 +6,7 @@ A disc's box often says more than the disc does. The back lists the extras, the 
 - **Overview:** each drive with a disc in has **Add a cover scan**, which opens the job straight at its scans. That works while the disc is still being scanned, so the box can help identify it.
 - **Any job:** in the job's panel, **Cover scans** is near the top, and it's there for every job, from the moment a disc is detected.
 - **Review cards:** at the bottom.
+- **Long before the disc goes in:** the **Covers** page keeps a shelf of case sheets scanned ahead of their discs, a whole stack at a time. See [The covers shelf](#the-covers-shelf).
 - **Before the disc goes in:** a drive with no disc has **Add a scan for the next disc**. The pictures wait there, for up to a day, and the next disc put in that drive takes them as soon as it's detected. They're read while MakeMKV scans the disc, in time to help identify it. Pictures can be removed before then, and are forgotten after a day if no disc comes. Each picture is labelled with what it shows:
 
 | Kind | What it is |
@@ -235,6 +236,57 @@ The outline on the picture shows which part becomes which cover. Pictures added 
 
 The inside of the cover and insert pages are never used as covers. They're kept for reading what's printed on them.
 
+## The covers shelf
+
+The **Covers** page holds sheets from your cases, scanned ahead of their discs: scan a whole stack while the drives are busy with something else, and each disc finds its sheet when it goes in. The shelf is kept in `data/covers` until a cover is used or deleted, up to 500 covers.
+
+**A cover** is one case sheet with up to two sides: its **outside** (back, spine and front, unfolded) and its **inside**. When it's used for a disc, these become that job's *Whole outside* and *Inside of the cover* scans.
+
+### Scanning a stack
+
+**Scan a stack** feeds the stack through the scanner's feeder. Choose how:
+
+- **Both sides at once**: a feeder with duplex scans each sheet's two sides one after the other.
+- **Two passes (turn the stack over)**: for a feeder without duplex. The first pass scans one side of every sheet. The page then says **Now turn the stack over and scan the other side**: put the stack back face down, in the same order, and press **Scan the other side**. The turned stack comes out last sheet first, so the first pass's first page pairs with the second pass's last page. **Cancel and discard** lets go of the first pass.
+- **One side only**: each sheet makes a cover with only its outside.
+
+The covers appear as the pages arrive (with two passes, once the second pass is in).
+
+**When the passes don't pair up.** If the second pass has more or fewer pages than the first (a sheet fed twice, two fed together, one left behind), nothing is paired, so one slip can't put every later inside with the wrong outside. Both passes are shown side by side, each page with its sheet number. **Leave out** the extra pages until both have as many, then **Make the covers**, or **Scan the second pass again**.
+
+The scanner scans for one thing at a time: a stack can't start while it scans for a job, and the other way round.
+
+### Uploading
+
+**Upload pictures or PDFs** takes many pictures at once, and PDFs, one page each (drawn at 300 dpi). With **Both sides of each sheet** ticked (the default), the pages pair up:
+
+- **Each sheet's sides one after the other**: outside, inside, outside, inside... as a duplex scan gives them. An odd number of pages is refused rather than guessed at.
+- **All the outsides, then all the insides (turned stack)**: two passes. Either one PDF holding both passes back to back (its first half, then its second half, last sheet first), or the outsides in the upload and the insides in **Insides in a separate file…**, in the order the turned stack came out. Passes that don't pair up are held as above.
+
+Untick it for one cover a page.
+
+### Blank sides, and which is the outside
+
+- **Blank sides** are left out: a side that's one even colour, or paper with hardly a mark on it once the glass is trimmed off (dust doesn't count; a short chapter list in small print does). A single-sided sheet makes a cover with only an outside, and a sheet blank on both sides is skipped.
+- **The outside** is the side zbar finds a barcode on, or else the side with a spine down it. When neither tells them apart, the first side scanned is the outside. **Swap sides** on a cover puts it right, and reads it again.
+- The same sheet added twice (the same outside file) is skipped.
+
+### Reading
+
+Each cover is read in the background as it arrives, one at a time and taking turns with the jobs' readings: Tesseract and zbar on both sides, the vision model when Settings → Scanner and covers say (**For every scan**, or **When Tesseract struggles**, which here means the title and year weren't both read), and the barcode lookups (as in [The box helps identify the disc](#the-box-helps-identify-the-disc)). A cover shows its title and year, its barcode and what the barcode names, and DVD, Blu-ray or 4K when the cover says. The search box searches all of these.
+
+Open a cover to see each side large, and to **Read again**, **Read with the vision model** (now, whatever the setting says, in the same one-at-a-time queue), **Swap sides** or **Delete** it.
+
+### Using a cover
+
+- **On a job.** The job's panel and its Review card say **This cover looks like it's on the shelf: …** with the cover's thumbnail, when one fits the disc. **Use it** makes the cover's sides the job's scans: they're read, used to identify the disc, and filed with it like any other scan, and the cover leaves the shelf. **Not this one** hides the suggestion. **Pick a cover from the shelf** opens every cover, best match first, with a search box.
+- **For a drive's next disc.** Open the cover on the Covers page, choose the drive and **Use for this drive's next disc**. The sides wait with the drive's other pictures for its next disc, for up to a day.
+
+Nothing is ever used without you choosing it. A cover is suggested when:
+
+- its barcode is the job's: the barcode read off the job's own scans, the UPC in its TheDiscDB release details, or a disc label that is a barcode; or
+- its title (or the name its barcode was looked up as) is close to what the disc may be: the confirmed title, the show, TheDiscDB's title, the candidates while it waits for review, a title set by hand, or the disc's label. A year that agrees helps, and one more than a year off counts against it, so a remake isn't offered for the original.
+
 ## A network scanner
 
 Most network printers with a scanner speak eSCL, which Apple calls AirScan. ripshelf talks to it directly, so it needs no driver and nothing installed on the printer. In **Settings → Scanner and covers**:
@@ -312,6 +364,21 @@ TV/Pippa & Goose (2013)/scans/PIPPA_&_GOOSE_KITE_TRAM - front.jpg
 | `POST /api/jobs/{id}/extras/rip` | rip a film's extras the box names, while the disc is in its drive |
 | `POST /api/jobs/{id}/scans/{scan}/vision` | read the scan with the vision model now (its `vision` and `vision_message` say how it goes) |
 | `GET /api/jobs/{id}/scans/{scan}/text` | the lines read on one scan, with their boxes and confidence, and its barcodes |
+| `GET /api/covers` | the shelf, newest first (`?q=` searches), and a stack being scanned or held |
+| `POST /api/covers/upload` | add covers: a form with `files` (pictures and PDFs), `insides` (a second pass of its own), `both_sides`, `layout` (`alternate` or `passes`) and `reverse_insides` |
+| `POST /api/covers/scanner` | scan a stack: `{"mode": "duplex"}`, `"two_pass"` or `"one_side"` |
+| `POST /api/covers/scanner/second-pass` | scan the turned-over stack (again, if it didn't pair up) |
+| `DELETE /api/covers/stack/pages/{page}` | leave a held page out |
+| `POST /api/covers/stack/pair` | make the held passes into covers |
+| `DELETE /api/covers/stack` | stop a stack being scanned, or let go of the pages held |
+| `GET /api/covers/{cover}/{side}` | `outside` or `inside`: the original file (`?thumb=true` or `?large=true` for a trimmed, turned JPEG) |
+| `POST /api/covers/{cover}/swap` | swap the outside and the inside |
+| `POST /api/covers/{cover}/read` | read it again |
+| `POST /api/covers/{cover}/vision` | read it with the vision model now (its `reading.vision_state` says how it goes) |
+| `DELETE /api/covers/{cover}` | delete it |
+| `POST /api/covers/{cover}/use/job/{id}` | make it the job's scans, and take it off the shelf |
+| `POST /api/covers/{cover}/use/drive/{drive}` | keep it for the drive's next disc instead |
+| `GET /api/jobs/{id}/shelf-suggestions` | covers that look like the job's disc, with a score and why (`?all=true` for every cover, scored) |
 
 In development, `scripts/dev-fake.sh` serves a pretend scanner at `/fake-escl/eSCL` and points Settings at it. Its glass holds a made-up DVD's cover sheet, and its feeder holds three insert pages.
 
