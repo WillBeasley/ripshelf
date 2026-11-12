@@ -61,7 +61,7 @@ Only releases are published. To run a commit from `main`, [build the image yours
 docker compose pull && docker compose up -d
 ```
 
-With `:latest` this gets the newest release, and with `:1.2` the newest `1.2.x`. To move to another release, change the tag in `.env` (or the `image:` line) and run the same command. For an image you built, rebuild it ([building.md](building.md#updating)), then `docker compose up -d`.
+Before moving to a new release, read its **Upgrading** notes in [CHANGELOG.md](../CHANGELOG.md). With `:latest` this gets the newest release, and with `:1.2` the newest `1.2.x`. To move to another release, change the tag in `.env` (or the `image:` line) and run the same command. For an image you built, rebuild it ([building.md](building.md#updating)), then `docker compose up -d`.
 
 **Don't update in the middle of a rip.** The container restarts and the job fails with "ripshelf restarted while this job was running", ready to retry. The same goes for Watchtower and similar tools, so give ripshelf the label `com.centurylinklabs.watchtower.enable=false`, or pin a release tag.
 

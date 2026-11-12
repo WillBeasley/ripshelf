@@ -35,7 +35,7 @@ There's nothing to configure. The workflow logs in with the job's own `GITHUB_TO
 
 1. Make sure `main` is what you want to ship and the tests pass: `ruff check src tests && pytest -q`, and `npm run check && npm test && npm run test:e2e` in `web/`.
 2. Pick the version. While it's `0.x`, raise the minor (`0.3.0` → `0.4.0`) for new features or anything that changes settings or the database, and the patch (`0.4.0` → `0.4.1`) for fixes only.
-3. Set it in three places, `version` in `pyproject.toml`, `__version__` in `src/ripshelf/__init__.py` and the release badge at the top of `README.md` (its text and link), and commit: `git commit -am "release 0.4.0"`.
+3. Set it in three places, `version` in `pyproject.toml`, `__version__` in `src/ripshelf/__init__.py` and the release badge at the top of `README.md` (its text and link). In `CHANGELOG.md`, rename the Unreleased section to the version and date, with anything an upgrade needs under Upgrading, and start a new empty Unreleased above it. Commit: `git commit -am "release 0.4.0"`.
 4. Tag that commit and push both. An annotated tag carries a message and, with signing set up, a signature:
 
    ```sh
@@ -44,7 +44,7 @@ There's nothing to configure. The workflow logs in with the job's own `GITHUB_TO
    ```
 
 5. The tag starts `images.yml` (and `test.yml`). Watch it under Actions. The first release takes longest, because MakeMKV is compiled on both runners.
-6. On GitHub, Releases → Draft a new release → choose the tag → "Generate release notes", edit them, and publish. Tick "Set as a pre-release" for an `-rc` tag.
+6. On GitHub, Releases → Draft a new release → choose the tag, paste in the version's section of `CHANGELOG.md` (or "Generate release notes" and edit them to match), and publish. Tick "Set as a pre-release" for an `-rc` tag.
 7. Check the image: `docker pull ghcr.io/willbeasley/ripshelf:0.4.0`.
 
 A tag that went wrong (a failed build, a missed commit) can be deleted and pushed again before anyone pulls it: `git tag -d v0.4.0 && git push origin :refs/tags/v0.4.0`. After the image is out, release `0.4.1` instead, because `:0.4.0` is meant never to move.
