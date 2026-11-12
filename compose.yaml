@@ -21,7 +21,8 @@ services:
       - "993"                           # <-- the host's render group id, for GPU transcoding (getent group render)
     devices:
       # <-- your optical drives, each /dev/srN with its own /dev/sgN (the numbers differ).
-      #     ls /sys/class/block/sr*/device/scsi_generic  shows the pairs.
+      #     ls /sys/class/block/sr*/device/scsi_generic  shows the pairs. They can change
+      #     between boots; docs/troubleshooting.md has udev names that don't.
       - /dev/sr0
       - /dev/sg1
       - /dev/sr1

@@ -69,7 +69,8 @@ services:
       retries: 3
 
   # One block per drive, with its /dev/srN and its own /dev/sgN (the numbers differ, see
-  # ls /sys/class/block/sr*/device/scsi_generic), and a short name.
+  # ls /sys/class/block/sr*/device/scsi_generic), and a short name. The numbers can change
+  # between boots; docs/troubleshooting.md has udev names that don't.
   drive-sr0:
     <<: *worker
     devices: [/dev/sr0, /dev/sg1]       # <--

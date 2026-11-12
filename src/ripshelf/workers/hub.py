@@ -71,6 +71,7 @@ class Worker:
     encoders: list[str]
     shared_scratch: bool
     makemkv_eula_pending: bool = False  # MakeMKV's licence isn't accepted on the worker, so it won't rip
+    device_problems: list[str] = field(default_factory=list)  # drives passed in without their /dev/sgN
     drives: dict[str, RemoteDrive] = field(default_factory=dict)
     commands: asyncio.Queue = field(default_factory=asyncio.Queue)
     last_seen: float = field(default_factory=time.monotonic)
@@ -102,12 +103,14 @@ class WorkerHub:
         return local_id
 
     def register(self, worker_id: str, name: str, drives: list[dict], encoders: list[str],
-                 shared_scratch: bool, makemkv_eula_pending: bool = False) -> Worker:
+                 shared_scratch: bool, makemkv_eula_pending: bool = False,
+                 device_problems: list[str] | None = None) -> Worker:
         old = self.workers.get(worker_id)
         if old:
             self._fail_runs(worker_id, "the worker restarted")
         w = Worker(id=worker_id, name=name, encoders=encoders, shared_scratch=shared_scratch,
-                   makemkv_eula_pending=makemkv_eula_pending, loop=asyncio.get_running_loop())
+                   makemkv_eula_pending=makemkv_eula_pending, device_problems=list(device_problems or []),
+                   loop=asyncio.get_running_loop())
         for d in drives:
             caps = [Capability(c) for c in d.get("capabilities", []) if c in Capability.__members__]
             hw = DriveHw(id=self.drive_id(worker_id, d["id"]), device=d["device"], sg_device=d.get("sg_device"),

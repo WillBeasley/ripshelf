@@ -87,6 +87,7 @@ class RegisterBody(BaseModel):
     encoders: list[str] = []
     shared_scratch: bool = False
     makemkv_eula_pending: bool = False
+    device_problems: list[str] = []  # drives passed in without their /dev/sgN, or the reverse
     drives: list[dict] = []
 
 
@@ -155,7 +156,7 @@ async def register(body: RegisterBody, request: Request, caller: Annotated[Calle
         if not isinstance(d.get("legacy_id"), str | None):
             raise HTTPException(422, "legacy_id must be a string")
     w = _hub(request).register(body.id, body.name, body.drives, body.encoders, body.shared_scratch,
-                                 body.makemkv_eula_pending)
+                                 body.makemkv_eula_pending, body.device_problems)
     return {"ok": True, "drives": [d.hw.id for d in w.drives.values()]}
 
 
