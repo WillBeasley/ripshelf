@@ -1,7 +1,8 @@
 """Minimal SCSI pass-through (SG_IO) for drive identity and capabilities.
 
-Only read-only commands are used, INQUIRY (standard + unit serial VPD page) and
-GET CONFIGURATION (whether the drive reads DVD / BD, and its serial number).
+Only read-only commands are used, INQUIRY (standard + unit serial VPD page),
+GET CONFIGURATION (whether the drive reads DVD / BD, and its serial number) and
+READ TOC (whether the disc in it is an audio CD).
 The commands and their parsing are shared with Windows (``hw.windows``), which
 sends them through its own pass-through instead of SG_IO.
 """
@@ -154,3 +155,22 @@ def identify_with(send: Send) -> DriveIdentity:
     except OSError:
         pass
     return DriveIdentity(vendor, model, rev, serial, reads_dvd, reads_bd)
+
+
+# READ TOC/PMA/ATIP, format 0 (the track list), LBA addresses, from track 1.
+READ_TOC = bytes([0x43, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x24, 0x00])
+LEAD_OUT = 0xAA
+
+
+def toc_tracks(data: bytes) -> tuple[int, int]:
+    """(audio tracks, data tracks) in a READ TOC reply. A track's control bit 2 marks it as data."""
+    end = min(len(data), 2 + int.from_bytes(data[0:2], "big")) if len(data) >= 4 else 0
+    audio = data_tracks = 0
+    for pos in range(4, end - 7, 8):
+        if data[pos + 2] == LEAD_OUT:
+            continue
+        if data[pos + 1] & 0x04:
+            data_tracks += 1
+        else:
+            audio += 1
+    return audio, data_tracks

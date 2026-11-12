@@ -118,6 +118,10 @@ Use the drive's own `srN`/`sgM` pair. The dump belongs to the drive and its firm
 
 **How to recognise it.** With `makemkvcon --debug`, the output stops after lines like `SDF auto v0a6: HL-DT-ST_BDDVDRW_GGC-H20N_…`, apart from a "DEBUG: Code 2 / Code 0" pair every 20 to 30 s, with one CPU core busy. Waiting, `--network=none`, `sdf_Stop = "1"` and SDF files from another install don't help.
 
+## "This is an audio CD"
+
+ripshelf rips video discs, and MakeMKV can't read music CDs, so a CD with audio tracks (an enhanced CD with a data track too) fails straight away instead of being scanned. The check reads the disc's track list when it goes in, on Linux, Windows and remote workers. Eject it; there is nothing to retry.
+
 ## A disc goes to Review instead of being identified
 
 - **No TMDB key.** A film TheDiscDB doesn't know needs one, or an OMDb key, to get candidates. TV shows are still found through TVmaze or TheTVDB without it ([providers.md](providers.md)).

@@ -147,6 +147,7 @@ class DriveRuntime:
     # again until the tray opens. Polling only asks the drive for its status.
     identified: bool = False
     label: str | None = None  # the disc's label, for a disabled drive (which gets no job)
+    audio_cd: bool = False  # the disc its last job started with is a music CD
     ejecting_until: float = 0.0  # ejected, and the tray hasn't been seen open yet
     status_pending: bool = False
     scan: runner.MakeMKV | RemoteMakeMKV | None = None
@@ -608,6 +609,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         job.disc.size_bytes = ident.size_bytes
         job.quick_fp = qfp
         d.job_id = job.id
+        d.audio_cd = ident.audio_cd
         self._event(job, "state", f"Disc detected in {d.hw.device}: {ident.label or 'no label'}")
         self._save(job)
         self._spawn_notify(job, "disc")
@@ -620,6 +622,13 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         job = self.db.get_job(job_id)
         d = self.drives[job.drive_id]
         try:
+            if d.audio_cd:
+                # MakeMKV would scan it for minutes and then find no titles.
+                raise JobError(Problem(
+                    code="audio_cd",
+                    message="This is an audio CD. ripshelf rips DVDs and Blu-rays with MakeMKV, which can't "
+                            "read music CDs, so the disc was left alone.",
+                    actions=["eject"]))
             cached = None
             if not from_scan:
                 cached = await self._read_structure(job, d)

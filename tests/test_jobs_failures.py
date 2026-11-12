@@ -68,6 +68,21 @@ async def test_rip_exits_zero_without_saving(harness, settings, mkv_script):
         assert job.problem.code == "rip_failed"
 
 
+async def test_audio_cd_is_never_scanned(harness):
+    async with harness() as h:
+        h.backend.insert(PM, audio_cd=True)
+        job = await h.wait_job(lambda j: j.state == JobState.failed)
+        assert job.problem.code == "audio_cd" and job.problem.actions == ["eject"]
+        assert "audio CD" in job.problem.message
+        assert not any(e.message.startswith("Scanning disc") for e in h.db.events(job.id))
+        assert not (h.m.work_dir(job) / "scan.log").exists()
+        # Retrying it gets the same answer, not a scan.
+        await h.m.retry(job.id)
+        job = await h.wait_job(lambda j: j.state == JobState.failed)
+        assert job.problem.code == "audio_cd"
+        assert not (h.m.work_dir(job) / "scan.log").exists()
+
+
 @pytest.mark.parametrize("info, code", [
     ("replay('scan-uhd-volume-key-unknown.log')", "volume_key_unknown"),
     ("replay('scan-bad-key.log')", "makemkv_key"),

@@ -73,6 +73,7 @@ class FakeDrives:
     def __init__(self, present: set[str] | None = None):
         self.present = set(DRIVES) if present is None else present
         self.swapped: dict[str, str] = {}  # device -> label of a different disc put in
+        self.audio_cds: set[str] = set()  # devices with a music CD put in
 
     def discover(self, uhd_models: list[str]) -> list[DriveHw]:
         return [hw for hw, _ in DRIVES.values()]
@@ -86,9 +87,13 @@ class FakeDrives:
     def close_tray(self, device: str) -> None:
         pass  # fake trays are never open, and an ejected fake drive is just empty
 
-    def insert(self, device: str, label: str | None = None) -> None:
-        """Put the drive's disc back in, or (with ``label``) a different disc."""
+    def insert(self, device: str, label: str | None = None, audio_cd: bool = False) -> None:
+        """Put the drive's disc back in, or (with ``label``) a different disc, or a music CD."""
         self.present.add(device)
+        if audio_cd:
+            self.audio_cds.add(device)
+        else:
+            self.audio_cds.discard(device)
         if label:
             self.swapped[device] = label
         else:
@@ -97,6 +102,9 @@ class FakeDrives:
     async def disc_identity(self, device: str) -> DiscIdentity:
         disc = DRIVES[device][1]
         label = self.swapped.get(device, disc.label)
+        if device in self.audio_cds:  # no filesystem, so blkid finds nothing
+            return DiscIdentity(label=None, uuid=None, fs_type=None, fs_version=None, size_bytes=700_000_000,
+                                audio_cd=True)
         uuid = hashlib.sha1(label.encode()).hexdigest()[:16]
         return DiscIdentity(label=label, uuid=uuid, fs_type="udf", fs_version="2.50", size_bytes=disc.size)
 
