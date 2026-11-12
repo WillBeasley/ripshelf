@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, get_args
 
-from pydantic import Field, SecretStr, ValidationError
+from pydantic import AfterValidator, Field, SecretStr, ValidationError
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -56,6 +56,20 @@ FOLDERS = ("library_dir", "movies_dir", "tv_dir", "disc_backups_dir", "scratch_d
 REQUIRED_FOLDERS = {"library_dir", "scratch_dir"}
 
 # The sections of the Settings screen, in order (web/src/lib/settings/sections.ts has their names).
+# The model each vision provider uses when none is set. A hosted OpenAI-compatible
+# service has none: its model names are its own.
+VISION_MODELS = {"local": "qwen3-vl:4b-instruct", "anthropic": "claude-opus-5-5"}
+
+
+def vision_model_for(provider: str, model: str | None) -> str | None:
+    """The model to ask: the one set, or the provider's default. Another provider's
+    default is never kept (an Ollama model name left when switching to Anthropic)."""
+    model = (model or "").strip()
+    if not model or (model in VISION_MODELS.values() and model != VISION_MODELS.get(provider)):
+        return VISION_MODELS.get(provider)
+    return model
+
+
 SECTIONS = ("identify", "drives", "scanner", "library", "media-servers", "transcoding", "notifications",
             "workers", "system")
 
@@ -93,6 +107,14 @@ def is_secret(field: FieldInfo) -> bool:
     return SecretStr in get_args(field.annotation) or field.annotation is SecretStr
 
 
+def _languages(codes: list[str]) -> list[str]:
+    """ISO 639-2 codes, as MakeMKV names a track's language ("eng")."""
+    out = [c.strip().lower() for c in codes if c.strip()]
+    if bad := [c for c in out if not (len(c) == 3 and c.isascii() and c.isalpha())]:
+        raise ValueError(f"not a three-letter language code: {', '.join(bad)}")
+    return list(dict.fromkeys(out))
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="RIPSHELF_", env_file=ENV_FILE, extra="ignore", validate_assignment=True
@@ -118,6 +140,9 @@ class Settings(BaseSettings):
         advanced=True, keywords="bdmv folder")] = None
     host: str = "0.0.0.0"
     port: int = 8380
+    # More names the UI is reached by, besides addresses, plain and local names and the
+    # public URL's (origins.py): comma separated, ".example.com" for any name under it.
+    allowed_hosts: str = ""
     makemkvcon: str = "makemkvcon"
     # MakeMKV's licence, where ripshelf installed MakeMKV itself (the image sets the file). Until
     # accept_makemkv_eula is set (RIPSHELF_ACCEPT_MAKEMKV_EULA=yes), MakeMKV is not run and discs wait.
@@ -212,6 +237,18 @@ class Settings(BaseSettings):
     catalogue_search: Annotated[Literal["off", "searxng"], UI(
         "identify", "Look catalogue numbers up with", "For DVDs labelled with the publisher's number.",
         choices=(("off", "Off"), ("searxng", "SearXNG (self-hosted)")))] = "off"
+    # A language model reading cryptic labels ("BTTF2"): off, only from the button in
+    # Review, or also on its own when nothing the label's own reading finds fits. It
+    # runs on the vision model's connection, with label_ai_model if set.
+    label_ai: Annotated[Literal["off", "manual", "auto"], UI(
+        "identify", "Read cryptic labels with an AI model",
+        "BTTF2 is Back to the Future Part II. Only the label and running times are sent.",
+        choices=(("off", "Never"), ("manual", "Only when I press the button in Review"),
+                 ("auto", "When nothing found fits the disc, and with the button")),
+        keywords="ai llm ollama claude decode abbreviation")] = "off"
+    label_ai_model: Annotated[str | None, Field(max_length=200), UI(
+        "identify", "Model for labels", "Blank uses the vision model. Any chat model will do.",
+        placeholder="the vision model", keywords="ai llm ollama")] = None
     # Sending confirmed discs back to TheDiscDB. Off, a button per job ("ask"), or on
     # its own once the user confirms the identity ("auto"). The key is sent only if set.
     thediscdb_contribute: Annotated[Literal["off", "ask", "auto"], UI(
@@ -240,6 +277,28 @@ class Settings(BaseSettings):
     # drive id -> a name given in the UI ("Top bay"), shown instead of the model.
     drive_names: Annotated[dict[str, str], UI(None, update=False)] = {}
     auto_eject: Annotated[bool, UI("drives", "Eject when the rip finishes")] = True
+    # Which audio and subtitle tracks MakeMKV keeps, as its default selection rule
+    # (makemkv.selection). Off leaves MakeMKV's own rule. A full backup keeps everything.
+    track_selection: Annotated[bool, UI(
+        "drives", "Choose which audio and subtitle tracks are kept",
+        "Off keeps MakeMKV's own choice. Full disc backups keep every track.",
+        keywords="audio subtitles language commentary streams")] = False
+    track_languages: Annotated[list[str], AfterValidator(_languages), UI(
+        "drives", "Languages", "Three-letter codes, comma separated, such as eng, fre.",
+        placeholder="eng", keywords="audio subtitles")] = ["eng"]
+    track_audio: Annotated[Literal["languages", "all"], UI(
+        "drives", "Audio", "A disc's only audio track is always kept.",
+        choices=(("languages", "In these languages"), ("all", "Every audio track")))] = "languages"
+    track_commentary: Annotated[bool, UI("drives", "Keep commentary tracks")] = True
+    track_subtitles: Annotated[Literal["none", "forced", "languages", "all"], UI(
+        "drives", "Subtitles", choices=(("none", "None"), ("forced", "Forced only, in these languages"),
+                                        ("languages", "In these languages"), ("all", "Every subtitle track")))
+    ] = "languages"
+    # MakeMKV's own rule syntax, used instead of the choices above when set.
+    track_rule: Annotated[str | None, Field(max_length=500, pattern=r'^[^"\n]*$'), UI(
+        "drives", "MakeMKV selection rule", "Used instead of the choices above. MakeMKV's own syntax.",
+        advanced=True, placeholder="-sel:all,+sel:(favlang|nolang|single),-sel:mvcvideo",
+        keywords="app_DefaultSelectionString")] = None
     # A scan is stopped once MakeMKV has written nothing for scan_timeout_s, and in any
     # case after scan_max_s. A damaged disc keeps MakeMKV busy (read retries, slow
     # AACS) for far longer than a healthy one, but it keeps reporting while it does.
@@ -285,7 +344,8 @@ class Settings(BaseSettings):
     # A vision model reading the scans beside Tesseract: never, only scans Tesseract
     # struggled with, every scan, or only when asked. "local" is an OpenAI-compatible
     # server on the LAN (Ollama), "openai" a hosted OpenAI-compatible service, and
-    # "anthropic" Anthropic's API (no address needed).
+    # "anthropic" Anthropic's API (no address needed). A model left blank is the
+    # provider's default (VISION_MODELS).
     vision_mode: Annotated[Literal["off", "struggles", "every", "manual"], UI(
         "scanner", "Read scans with a vision model",
         choices=(("off", "Never"), ("struggles", "Only when Tesseract struggles (recommended)"),
@@ -298,8 +358,8 @@ class Settings(BaseSettings):
         keywords="ollama openai anthropic claude")] = "local"
     vision_url: Annotated[str | None, Field(max_length=300), UI(
         "scanner", "Vision model address", placeholder="http://ollama:11434")] = None
-    vision_model: Annotated[str, Field(max_length=200), UI(
-        "scanner", "Vision model", placeholder="qwen3-vl:4b-instruct")] = "qwen3-vl:4b-instruct"
+    vision_model: Annotated[str | None, Field(max_length=200), UI(
+        "scanner", "Vision model", "Blank uses the default for where it runs.")] = None
     vision_api_key: Annotated[SecretStr | None, UI("scanner", "Vision model API key")] = None
     # Copy a job's scans into the film's or show's folder, in scans/.
     scans_to_library: Annotated[bool, UI(
@@ -449,6 +509,11 @@ class Settings(BaseSettings):
 
     def rip_mode_for(self, drive_id: str) -> str:
         return self.drive_modes.get(drive_id, self.rip_mode)
+
+    @property
+    def vision_model_name(self) -> str | None:
+        """The vision model to ask: the one set, or the provider's default."""
+        return vision_model_for(self.vision_provider, self.vision_model)
 
     def transcode_source(self, kind: str | None) -> dict[str, bool]:
         """Whether rips from this kind of disc are transcoded, and cropped. A disc

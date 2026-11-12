@@ -89,6 +89,7 @@ export interface Api {
   EpisodeRef?: EpisodeRef;
   Evidence?: Evidence;
   Filesystem?: Filesystem;
+  FinishedPage?: FinishedPage;
   FolderRequest?: FolderRequest;
   FolderState?: FolderState;
   Hardware?: Hardware;
@@ -103,6 +104,7 @@ export interface Api {
   JobStep?: JobStep;
   JobUpdated?: JobUpdated;
   JobsDeleted?: JobsDeleted;
+  LabelReading?: LabelReading;
   Listing?: Listing;
   ListingDetails?: ListingDetails;
   ListingItem?: ListingItem;
@@ -265,6 +267,10 @@ export interface Show {
    */
   providers: string[];
   excluded: boolean;
+  /**
+   * found by searching for the AI model's reading of the label; never auto-confirms
+   */
+  from_ai: boolean;
   score: number;
   evidence: Evidence[];
 }
@@ -324,6 +330,10 @@ export interface Candidate {
    * a making-of, short or other extra; never auto-confirms
    */
   excluded: boolean;
+  /**
+   * only the AI model's reading of the label supports it; never auto-confirms
+   */
+  from_ai: boolean;
   score: number;
   evidence: Evidence[];
 }
@@ -983,98 +993,17 @@ export interface StorageFolder {
   exists: boolean;
 }
 /**
+ * Finished, failed and cancelled jobs, newest first, for paging back through the history.
+ *
  * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "FolderRequest".
+ * via the `definition` "FinishedPage".
  */
-export interface FolderRequest {
-  path: string;
+export interface FinishedPage {
+  jobs: Job[];
   /**
-   * make it (and its parents) if it doesn't exist
+   * finished jobs older than these (or than ``before``, if there are none)
    */
-  create: boolean;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "FolderState".
- */
-export interface FolderState {
-  path: string;
-  exists: boolean;
-  created: boolean;
-  /**
-   * bytes free where it is (or would be)
-   */
-  free: number | null;
-  error: string | null;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "Hardware".
- */
-export interface Hardware {
-  devices: HwDevice[];
-  encoders: HwEncoder[];
-  ffmpeg_found: boolean;
-  /**
-   * what ripshelf transcodes with now
-   */
-  encoder: "qsv" | "vaapi" | "nvenc" | "x265";
-  encoder_note: string;
-  checked_at: number;
-  /**
-   * GPUs aren't listed on Windows; the encoders' test encodes tell
-   */
-  windows: boolean;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "HwDevice".
- */
-export interface HwDevice {
-  path: string;
-  vendor: string | null;
-  driver: string | null;
-  model: string | null;
-  /**
-   * ripshelf may open it (read and write)
-   */
-  accessible: boolean;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "HwEncoder".
- */
-export interface HwEncoder {
-  /**
-   * the ffmpeg encoder, e.g. hevc_vaapi
-   */
-  name: string;
-  codec: string;
-  method: string;
-  device: string | null;
-  description: string;
-  /**
-   * a test encode succeeded
-   */
-  works: boolean;
-  /**
-   * false if not tried, because there is no GPU for it
-   */
-  tested: boolean;
-  /**
-   * 10-bit (Main10) test encode succeeded, where tested
-   */
-  ten_bit: boolean | null;
-  error: string | null;
-  used_by_ripshelf: boolean;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "ImportPrivateDataResult".
- */
-export interface ImportPrivateDataResult {
-  drive_ids: string[];
-  files: number;
+  older: number;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1765,6 +1694,100 @@ export interface RefileMove {
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "FolderRequest".
+ */
+export interface FolderRequest {
+  path: string;
+  /**
+   * make it (and its parents) if it doesn't exist
+   */
+  create: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "FolderState".
+ */
+export interface FolderState {
+  path: string;
+  exists: boolean;
+  created: boolean;
+  /**
+   * bytes free where it is (or would be)
+   */
+  free: number | null;
+  error: string | null;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "Hardware".
+ */
+export interface Hardware {
+  devices: HwDevice[];
+  encoders: HwEncoder[];
+  ffmpeg_found: boolean;
+  /**
+   * what ripshelf transcodes with now
+   */
+  encoder: "qsv" | "vaapi" | "nvenc" | "x265";
+  encoder_note: string;
+  checked_at: number;
+  /**
+   * GPUs aren't listed on Windows; the encoders' test encodes tell
+   */
+  windows: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "HwDevice".
+ */
+export interface HwDevice {
+  path: string;
+  vendor: string | null;
+  driver: string | null;
+  model: string | null;
+  /**
+   * ripshelf may open it (read and write)
+   */
+  accessible: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "HwEncoder".
+ */
+export interface HwEncoder {
+  /**
+   * the ffmpeg encoder, e.g. hevc_vaapi
+   */
+  name: string;
+  codec: string;
+  method: string;
+  device: string | null;
+  description: string;
+  /**
+   * a test encode succeeded
+   */
+  works: boolean;
+  /**
+   * false if not tried, because there is no GPU for it
+   */
+  tested: boolean;
+  /**
+   * 10-bit (Main10) test encode succeeded, where tested
+   */
+  ten_bit: boolean | null;
+  error: string | null;
+  used_by_ripshelf: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ImportPrivateDataResult".
+ */
+export interface ImportPrivateDataResult {
+  drive_ids: string[];
+  files: number;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "JobDetail".
  */
 export interface JobDetail {
@@ -1883,6 +1906,25 @@ export interface JobUpdated {
 export interface JobsDeleted {
   type: "jobs_deleted";
   ids: number[];
+}
+/**
+ * What the AI model made of a cryptic disc label, from the button in Review.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "LabelReading".
+ */
+export interface LabelReading {
+  /**
+   * full titles the label may stand for, most likely first
+   */
+  titles: string[];
+  kind: ("movie" | "tv") | null;
+  model: string;
+  seconds: number;
+  /**
+   * a film disc's candidates, ranked again with these titles
+   */
+  candidates: Candidate[];
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -2114,6 +2156,7 @@ export interface ProviderInfo {
         | "scanner"
         | "ocr"
         | "vision"
+        | "label_ai"
       )
     | null;
 }
@@ -2489,7 +2532,8 @@ export interface SettingsTestRequest {
     | "paths"
     | "scanner"
     | "ocr"
-    | "vision";
+    | "vision"
+    | "label_ai";
   values: SettingsUpdate;
 }
 /**
@@ -2517,6 +2561,8 @@ export interface SettingsUpdate {
   verify_order?: boolean | null;
   searxng_url?: string | null;
   catalogue_search?: ("off" | "searxng") | null;
+  label_ai?: ("off" | "manual" | "auto") | null;
+  label_ai_model?: string | null;
   thediscdb_contribute?: ("off" | "ask" | "auto") | null;
   thediscdb_contribute_url?: string | null;
   thediscdb_api_key?: string | null;
@@ -2527,6 +2573,12 @@ export interface SettingsUpdate {
   } | null;
   disabled_drives?: string[] | null;
   auto_eject?: boolean | null;
+  track_selection?: boolean | null;
+  track_languages?: string[] | null;
+  track_audio?: ("languages" | "all") | null;
+  track_commentary?: boolean | null;
+  track_subtitles?: ("none" | "forced" | "languages" | "all") | null;
+  track_rule?: string | null;
   scan_timeout_s?: number | null;
   scan_max_s?: number | null;
   poll_interval_s?: number | null;
@@ -2640,6 +2692,8 @@ export interface SettingsUpdate1 {
   verify_order?: boolean | null;
   searxng_url?: string | null;
   catalogue_search?: ("off" | "searxng") | null;
+  label_ai?: ("off" | "manual" | "auto") | null;
+  label_ai_model?: string | null;
   thediscdb_contribute?: ("off" | "ask" | "auto") | null;
   thediscdb_contribute_url?: string | null;
   thediscdb_api_key?: string | null;
@@ -2650,6 +2704,12 @@ export interface SettingsUpdate1 {
   } | null;
   disabled_drives?: string[] | null;
   auto_eject?: boolean | null;
+  track_selection?: boolean | null;
+  track_languages?: string[] | null;
+  track_audio?: ("languages" | "all") | null;
+  track_commentary?: boolean | null;
+  track_subtitles?: ("none" | "forced" | "languages" | "all") | null;
+  track_rule?: string | null;
   scan_timeout_s?: number | null;
   scan_max_s?: number | null;
   poll_interval_s?: number | null;
@@ -2763,6 +2823,12 @@ export interface SettingsView {
    * where the database backups go
    */
   backups_dir: string;
+  /**
+   * vision provider -> the model it uses when none is set
+   */
+  vision_models: {
+    [k: string]: string;
+  };
   setup_complete: boolean;
   metadata_providers: {
     [k: string]: ProviderSlot[];
@@ -2779,6 +2845,8 @@ export interface SettingsView {
   verify_order: boolean;
   searxng_url: string | null;
   catalogue_search: "off" | "searxng";
+  label_ai: "off" | "manual" | "auto";
+  label_ai_model: string | null;
   thediscdb_contribute: "off" | "ask" | "auto";
   thediscdb_contribute_url: string;
   thediscdb_api_key_set: boolean;
@@ -2792,6 +2860,12 @@ export interface SettingsView {
     [k: string]: string;
   };
   auto_eject: boolean;
+  track_selection: boolean;
+  track_languages: string[];
+  track_audio: "languages" | "all";
+  track_commentary: boolean;
+  track_subtitles: "none" | "forced" | "languages" | "all";
+  track_rule: string | null;
   scan_timeout_s: number;
   scan_max_s: number;
   poll_interval_s: number;
@@ -2806,7 +2880,7 @@ export interface SettingsView {
   vision_mode: "off" | "struggles" | "every" | "manual";
   vision_provider: "local" | "openai" | "anthropic";
   vision_url: string | null;
-  vision_model: string;
+  vision_model: string | null;
   vision_api_key_set: boolean;
   scans_to_library: boolean;
   tv_rip_extras: boolean;
@@ -2904,6 +2978,12 @@ export interface SettingsViewBase {
    * where the database backups go
    */
   backups_dir: string;
+  /**
+   * vision provider -> the model it uses when none is set
+   */
+  vision_models: {
+    [k: string]: string;
+  };
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -3019,6 +3099,10 @@ export interface Status {
    * a SearXNG address is set, so Review can search the web
    */
   web_search: boolean;
+  /**
+   * an AI model can read labels, so Review shows its button
+   */
+  label_ai: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

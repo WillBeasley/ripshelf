@@ -201,6 +201,33 @@ def test_add_use_and_revoke_a_worker_token(client):
     assert again["worker"]["worker_id"] == "den-pc", "added back, with the same id"
 
 
+def test_a_worker_token_reaches_only_its_own_runs(client, tmp_path):
+    hub = client.app.state.manager.hub
+    den = client.post("/api/remote-workers", json={"name": "Den"}).json()["token"]
+    attic = client.post("/api/remote-workers", json={"name": "Attic"}).json()["token"]
+    assert register(client, den, "den").status_code == 200
+    assert register(client, attic, "attic").status_code == 200
+
+    async def start():
+        return hub.start_run("attic", {"type": "makemkv"}, tmp_path / "attic.log", tmp_path / "out", None)
+
+    run = client.portal.call(start)
+    base, h = f"/api/workers/den/runs/{run.id}", {"Authorization": f"Bearer {den}"}
+    # Den's token, under Den's own id, aimed at a run of Attic's.
+    assert client.post(f"{base}/lines", json={"lines": ["Moonlit Orchard"]}, headers=h).status_code == 403
+    assert client.put(f"{base}/files/title_t00.mkv", content=b"x", headers=h).status_code == 403
+    assert client.post(f"{base}/finish", json={"returncode": 0}, headers=h).status_code == 403
+    assert not run.done.done() and not (tmp_path / "out" / "title_t00.mkv").exists()
+    assert "Moonlit Orchard" not in (tmp_path / "attic.log").read_text()
+
+    base, h = f"/api/workers/attic/runs/{run.id}", {"Authorization": f"Bearer {attic}"}
+    assert client.post(f"{base}/lines", json={"lines": ["The Brass Heron"]}, headers=h).status_code == 200
+    assert client.put(f"{base}/files/title_t00.mkv", content=b"x", headers=h).status_code == 200
+    assert client.post(f"{base}/finish", json={"returncode": 0}, headers=h).status_code == 200
+    assert run.done.result().returncode == 0 and (tmp_path / "out" / "title_t00.mkv").exists()
+    assert "The Brass Heron" in (tmp_path / "attic.log").read_text()
+
+
 def test_shared_token_works_and_is_reported(settings):
     settings.worker_token = SecretStr(TOKEN)
     with TestClient(create_app(settings, backend=NoDrives(present=set()))) as c:

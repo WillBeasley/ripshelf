@@ -19,5 +19,7 @@ export RIPSHELF_SCANNER_URL="${RIPSHELF_SCANNER_URL:-http://127.0.0.1:$RIPSHELF_
 export RIPSHELF_VISION_MODE="${RIPSHELF_VISION_MODE:-struggles}"
 export RIPSHELF_VISION_URL="${RIPSHELF_VISION_URL:-http://127.0.0.1:$RIPSHELF_PORT/fake-vision}"
 export RIPSHELF_VISION_MODEL="${RIPSHELF_VISION_MODEL:-fake-vl}"
+# Its label reading, from the button in Review.
+export RIPSHELF_LABEL_AI="${RIPSHELF_LABEL_AI:-manual}"
 mkdir -p var/fake/library
 exec .venv/bin/ripshelf

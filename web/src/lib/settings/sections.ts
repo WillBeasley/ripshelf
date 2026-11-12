@@ -45,7 +45,7 @@ export const SECTIONS: SectionInfo[] = [
 			const n = live.drives.filter((d) => !v.disabled_drives.includes(d.id)).length;
 			return `${n} drive${n === 1 ? '' : 's'} in use · ${on(v.rip_mode === 'backup', 'full disc backups', 'titles as MKV')}`;
 		},
-		problems: ['makemkv_eula', 'worker_makemkv_eula', 'makemkv_key_unset', 'private_data_missing', 'java_missing']
+		problems: ['makemkv_eula', 'worker_makemkv_eula', 'drive_device', 'makemkv_key_unset', 'private_data_missing', 'java_missing']
 	},
 	{
 		id: 'scanner',

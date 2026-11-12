@@ -34,13 +34,15 @@ def fake_sysfs(root: Path, drives_spec: dict[str, dict]) -> Path:
 
 @pytest.fixture
 def sysfs(tmp_path, monkeypatch):
-    def make(spec, dev_nodes=True):
+    def make(spec, dev_nodes=True, sg_nodes=True):
         block = fake_sysfs(tmp_path, spec)
         monkeypatch.setattr(drives, "SYS_BLOCK", block)
         dev = tmp_path / "dev"
         dev.mkdir(exist_ok=True)
         for name in spec if dev_nodes else ():
             (dev / name).touch()
+            if sg_nodes and spec[name].get("sg"):
+                (dev / spec[name]["sg"]).touch()
         monkeypatch.setattr(drives.SysfsDrives, "__init__", _with_dev(dev))
         return block
     return make
@@ -87,6 +89,50 @@ def test_missing_sg_device_and_sysfs_fields(sysfs, monkeypatch):
     assert d.sg_device is None and d.vendor == "" and d.serial is None
     assert d.capabilities == [Capability.dvd]
     assert called == []
+
+
+def test_drive_without_its_sg_node_is_a_setup_problem(sysfs, monkeypatch):
+    # compose.yaml passes sr0 with sg1, but after a reboot sr0's sg is sg5 (and sg1 a disk's).
+    block = sysfs({"sr0": {"vendor": "HL-DT-ST", "model": "DVD-RAM GHC0N", "sg": "sg5"}}, sg_nodes=False)
+    (block.parent.parent / "dev" / "sg1").touch()
+    called = []
+    monkeypatch.setattr(sgio, "identify", lambda sg: called.append(sg))
+    b = SysfsDrives()
+    [d] = b.discover(UHD)
+    assert d.sg_device is None and called == []
+    [msg] = b.device_problems
+    assert "/dev/sr0 (HL-DT-ST DVD-RAM GHC0N)" in msg and "without its own /dev/sg5" in msg
+
+
+def test_sg_passed_without_its_drive_is_a_setup_problem(sysfs, monkeypatch):
+    # Two drives swapped numbers: sr0 is passed with sg6, which now belongs to sr1.
+    block = sysfs({"sr0": {"model": "GHC0N", "sg": "sg5"}, "sr1": {"model": "iHAS122", "sg": "sg6"}},
+                  dev_nodes=False)
+    dev = block.parent.parent / "dev"
+    (dev / "sr0").touch()
+    (dev / "sg6").touch()
+    monkeypatch.setattr(sgio, "identify", lambda sg: None)
+    b = SysfsDrives()
+    b.discover(UHD)
+    assert len(b.device_problems) == 2
+    assert "without its own /dev/sg5" in b.device_problems[0]
+    assert b.device_problems[1].startswith("/dev/sg6 is passed in, but it belongs to /dev/sr1")
+
+
+def test_drive_with_no_sg_at_all_says_to_load_sg(sysfs, monkeypatch):
+    sysfs({"sr0": {"model": "iHAS122"}})
+    monkeypatch.setattr(sgio, "identify", lambda sg: None)
+    b = SysfsDrives()
+    b.discover(UHD)
+    [msg] = b.device_problems
+    assert "has no /dev/sgN" in msg and "modprobe sg" in msg
+
+
+def test_correctly_passed_drives_have_no_problems(sysfs, monkeypatch):
+    sysfs({"sr0": {"model": "GHC0N", "sg": "sg5"}, "sr1": {"model": "iHAS122", "sg": "sg6"}})
+    monkeypatch.setattr(sgio, "identify", lambda sg: None)
+    b = SysfsDrives()
+    assert len(b.discover(UHD)) == 2 and b.device_problems == []
 
 
 def test_sg_identify_failure_falls_back_to_model_name(sysfs, monkeypatch):

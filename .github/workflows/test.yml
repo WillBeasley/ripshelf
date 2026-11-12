@@ -1,14 +1,20 @@
-# Tests on every push and pull request (ruff, pytest, svelte-check, and the UI's unit and
-# browser tests). See docs/ci-github.md.
+# Tests on every push and pull request (ruff, pytest, svelte-check, the UI build, the UI's
+# unit and browser tests), and a start of the image. images.yml runs these first for a
+# release tag, and publishes nothing if they fail. See docs/ci-github.md.
 name: test
 on:
   push:
     branches: [main]
-    tags: ["v*"]
     paths-ignore: ["docs/**", "**.md"]
   pull_request:
     paths-ignore: ["docs/**", "**.md"]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      image:
+        description: build and start the image (images.yml does that itself, per platform)
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -56,6 +62,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm run check
+          npm run build
 
   ui:
     # The UI's unit tests (Vitest), then its browser tests (Playwright) against the backend
@@ -99,3 +106,23 @@ jobs:
           name: playwright-report
           path: web/playwright-report/
           retention-days: 14
+
+  # Builds the image (amd64 only) without pushing it, and starts it.
+  image:
+    if: inputs.image != false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      # Only main writes the cache, which pull requests can read; a pull request's own
+      # cache would hold another copy of MakeMKV's build for every one.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: localhost/ripshelf:ci
+          cache-from: type=gha,scope=ci-linux-amd64
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=ci-linux-amd64,mode=max' || '' }}
+      - name: Start it
+        run: scripts/smoke-image.sh localhost/ripshelf:ci

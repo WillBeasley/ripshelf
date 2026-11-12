@@ -146,12 +146,18 @@ def set_key(conf_dir: Path, key: str | None) -> None:
     key stays there, because the MakeMKV app uses it too."""
     if procs.WINDOWS and key and registry_key() != key:
         set_registry_key(key)
+    set_conf(conf_dir, {"app_Key": key})
+
+
+def set_conf(conf_dir: Path, values: dict[str, str | None]) -> None:
+    """Set (or, with None, remove) settings in ``conf_dir/settings.conf``, keeping its other lines."""
     conf_dir.mkdir(parents=True, exist_ok=True)
     conf = conf_dir / "settings.conf"
     lines = conf.read_text(encoding="utf-8").splitlines() if conf.exists() else []
-    lines = [ln for ln in lines if not re.match(r"\s*app_Key\s*=", ln)]
-    if key:
-        lines.insert(0, f'app_Key = "{key}"')
+    lines = [ln for ln in lines if not any(re.match(rf"\s*{re.escape(k)}\s*=", ln) for k in values)]
+    for k, v in reversed(values.items()):
+        if v:
+            lines.insert(0, f'{k} = "{v}"')
     # Atomically, 0600, so a makemkvcon starting meanwhile never reads half a file.
     fd, tmp = tempfile.mkstemp(dir=conf_dir, prefix=".settings.conf.")
     try:
@@ -359,9 +365,13 @@ class MakeMKV:
         on_line: Callable[[str], None] | None = None,
         timeout: float | None = None,
         idle_timeout: float | None = None,
+        conf: dict[str, str | None] | None = None,
     ) -> RunResult:
+        """``conf`` is put in the home's settings.conf first (the track selection rule)."""
         env = home_env(home)
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        if conf:
+            set_conf(Path(home) / ".MakeMKV", conf)
         self._cancelled = False
         release: Callable[[], None] = lambda: None  # noqa: E731
         if self.gate:

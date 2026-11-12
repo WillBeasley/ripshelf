@@ -21,7 +21,8 @@ services:
       - "993"                           # <-- the host's render group id, for GPU transcoding (getent group render)
     devices:
       # <-- your optical drives, each /dev/srN with its own /dev/sgN (the numbers differ).
-      #     ls /sys/class/block/sr*/device/scsi_generic  shows the pairs.
+      #     ls /sys/class/block/sr*/device/scsi_generic  shows the pairs. They can change
+      #     between boots; docs/troubleshooting.md has udev names that don't.
       - /dev/sr0
       - /dev/sg1
       - /dev/sr1
@@ -46,6 +47,12 @@ services:
       # and delete the two RIPSHELF_*_DIR lines and the /movies and /tv mounts.
     ports:
       - "8380:8380"                     # no login, so keep it on your LAN or VPN
+    healthcheck:                        # /api/health answers once the database is open
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8380/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
 
   # Optional: a vision model reading scans of the box (docs/cover-scans.md). Uncomment,
   # then in Settings → Scanner set the vision model's address to http://ollama:11434 and

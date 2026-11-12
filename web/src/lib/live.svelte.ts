@@ -37,6 +37,10 @@ class Live {
 	connected = $state(false);
 	loaded = $state(false);
 	error = $state<string | null>(null);
+	// Finished jobs older than any loaded, and how many of those the Finished page
+	// has loaded past the main list's window (reloaded on every refresh).
+	olderFinished = $state(0);
+	#extraFinished = 0;
 
 	#eventListeners = new Set<(e: JobEvent) => void>();
 	#source: EventSource | null = null;
@@ -59,6 +63,20 @@ class Live {
 		return Object.values(this.jobs)
 			.filter(isAfterDrive)
 			.sort((a, b) => a.created_at.localeCompare(b.created_at));
+	}
+
+	// The oldest finished job loaded, which the next page of history starts below.
+	#oldestFinished(): number | null {
+		let min: number | null = null;
+		for (const j of this.finishedJobs) if (min == null || j.id < min) min = j.id;
+		return min;
+	}
+
+	async loadOlderFinished(n = 100) {
+		const page = await api.finished(this.#oldestFinished(), n);
+		for (const j of page.jobs) this.upsertJob(j);
+		this.#extraFinished += page.jobs.length;
+		this.olderFinished = page.older;
 	}
 
 	removeJobs(ids: number[]) {
@@ -115,6 +133,11 @@ class Live {
 			const map: Record<number, Job> = {};
 			for (const j of jobs) map[j.id] = j;
 			this.jobs = map;
+			// Bring back the older pages the Finished page had loaded, and count the rest.
+			const older = await api.finished(this.#oldestFinished(), this.#extraFinished);
+			for (const j of older.jobs) this.jobs[j.id] = j;
+			this.#extraFinished = older.jobs.length;
+			this.olderFinished = older.older;
 			this.threshold = settings.auto_confirm_threshold;
 			this.setupComplete = settings.setup_complete ?? true;
 			// Drive jobs older than the list window.

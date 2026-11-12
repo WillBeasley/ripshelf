@@ -371,3 +371,47 @@ async def test_anthropic_ignores_an_address_left_from_a_local_model(harness, set
         assert p.kind == "anthropic" and p.url is None and p.model == "a-vision-model"
         settings.vision_provider = "local"
         assert h.m.vision_provider().url == "http://ollama:11434"
+
+
+async def test_each_provider_has_its_own_default_model(harness, settings):
+    """Switched from Ollama to Anthropic with the model left as it was, Anthropic gets its
+    own default, not the Ollama model name; a model typed for it is kept."""
+    from pydantic import SecretStr
+
+    from ripshelf.config import VISION_MODELS
+
+    settings.vision_mode, settings.vision_url, settings.vision_api_key = "every", "http://ollama:11434", SecretStr("k")
+    async with harness() as h:
+        assert h.m.vision_provider().model == VISION_MODELS["local"]
+        settings.vision_provider = "anthropic"
+        assert h.m.vision_provider().model == VISION_MODELS["anthropic"]
+        settings.vision_model = VISION_MODELS["local"]  # saved by hand before the switch
+        assert h.m.vision_provider().model == VISION_MODELS["anthropic"]
+        settings.vision_model = "claude-haiku-5-5"
+        assert h.m.vision_provider().model == "claude-haiku-5-5"
+        # A hosted OpenAI-compatible service has no default: no model, no provider.
+        settings.vision_provider, settings.vision_model = "openai", None
+        assert h.m.vision_provider() is None
+        settings.vision_model = "vm"
+        assert h.m.vision_provider().model == "vm"
+
+
+def test_settings_show_the_default_models(settings):
+    with TestClient(create_app(settings, backend=FakeDrives(present=set()))) as client:
+        s = client.get("/api/settings").json()
+        assert s["vision_model"] is None and s["vision_models"]["local"] == "qwen3-vl:4b-instruct"
+        r = client.post("/api/settings/test", json={"check": "vision", "values": {
+            "vision_provider": "openai", "vision_url": "https://api.example.test"}}).json()
+        assert not r["ok"] and r["message"] == "No model name"
+
+
+async def test_the_label_reader_uses_the_default_model_too(harness, settings):
+    from pydantic import SecretStr
+
+    from ripshelf.config import VISION_MODELS
+
+    settings.label_ai, settings.vision_provider, settings.vision_api_key = "manual", "anthropic", SecretStr("k")
+    async with harness() as h:
+        assert h.m.label_provider().model == VISION_MODELS["anthropic"]
+        settings.label_ai_model = "claude-haiku-5-5"
+        assert h.m.label_provider().model == "claude-haiku-5-5"

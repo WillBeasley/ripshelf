@@ -20,6 +20,7 @@ from .bus import EventBus
 from .config import Settings, load_settings, load_worker_token
 from .db import Database
 from .jobs import Manager
+from .origins import OriginGuard
 from .system import HardwareCache
 from .workers.api import admin as remote_workers_router
 from .workers.api import router as workers_router
@@ -79,6 +80,7 @@ def create_app(settings: Settings | None = None, backend=None) -> FastAPI:
     # Set when shutdown starts, so worker long-polls and UI event streams end by themselves
     # instead of being cancelled (with a traceback each) when the grace period runs out.
     app.state.closing = asyncio.Event()
+    app.add_middleware(OriginGuard, settings=s)
     app.include_router(api)
     app.include_router(workers_router)
     app.include_router(remote_workers_router)
@@ -155,6 +157,14 @@ class Server(uvicorn.Server):
         begin_shutdown(self.config.app)
 
 
+class QuietHealth(logging.Filter):
+    """Leaves the container healthcheck's passing probes out of the access log."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        return not (isinstance(args, tuple) and len(args) == 5 and args[2] == "/api/health" and args[4] == 200)
+
+
 def uvicorn_log_config() -> dict:
     """uvicorn's own messages (start-up, errors) go through the root logger, so they
     reach the log file and the Logs page too; its per-request access log does not."""
@@ -162,6 +172,8 @@ def uvicorn_log_config() -> dict:
 
     cfg = copy.deepcopy(LOGGING_CONFIG)
     cfg["loggers"]["uvicorn"] = {"handlers": [], "level": "INFO", "propagate": True}
+    cfg["filters"] = {"quiet_health": {"()": QuietHealth}}
+    cfg["handlers"]["access"]["filters"] = ["quiet_health"]
     return cfg
 
 

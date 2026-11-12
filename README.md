@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/WillBeasley/ripshelf/actions/workflows/test.yml"><img src="https://github.com/WillBeasley/ripshelf/actions/workflows/test.yml/badge.svg?branch=main" alt="Tests"></a>
   <a href="https://github.com/WillBeasley/ripshelf/actions/workflows/images.yml"><img src="https://github.com/WillBeasley/ripshelf/actions/workflows/images.yml/badge.svg" alt="Image build"></a>
-  <a href="https://github.com/WillBeasley/ripshelf/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/release-v0.7.0-blue" alt="Release v0.7.0"></a>
+  <a href="https://github.com/WillBeasley/ripshelf/tags"><img src="https://img.shields.io/github/v/tag/WillBeasley/ripshelf?sort=semver&label=release" alt="Latest release"></a>
   <a href="https://github.com/WillBeasley/ripshelf/pkgs/container/ripshelf"><img src="https://img.shields.io/badge/ghcr.io-willbeasley%2Fripshelf-blue?logo=docker" alt="Container image: ghcr.io/willbeasley/ripshelf"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-green" alt="Licence: MIT"></a>
 </p>
@@ -29,6 +29,7 @@ Discs are identified from several sources, and each candidate gets a score and t
 - **TheDiscDB.** Discs in [TheDiscDB](https://thediscdb.com) are recognised by fingerprint, including which title is the film and which is each episode.
 - **Several metadata providers.** TMDB, TheTVDB, TVmaze and OMDb are asked in an order you choose, separately for films, shows and episode lists.
 - **TV discs.** Shows are found from the disc label, episodes are mapped by runtime in aired or DVD order, and extras are kept apart.
+- **Cover scans.** Scan or photograph the box, and its listing of episodes and extras is read and matched to the disc's titles.
 - **Catalogue numbers.** Labels that are a catalogue number (`EO51710`) can be looked up on the web.
 - **Review.** Uncertain discs wait on the Review page with candidates, scores and evidence. Confirmed discs can be contributed back to TheDiscDB (opt-in).
 
@@ -116,11 +117,13 @@ ripshelf depends on these projects, and most of them are free to use:
 | [Metadata providers](docs/providers.md) | TheDiscDB, TMDB, TheTVDB, TVmaze and OMDb, their keys, and the order they're asked in |
 | [Contributing to TheDiscDB](docs/thediscdb-contributing.md) | sending confirmed discs back to TheDiscDB (opt-in) |
 | [TV discs in one title](docs/tv-splitting.md) | discs with every episode in one long title, cut into episodes |
+| [Cover scans](docs/cover-scans.md) | scanning or photographing the box, reading its listing, and naming episodes and extras from it |
 | [Catalogue numbers](docs/catalogue.md) | looking up catalogue-number labels on the web |
 | [Full disc backups](docs/backup.md) | MakeMKV's backup ("ISO mode") instead of MKV titles |
 | [One container or one per drive](docs/modes.md) | the single container, or a worker container per drive |
 | [Remote workers](docs/workers.md) | drives on other machines, including a Raspberry Pi |
 | [Windows](docs/windows.md) | running natively on Windows |
+| [Raspberry Pi 5](docs/raspberry-pi.md) | a Pi 5 with a USB drive, with setup scripts, Docker or native |
 | [Building the image](docs/building.md) | building from source, another MakeMKV release or architecture |
 | [CI on GitHub](docs/ci-github.md) | tests and published images |
 | [Troubleshooting](docs/troubleshooting.md) | common problems and fixes |

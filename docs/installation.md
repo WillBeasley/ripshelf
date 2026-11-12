@@ -28,7 +28,9 @@ The image is `ghcr.io/willbeasley/ripshelf`, for `linux/amd64` and `linux/arm64`
 
 By default films go to `./movies` and TV to `./tv` next to the compose file. To use an existing library, change the left-hand side of the `/movies` and `/tv` mounts (for example `/media/Movies:/movies`). Or mount one folder holding `Movies/` and `TV/` at `/library`, and delete the `RIPSHELF_MOVIES_DIR` and `RIPSHELF_TV_DIR` lines. Each folder must already exist. ripshelf never creates them, so an unmounted disk can't fill your system disk.
 
-There's no login on the UI, so keep it on your LAN or VPN.
+There's no login on the UI, so keep it on your LAN or VPN. It does refuse changes sent by web pages on other sites, and answers only to the names a LAN uses, so a page open in your browser can't use it behind your back. If you open it by a public name (through a reverse proxy, or a Tailscale name), set that address in Settings → System or add the name to `RIPSHELF_ALLOWED_HOSTS` ([settings.md](settings.md#settings-that-arent-on-the-settings-page)).
+
+The compose files have a healthcheck, so `docker compose ps` shows the controller as `healthy` once it answers and its database opens. It asks `GET /api/health` (200, or 503 while shutting down or when the database fails), which monitoring tools such as Uptime Kuma can use too. In `compose.per-drive.yaml` the drive workers wait for it.
 
 ## First-run configuration
 
@@ -66,6 +68,8 @@ Before moving to a new release, read its **Upgrading** notes in [CHANGELOG.md](.
 **Don't update in the middle of a rip.** The container restarts and the job fails with "ripshelf restarted while this job was running", ready to retry. The same goes for Watchtower and similar tools, so give ripshelf the label `com.centurylinklabs.watchtower.enable=false`, or pin a release tag.
 
 The database, settings and MakeMKV data are in `./data`, so they survive updates and switching between a pulled image and one you built. Daily database backups go to `./backups`.
+
+When a release changes how the database is laid out, the first start copies it aside first, as `data/ripshelf-before-vN.db`, and then upgrades it. To go back to the older release, stop ripshelf and put that copy back as `data/ripshelf.db` (jobs from after the upgrade are lost). From 0.7 on, a release refuses to open a database a later release has upgraded, rather than misread it. A job the new release can't read at all is left out of the job list and named in the log (`skipping jobs row N`), instead of stopping ripshelf.
 
 ## Other ways to run it
 

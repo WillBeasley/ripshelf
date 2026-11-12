@@ -23,7 +23,7 @@ The simulated drives replay recorded MakeMKV logs of a UHD film, a DVD film, a T
 ```sh
 .venv/bin/ruff check src tests
 .venv/bin/pytest -n 12                 # about 2 minutes in parallel, 11 without; add --cov for branch coverage
-.venv/bin/pytest -n 12 -m "not slow"   # without the dozen end-to-end tests that take 10 s or more
+.venv/bin/pytest -n 12 -m "not slow"   # without the end-to-end tests that take 10 s or more
 (cd web && npm run check)              # svelte-check
 (cd web && npm test)                   # the UI's unit tests (Vitest)
 (cd web && npm run test:e2e)           # the UI in a browser (Playwright), about 30 s
@@ -51,7 +51,11 @@ Dependabot (`.github/dependabot.yml`) opens a pull request each week for newer U
 
 | Path | What's there |
 |---|---|
-| `src/ripshelf/jobs.py` | the job pipeline (scan, identify, rip, finalise) |
+| `src/ripshelf/jobs.py` | the job pipeline (scan, identify, rip, finalise), the `Manager` the files below are mixed into |
+| `src/ripshelf/tvjobs.py` | the TV half of the pipeline: rip every title, map episodes, split long titles |
+| `src/ripshelf/transcodejobs.py`, `refilejobs.py`, `contributejobs.py` | transcoding, identifying a finished job again, sending discs to TheDiscDB |
+| `src/ripshelf/scanjobs.py`, `readjobs.py`, `visionjobs.py`, `matchjobs.py` | a job's box scans, reading their text (Tesseract, a vision model), and what the matched listing is used for |
+| `src/ripshelf/scanner/` | the network scanner (eSCL), image clean-up, OCR, the vision model, and turning the box's text into a listing matched to the titles |
 | `src/ripshelf/identify/`, `tv/`, `providers/` | film and TV identification, and metadata providers |
 | `src/ripshelf/makemkv/` | running `makemkvcon` and parsing its output |
 | `src/ripshelf/workers/` | the worker agent and the controller's side of it |

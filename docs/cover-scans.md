@@ -92,9 +92,11 @@ A vision model, a language model that reads pictures, gets most of these. ripshe
 - **Only when you press Read with the vision model** on a scan. The button is there in every mode except Never.
 
 **Where it runs:**
-- **On your network:** Ollama, or any other server with an OpenAI-compatible API (LM Studio, vLLM…). Set its address and the model.
+- **On your network:** Ollama, or any other server with an OpenAI-compatible API (LM Studio, vLLM…). Set its address; the model is `qwen3-vl:4b-instruct` unless you name another.
 - **A cloud service with an OpenAI-compatible API:** its address, the model and a key.
-- **Anthropic's API:** a key and the model name from Anthropic's model list.
+- **Anthropic's API:** a key. The model is `claude-opus-5-5` unless you name another from Anthropic's model list (a smaller one, such as `claude-haiku-5-5`, costs less a scan).
+
+Left blank, the model is the default for where it runs; a hosted OpenAI-compatible service has none, so name one of its models. Switching where it runs clears a model name that was the old one's default.
 
 With a cloud service, the pictures of the box leave your network. Settings says so, and only the scans are sent.
 

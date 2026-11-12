@@ -45,6 +45,24 @@ def test_status_drives_settings(client):
     assert s["tmdb_api_key_set"] is False and "tmdb_api_key" not in s
 
 
+def test_health(client):
+    # As the compose healthcheck asks, from inside the container.
+    for host in ("127.0.0.1:8380", "localhost:8380"):
+        r = client.get("/api/health", headers={"host": host})
+        assert r.status_code == 200 and r.json() == {"status": "ok"}
+    client.app.state.closing.set()
+    try:
+        assert client.get("/api/health").status_code == 503
+    finally:
+        client.app.state.closing.clear()
+
+
+def test_health_fails_without_the_database(client):
+    client.app.state.manager.db.conn.close()
+    r = client.get("/api/health")
+    assert r.status_code == 503 and "database" in r.json()["detail"]
+
+
 def test_disc_to_library_through_the_api(client, settings):
     assert client.post("/api/dev/insert/fake-ihas122").status_code == 204
     job = wait(client, lambda j: j["state"] == "review")
