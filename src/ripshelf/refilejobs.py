@@ -320,7 +320,7 @@ class RefileMixin:
                     continue
                 p = Path(new(r.files[i]))
                 try:
-                    file = str(p.relative_to(folder))
+                    file = p.relative_to(folder).as_posix()  # as the first copy wrote it
                 except ValueError:
                     file = str(p)
                 copied[i] = {"file": file, "sha256": sums.get(i),

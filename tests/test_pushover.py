@@ -293,7 +293,8 @@ async def test_rip_and_copy_notes_without_transcoding(harness, pushed, settings)
         "Waiting for you to review it. Then: copying into the library (transcoding is off)",
         "Next: copying into the library (transcoding is off)")
     assert copied["priority"] == "-1"
-    assert copied["message"].split("\n")[0].endswith("Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv")
+    first = copied["message"].split("\n")[0].replace("\\", "/")  # a Windows path has backslashes
+    assert first.endswith("Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv")
 
 
 async def test_transcode_note(harness, pushed, settings):

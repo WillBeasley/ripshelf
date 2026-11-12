@@ -187,6 +187,13 @@ async def detect_crop(ffmpeg: str, path: Path, duration: float, width: int, heig
     return choose_crop(found, width, height)
 
 
+def kind_off(s, disc_kind: str | None) -> str | None:
+    """Why discs of this kind are never transcoded under settings ``s``, or None if they can be."""
+    if not s.transcode_source(disc_kind)["transcode"]:
+        return f"{DISC_NAMES.get(disc_kind, disc_kind)} discs are not transcoded"
+    return None
+
+
 def plan(info: MediaInfo, s, disc_kind: str | None, encoder: str) -> Plan:
     """What to do with one file under settings ``s``."""
     v = info.video
@@ -196,9 +203,10 @@ def plan(info: MediaInfo, s, disc_kind: str | None, encoder: str) -> Plan:
         return Plan(False, reasons=["transcoding is off"])
     if v.hdr and not s.transcode_hdr:
         return Plan(False, reasons=[f"{'Dolby Vision' if v.dolby_vision else 'HDR'} source left untouched"])
+    off = kind_off(s, disc_kind)
+    if off:
+        return Plan(False, reasons=[off])
     source = s.transcode_source(disc_kind)
-    if not source["transcode"]:
-        return Plan(False, reasons=[f"{DISC_NAMES.get(disc_kind, disc_kind)} discs are not transcoded"])
     crop_mode = s.transcode_crop if source["crop"] else "off"
     wanted = v.codec.lower() in {c.lower() for c in s.transcode_codecs}
     if not wanted and crop_mode != "always":

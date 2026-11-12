@@ -153,7 +153,8 @@ def test_parts():
 
 def test_split_command():
     cmd = split.split_command("mkvmerge", Path("/s/t.mkv"), Path("/o"), [4, 2, 2])
-    assert cmd == ["mkvmerge", "--quiet", "-o", "/o/part.mkv", "--split", "chapters:3,5", "/s/t.mkv"]
+    assert cmd == ["mkvmerge", "--quiet", "-o", str(Path("/o/part.mkv")), "--split", "chapters:3,5",
+                   str(Path("/s/t.mkv"))]
 
 
 def test_mkvmerge_found_in_program_files_on_windows(tmp_path, monkeypatch):

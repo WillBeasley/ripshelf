@@ -23,7 +23,7 @@ from ripshelf.models import JobState, ScannerScanRequest, ScanSplit, ScanUpdate
 from ripshelf.scanner import escl, images
 from ripshelf.scanner.escl import Escl, ScannerError
 
-from .conftest import until
+from .conftest import read_picture, until
 from .test_contribute import BASE, FIXTURES, heron_job, pippa_job, put
 
 URL = "http://scanner.test/eSCL"
@@ -316,9 +316,9 @@ async def test_a_scan_is_cropped_by_hand_and_trimmed_again(harness, settings):
         # Drawn on the scan as shown, turned: its left half, all the way down.
         sc = await h.m.update_scan(job.id, sc.id, ScanUpdate(crop=[0, 0, 0.5, 1]))
         assert sc.crop == [0, 430, 600, 860] and sc.crop_by_hand  # the original's bottom half
-        thumb = Image.open(await h.m.scan_thumb(job.id, sc.id, large=True))
+        thumb = read_picture(await h.m.scan_thumb(job.id, sc.id, large=True))
         assert thumb.size == (430, 600)
-        whole = Image.open(await h.m.scan_thumb(job.id, sc.id, whole=True))
+        whole = read_picture(await h.m.scan_thumb(job.id, sc.id, whole=True))
         assert whole.size == (860, 600)  # turned, not cropped
         sc = await h.m.update_scan(job.id, sc.id, ScanUpdate(rotate=0))
         assert sc.crop == [0, 430, 600, 860]  # turning keeps the crop
@@ -342,7 +342,7 @@ async def test_front_and_back_scans_become_the_covers(harness, settings):
         await h.m.add_scan(job.id, picture(colour=(0, 200, 0)), "front", "camera")
         c = h.db.get_job(job.id).contribution
         assert c.covers == ["front"]
-        cover = Image.open(h.m.cover_file(job.id, "front"))
+        cover = read_picture(h.m.cover_file(job.id, "front"))
         assert cover.getpixel((5, 5))[1] > 180
 
 
