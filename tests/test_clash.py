@@ -233,7 +233,7 @@ async def test_eject_to_check_and_the_same_disc_carries_on(harness, keyed, setti
             assert PM not in h.backend.present
             await asyncio.sleep(0.5)
             assert h.job(job.id).state == JobState.checking, "an empty drive doesn't fail it"
-            h.backend.insert(PM)
+            await h.insert(PM)
             back = await h.wait_job(lambda j: j.state == JobState.clash)
             assert back.id == job.id and back.clash.files and back.checking_from is None
             assert len(h.db.list_jobs()) == 1, "no rescan, no new job"
@@ -248,7 +248,7 @@ async def test_eject_to_check_and_a_different_disc_ends_the_job(harness, keyed, 
         async with harness(PM) as h:
             job = await h.wait_job(lambda j: j.state == JobState.clash)
             await h.m.check_disc(job.id)
-            h.backend.insert(PM, label="SOMETHING_ELSE")
+            await h.insert(PM, label="SOMETHING_ELSE")
             await until(lambda: len(h.db.list_jobs()) == 2)
             old = h.job(job.id)
             assert old.state == JobState.cancelled
@@ -301,7 +301,7 @@ async def test_tv_check_mid_rip_keeps_finished_titles_and_rips_the_rest(harness,
         assert len(list(out.glob("*.mkv"))) == len(kept), "the half-written title is gone"
         mtimes = {i: Path(f).stat().st_mtime for i, f in kept.items()}
         monkeypatch.setenv("RIPSHELF_FAKE_RIP_SECONDS", "0.3")  # each remaining title is a run of its own
-        h.backend.insert(SD)
+        await h.insert(SD)
         done = await h.wait_job(lambda j: j.rip.state == RipState.done and j.state != JobState.checking, timeout=60)
         assert len(done.rip.files) == 11
         assert all(Path(done.rip.files[i]).stat().st_mtime == m for i, m in mtimes.items()), "kept, not redone"

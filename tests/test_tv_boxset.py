@@ -51,7 +51,7 @@ async def run_disc(h, label, monkeypatch, settings, mkv_script, runtimes, play_a
 
     monkeypatch.setattr(fake.DRIVES[DRIVE][1], "label", label)
     settings.makemkvcon = mkv_script(info=disc_info(runtimes, play_all), rip=RIP_ALL)
-    h.backend.insert(DRIVE)
+    await h.insert(DRIVE)
     return await until(lambda: next((j for j in h.db.list_jobs() if j.disc.label == label
                                      and j.state == JobState.review and j.rip.state == "done"), None), 40)
 
@@ -184,7 +184,7 @@ async def run_auto(h, label, monkeypatch, settings, mkv_script, runtimes, play_a
 
     monkeypatch.setattr(fake.DRIVES[DRIVE][1], "label", label)
     settings.makemkvcon = mkv_script(info=disc_info(runtimes, play_all), rip=RIP_ALL)
-    h.backend.insert(DRIVE)
+    await h.insert(DRIVE)
     return await wait_settled(h, label)
 
 

@@ -36,7 +36,7 @@ async def test_delete_finished_job_keeps_library_and_disc_cache(harness, setting
         assert h.m.drives["fake-ihas122"].job_id is None
         # The film stays in the library and the disc is still recognised.
         assert (settings.library_dir / "Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv").exists()
-        h.backend.insert(PM)
+        await h.insert(PM)
         again = await until(lambda: next(iter(h.db.list_jobs()), None))
         again = await h.wait_job(lambda j: j.id == again.id and j.identity is not None)
         assert again.identity_source == "cache"

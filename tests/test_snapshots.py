@@ -151,7 +151,7 @@ async def test_a_film_ejected_mid_rip_rips_again_when_it_is_back(harness, settin
         assert checking.rip.state == RipState.pending and checking.rip.paused
         assert PM not in h.backend.present
         monkeypatch.setenv("RIPSHELF_FAKE_RIP_SECONDS", "0.3")
-        h.backend.insert(PM)
+        await h.insert(PM)
         done = await h.wait_job(lambda j: j.rip.state == RipState.done and j.state == JobState.review)
         assert done.id == job.id and not done.rip.all_titles and Path(done.rip.file).exists()
         assert any("starts again when the disc is back" in e.message for e in h.db.events(job.id))

@@ -13,6 +13,7 @@ from ripshelf.config import Settings
 from ripshelf.db import Database
 from ripshelf.dev.fake import FakeDrives
 from ripshelf.jobs import Manager
+from ripshelf.models import DriveStatus
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -136,6 +137,18 @@ async def until(pred, timeout: float = 30, what: str = "condition"):
     raise AssertionError(f"timed out waiting for {what}")
 
 
+async def insert(m: Manager, backend: FakeDrives, device: str, label: str | None = None) -> None:
+    """Put a disc in, as a person would after an eject: once the poller has seen the drive
+    empty. Any sooner and the poller can still take the disc for the one from before the
+    eject, which it ignores for ``EJECT_SETTLE_S`` (20 s); the test then takes 20 s longer,
+    or times out on a busy machine."""
+    d = next(d for d in m.drives.values() if d.hw.device == device)
+    # The poller clears ejecting_until when it sees the drive empty.
+    await until(lambda: d.status != DriveStatus.disc and not d.ejecting_until,
+                what=f"the poller to see {device} empty")
+    backend.insert(device, label)
+
+
 class Harness:
     def __init__(self, settings: Settings, present: set[str]):
         self.s = settings
@@ -160,6 +173,9 @@ class Harness:
 
     async def wait_job(self, pred, timeout: float = 30, what: str = "job state"):
         return await until(lambda: (j := self.job()) and pred(j) and j, timeout, what)
+
+    async def insert(self, device: str, label: str | None = None) -> None:
+        await insert(self.m, self.backend, device, label)
 
 
 @pytest.fixture
