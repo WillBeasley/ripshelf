@@ -186,7 +186,7 @@ class MatchMixin:
         out_dir.mkdir(parents=True, exist_ok=True)
         self._event(job, "rip", f"Ripping {len(indices)} extra{'s' if len(indices) != 1 else ''} the box names")
         home = self._home(d)
-        d.rip = self._runner(d)
+        d.rip = self._runner(d, job.disc.kind)
         log_path = self.work_dir(job) / "rip-extras.log"
         try:
             for idx in indices:

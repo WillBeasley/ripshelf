@@ -26,10 +26,6 @@ from ..models import NewRemoteWorker, NewRemoteWorkerRequest, RemoteWorker, Remo
 router = APIRouter(prefix="/api/workers")
 
 TOUCH_EVERY_S = 30.0
-# The most one uploaded file may be. A title can't be bigger than its disc, and the biggest
-# discs (four-layer BD-XL) hold 128 GB, so this leaves room for any real rip while stopping a
-# runaway or hostile upload from filling the controller's disk.
-MAX_UPLOAD_BYTES = 160 * 1024**3
 
 
 def hash_token(token: str) -> str:
@@ -182,9 +178,10 @@ async def upload(worker_id: str, run_id: int, name: str, request: Request):
         raise HTTPException(404, "no such run") from None
     except ValueError as e:
         raise HTTPException(400, str(e)) from None
-    too_big = HTTPException(413, f"{name} is larger than {MAX_UPLOAD_BYTES // 1024**3} GiB")
+    limit = run.max_file_bytes  # set from the disc's kind (see hub.MAX_FILE_BYTES)
+    too_big = HTTPException(413, f"{name} is over {limit / 1000**3:g} GB, more than a disc like this holds")
     declared = request.headers.get("content-length")
-    if declared and declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
+    if declared and declared.isdigit() and int(declared) > limit:
         raise too_big
     target.parent.mkdir(parents=True, exist_ok=True)
     part = target.with_name(f".{target.name}.upload")
@@ -193,7 +190,7 @@ async def upload(worker_id: str, run_id: int, name: str, request: Request):
             size = 0
             async for chunk in request.stream():
                 size += len(chunk)
-                if size > MAX_UPLOAD_BYTES:
+                if size > limit:
                     raise too_big
                 f.write(chunk)
     except Exception:

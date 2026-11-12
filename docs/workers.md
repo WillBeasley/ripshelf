@@ -3,7 +3,7 @@
 A worker is the same image run as `ripshelf worker`. It owns a machine's optical drives and runs MakeMKV on them. The controller keeps the UI, the database, identification, transcoding and the library.
 
 - **In the UI.** Worker drives appear like local ones, marked "on <worker name>", with live progress and logs.
-- **Files.** Rips are uploaded to the controller over HTTP. On the same host they can instead be written straight into the controller's scratch folder, if it's mounted at the same path. One uploaded file can be at most 160 GiB, more than the biggest disc holds.
+- **Files.** Rips are uploaded to the controller over HTTP. On the same host they can instead be written straight into the controller's scratch folder, if it's mounted at the same path. Each uploaded file is capped at the most its kind of disc can hold (10 GB for a DVD, 55 GB for a Blu-ray, 110 GB for a 4K Blu-ray, 140 GB otherwise).
 - **If a worker goes quiet.** A short network drop ends nothing, because the worker retries until the controller answers. After 45 s without a heartbeat its jobs fail with that reason, ready to retry. When the worker is back, it stops the rips the controller gave up on and deletes their files, so the drive is free for the retry.
 
 ## Add a remote worker
