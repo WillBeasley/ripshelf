@@ -29,10 +29,10 @@ log = logging.getLogger(__name__)
 
 PDF_DPI = 300  # PDF pages are drawn at this, about what the text reader wants
 MAX_PDF_PAGES = 200
-BLANK_SAMPLE_PX = 300  # a side is looked at in a copy this wide
-BLANK_SPREAD = 6  # a side whose greys vary less than this is one even colour...
-BLANK_INK = 0.003  # ...or whose pixels this little of are darker than paper
-INK_LEVEL = 160  # a grey this dark or darker is print, not paper
+BLANK_SAMPLE_PX = 1000  # a side is looked at in a copy this wide, so small print survives
+BLANK_SPREAD = 3  # a side whose greys vary less than this is one even colour...
+BLANK_MARKS = 0.0005  # ...or one with less than this of it marked (specks of dust, not a chapter list)
+MARK_LEVEL = 60  # a grey this far from the paper's is a mark: print, darker or lighter
 
 
 class StackError(ValueError):
@@ -124,14 +124,16 @@ class Look:
 
 def is_blank(img: Image.Image) -> bool:
     """Near enough nothing printed: one even colour, or paper with hardly a mark (the
-    plain inside of a single-sided sheet, specks and all)."""
+    plain inside of a single-sided sheet, specks and all). The paper is the commonest
+    grey, so a black inside with white print counts as printed too."""
     small = img.convert("L")
     small.thumbnail((BLANK_SAMPLE_PX, BLANK_SAMPLE_PX))
     if ImageStat.Stat(small).stddev[0] < BLANK_SPREAD:
         return True
     hist = small.histogram()
-    ink = sum(hist[:INK_LEVEL + 1]) / max(1, small.width * small.height)
-    return ink < BLANK_INK and ImageStat.Stat(small).mean[0] > INK_LEVEL
+    paper = max(range(256), key=lambda v: hist[v])
+    marks = sum(n for v, n in enumerate(hist) if abs(v - paper) > MARK_LEVEL)
+    return marks < BLANK_MARKS * small.width * small.height
 
 
 def look(img: Image.Image) -> Look:
