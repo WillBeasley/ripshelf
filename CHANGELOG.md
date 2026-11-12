@@ -22,6 +22,7 @@ This will be 0.7.0. Release candidates: [0.7.0-rc1](https://github.com/WillBeasl
 - One list of a TV disc's titles with an episode picker. A title can hold any episodes, from any season, and the box's picks are taken title by title ([#30](https://github.com/WillBeasley/ripshelf/pull/30)).
 - Every long title the box's episodes are in is split, not just the first ([#33](https://github.com/WillBeasley/ripshelf/pull/33)).
 - The UI has unit tests (Vitest) and browser tests (Playwright) against simulated drives and a pretend TMDB, run in CI ([#34](https://github.com/WillBeasley/ripshelf/pull/34)).
+- The daily backup keeps `settings.json` and the MakeMKV data (`makemkv/`, `makemkv-files/`) too, as `ripshelf-<date>-files.tar.gz` beside the database copy ([settings.md](docs/settings.md#daily-backups)).
 - Dependabot proposes updates to the UI's packages, the CI actions and the Dockerfile's base images each week, and the base images are pinned by digest. A weekly workflow checks the Python locks for known vulnerabilities.
 
 ### Changed
