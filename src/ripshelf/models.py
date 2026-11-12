@@ -728,6 +728,108 @@ class PendingScans(BaseModel):
     scanner: ScannerRun | None = Field(None, description="a scan for the next disc, under way or failed")
 
 
+ShelfSideName = Literal["outside", "inside"]
+ShelfReadState = Literal["waiting", "reading", "done", "failed", "unavailable"]
+StackMode = Literal["duplex", "two_pass", "one_side"]
+StackState = Literal["scanning", "flip", "mismatch", "failed"]
+
+
+class ShelfSide(BaseModel):
+    """One side of a sheet on the shelf: the picture as it came, and how it's used."""
+
+    content_type: str = Field(description="image/jpeg, image/png or image/webp")
+    width: int
+    height: int
+    sha256: str
+    size_bytes: int
+    rotate: ScanRotate = Field(0, description="turned clockwise by this much when shown or used")
+    crop: list[int] | None = Field(None, description="the sheet within the scan, [left, top, right, bottom] in "
+                                                     "the original's pixels, when trimmed")
+    split: ScanSplit | None = Field(None, description="where the spine is, for the outside")
+
+
+class ShelfReading(BaseModel):
+    """What was read on a shelf cover."""
+
+    state: ShelfReadState = "waiting"
+    message: str | None = None
+    title: str | None = None
+    year: int | None = None
+    barcode: str | None = None
+    barcode_name: str | None = Field(None, description="what the barcode names, from the barcode lookups")
+    barcode_source: str | None = Field(None, description="where barcode_name came from: thediscdb, upcitemdb, "
+                                                         "barcodelookup, eansearch or web")
+    format: DiscKind | None = Field(None, description="DVD, Blu-ray or 4K, when the cover says")
+    catalogue_number: str | None = None
+    read_at: datetime | None = None
+    vision: bool = Field(False, description="the vision model's reading is in it")
+    vision_state: Literal["queued", "reading", "done", "failed"] | None = Field(
+        None, description="reading it with the vision model")
+    vision_message: str | None = Field(None, description="why the vision model's reading failed, or what it took")
+
+
+class ShelfCover(BaseModel):
+    """A case's sheet on the shelf, waiting for its disc: its outside (back, spine and
+    front) and inside, either of which may be missing."""
+
+    id: str
+    created_at: datetime
+    source: ScanSource
+    outside: ShelfSide | None = None
+    inside: ShelfSide | None = None
+    reading: ShelfReading = Field(default_factory=ShelfReading)
+    note: str | None = Field(None, description="how it was put together, such as a blank inside left out")
+
+
+class StackPage(BaseModel):
+    """A page of a stack held until its other side is scanned."""
+
+    id: str
+    content_type: str
+    size_bytes: int
+    sha256: str
+    blank: bool = Field(False, description="nothing printed on it, as far as can be seen")
+
+
+class ShelfStack(BaseModel):
+    """A stack of sheets on its way to the shelf: being scanned, or held between two
+    passes (or because the passes' pages don't pair up)."""
+
+    mode: StackMode
+    source: ScanSource
+    state: StackState
+    pass_no: Literal[1, 2] = 1
+    pages: int = Field(0, description="pages received in this pass so far")
+    covers: int = Field(0, description="covers made from the stack so far")
+    first: list[StackPage] = Field(default=[], description="the first pass, held (two passes)")
+    second: list[StackPage] = Field(default=[], description="the second pass, held, as it came out (reversed)")
+    started_at: datetime
+    message: str | None = None
+
+
+class ShelfView(BaseModel):
+    covers: list[ShelfCover] = Field(description="newest first")
+    stack: ShelfStack | None = None
+    limit: int = Field(description="the most covers the shelf keeps")
+
+
+class ShelfScanRequest(BaseModel):
+    mode: StackMode = "duplex"
+    dpi: int | None = Field(None, description="the Settings default if left out")
+
+
+class ShelfUploadResult(BaseModel):
+    covers: list[ShelfCover] = []
+    stack: ShelfStack | None = Field(None, description="the pages held, when two passes don't pair up")
+    notes: list[str] = Field(default=[], description="pages skipped, and why")
+
+
+class ShelfSuggestion(BaseModel):
+    cover: ShelfCover
+    score: float = Field(description="0 to 1; 1 is the same barcode")
+    reason: str
+
+
 ScannerSource = Literal["platen", "feeder"]
 ScannerState = Literal["scanning", "failed"]
 
@@ -945,6 +1047,7 @@ class ScannerInfo(BaseModel):
     duplex: bool = False
     resolutions: list[int] = []
     busy_job: int | None = Field(None, description="the job the scanner is scanning for")
+    busy_shelf: bool = Field(False, description="the scanner is scanning a stack for the covers shelf")
     vision: str | None = Field(None, description="the vision model set up to read scans (model at where), if any")
     vision_cloud: bool = Field(False, description="the vision model is a cloud service")
 

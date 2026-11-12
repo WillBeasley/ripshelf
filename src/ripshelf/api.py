@@ -7,7 +7,7 @@ import shutil
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Annotated, Any, get_args
+from typing import Annotated, Any, Literal, get_args
 
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -24,6 +24,7 @@ from . import (
     system,
     transcode,
 )
+from . import shelf as shelf_mod
 from .bus import next_item
 from .config import EDITABLE, FOLDERS, REQUIRED_FOLDERS, SECRETS, VISION_MODELS, Settings
 from .identify import catalogue
@@ -88,6 +89,13 @@ from .models import (
     SettingsUpdate,
     SettingsView,
     SetupTools,
+    ShelfCover,
+    ShelfScanRequest,
+    ShelfSideName,
+    ShelfStack,
+    ShelfSuggestion,
+    ShelfUploadResult,
+    ShelfView,
     Show,
     Snapshots,
     Status,
@@ -102,7 +110,7 @@ from .models import (
 )
 from .providers import contribute as contribute_provider
 from .providers import release_info
-from .scanner import escl, images, ocr
+from .scanner import escl, images, ocr, stack
 from .tv import split as tvsplit
 
 SSE_HEARTBEAT_S = 15
@@ -702,6 +710,151 @@ async def pending_image(scan_id: str, request: Request, thumb: bool = False):
         data = found[0].read_bytes()
         p.write_bytes(await asyncio.to_thread(lambda: images.thumbnail(images.render(data, sc.crop, sc.rotate))))
     return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+
+# --- the covers shelf ---------------------------------------------------------------------
+
+
+@api.get("/covers", response_model=ShelfView)
+async def shelf(request: Request, q: str | None = None):
+    """Case sheets scanned ahead of their discs, newest first; ``q`` searches the title,
+    year, barcode, what the barcode names, catalogue number and format."""
+    return manager(request).shelf(q)
+
+
+@api.post("/covers/upload", response_model=ShelfUploadResult)
+async def shelf_upload(request: Request, files: Annotated[list[UploadFile], File()],
+                       insides: Annotated[list[UploadFile] | None, File()] = None,
+                       both_sides: Annotated[bool, Form()] = True,
+                       layout: Annotated[Literal["alternate", "passes"], Form()] = "alternate",
+                       reverse_insides: Annotated[bool, Form()] = True):
+    """Covers from pictures and PDFs (a page each). With ``both_sides`` the pages pair up
+    into each sheet's outside and inside: one after the other (``alternate``, as a duplex
+    scan gives them), or the first half then the second half reversed (``passes``, a
+    stack scanned twice). ``insides`` holds a second pass of its own, as it came out
+    (reversed, unless ``reverse_insides`` is false). Passes that don't pair up are held as
+    the shelf's stack, to drop the extra pages."""
+    total = 0
+    data: dict[str, list[bytes]] = {"files": [], "insides": []}
+    for name, group in (("files", files), ("insides", insides or [])):
+        for f in group:
+            b = await f.read(shelf_mod.MAX_UPLOAD_BYTES + 1)
+            total += len(b)
+            if total > shelf_mod.MAX_UPLOAD_BYTES:
+                raise HTTPException(413, "the upload is larger than 200 MB; send it in parts")
+            data[name].append(b)
+    return await _contribution_call(lambda: manager(request).add_shelf_upload(
+        data["files"], data["insides"], both_sides, layout, reverse_insides))
+
+
+@api.post("/covers/scanner", response_model=ShelfStack)
+async def shelf_scan(body: ShelfScanRequest, request: Request):
+    """Scan a stack of sheets from the feeder, in the background (the shelf's ``stack``
+    says how it goes): both sides at once, two passes (the stack turned over between
+    them), or one side."""
+    return await _contribution_call(lambda: manager(request).scan_stack(body))
+
+
+@api.post("/covers/scanner/second-pass", response_model=ShelfStack)
+async def shelf_scan_second(request: Request, body: ShelfScanRequest | None = None):
+    """Scan the turned-over stack for the sheets' other sides (again, if they didn't pair up)."""
+    return await _contribution_call(lambda: manager(request).scan_second_pass(body.dpi if body else None))
+
+
+@api.delete("/covers/stack", status_code=204)
+async def shelf_stack_cancel(request: Request):
+    """Stop the stack being scanned, or let go of the pages held (covers made stay)."""
+    await manager(request).cancel_stack()
+
+
+@api.post("/covers/stack/pair", response_model=ShelfUploadResult)
+async def shelf_stack_pair(request: Request):
+    """Make the held passes into covers, once they have as many pages each."""
+    return await _contribution_call(lambda: manager(request).pair_stack())
+
+
+@api.delete("/covers/stack/pages/{page_id}", response_model=ShelfStack)
+async def shelf_stack_drop(page_id: str, request: Request):
+    """Leave a held page out (a sheet fed twice, or a stray page)."""
+    return await _contribution_call(lambda: manager(request).drop_stack_page(page_id))
+
+
+@api.get("/covers/stack/pages/{page_id}")
+async def shelf_stack_page(page_id: str, request: Request, thumb: bool = False):
+    """A held page (or, with ``thumb``, a small JPEG of it, trimmed)."""
+    found = manager(request).stack_page_file(page_id)
+    if not found:
+        raise HTTPException(404)
+    if not thumb:
+        return FileResponse(found[0], media_type=found[1])
+    p = found[0].with_suffix(".thumb.jpg")
+    if not p.is_file():
+        data, trim = found[0].read_bytes(), settings(request).scanner_trim
+        p.write_bytes(await asyncio.to_thread(
+            lambda: images.thumbnail(stack.render_trimmed(data, trim)[0])))
+    return FileResponse(p, media_type="image/jpeg")
+
+
+@api.get("/covers/{cover_id}/{side}")
+async def shelf_image(cover_id: str, side: ShelfSideName, request: Request, thumb: bool = False,
+                      large: bool = False):
+    """A side as it came, or with ``thumb`` a small JPEG trimmed and turned (``large``: up
+    to 1600 pixels)."""
+    m = manager(request)
+    if thumb or large:
+        p = await m.shelf_thumb(cover_id, side, large)
+        if not p:
+            raise HTTPException(404)
+        return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+    found = m.shelf_file(cover_id, side)
+    if not found:
+        raise HTTPException(404)
+    return FileResponse(found[0], media_type=found[1])
+
+
+@api.post("/covers/{cover_id}/swap", response_model=ShelfCover)
+async def shelf_swap(cover_id: str, request: Request):
+    """The outside was taken for the inside: swap them (and read it again)."""
+    return await _contribution_call(lambda: manager(request).swap_shelf_sides(cover_id))
+
+
+@api.post("/covers/{cover_id}/read", response_model=ShelfCover)
+async def shelf_read(cover_id: str, request: Request):
+    """Read the cover again, in the background."""
+    return await _contribution_call(lambda: manager(request).read_shelf_again(cover_id))
+
+
+@api.post("/covers/{cover_id}/vision", status_code=202, response_model=ShelfCover)
+async def shelf_vision(cover_id: str, request: Request):
+    """Read the cover with the vision model now, in the background, taking turns with
+    other readings (the cover's ``reading.vision_state`` says how it goes)."""
+    return await _contribution_call(lambda: manager(request).ask_shelf_vision(cover_id))
+
+
+@api.delete("/covers/{cover_id}", status_code=204)
+async def shelf_delete(cover_id: str, request: Request):
+    await _contribution_call(lambda: manager(request).delete_shelf_cover(cover_id))
+
+
+@api.post("/covers/{cover_id}/use/job/{job_id}", response_model=Job)
+async def shelf_use(cover_id: str, job_id: int, request: Request):
+    """The cover's sides become the job's scans (read, used to identify it and filed
+    with it), and it leaves the shelf."""
+    return await _contribution_call(lambda: _public(manager(request).use_shelf_cover(cover_id, job_id)))
+
+
+@api.post("/covers/{cover_id}/use/drive/{drive_id}", response_model=PendingScans)
+async def shelf_for_drive(cover_id: str, drive_id: str, request: Request):
+    """Keep the cover for the drive's next disc instead, and take it off the shelf."""
+    return await _contribution_call(lambda: manager(request).shelf_cover_for_drive(cover_id, drive_id))
+
+
+@api.get("/jobs/{job_id}/shelf-suggestions", response_model=list[ShelfSuggestion])
+async def shelf_suggestions(job_id: int, request: Request, all: bool = False):
+    """Covers on the shelf that look like the job's disc, best first, with why: only those
+    that fit well, or with ``all`` every cover, scored (for picking one by hand)."""
+    m = manager(request)
+    return _sync_call(lambda: m.shelf_picks(job_id) if all else m.shelf_suggestions(job_id))
 
 
 @api.get("/scanner", response_model=ScannerInfo)

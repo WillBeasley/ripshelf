@@ -15,6 +15,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "pillow>=10.4",
     "pyzbar>=0.1.9",
+    "pypdfium2>=4.30",
     "anthropic>=2.0",
 ]
 

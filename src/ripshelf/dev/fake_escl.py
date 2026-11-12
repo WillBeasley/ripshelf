@@ -172,6 +172,7 @@ class FakeScanner:
     busy_pages: int = 0  # and this many page requests
     page_delay_s: float = 0.0
     inside: bool = False  # the glass holds the inside of the sheet
+    feeder_images: list[list[bytes]] | None = None  # each feeder scan's pages, as sent, in turn
     jobs: dict[str, FakeJob] = field(default_factory=dict)
     settings: list[str] = field(default_factory=list)  # every ScanSettings posted
     cancelled: list[str] = field(default_factory=list)
@@ -206,7 +207,9 @@ class FakeScanner:
                 self.busy_posts -= 1
                 return Response(status_code=503)
             dpi = int(body.split("<scan:XResolution>")[1].split("<")[0])
-            if "<pwg:InputSource>Feeder" in body:
+            if "<pwg:InputSource>Feeder" in body and self.feeder_images:
+                pages = list(self.feeder_images.pop(0))
+            elif "<pwg:InputSource>Feeder" in body:
                 sides = 2 if "<scan:Duplex>true" in body else 1
                 pages = [insert_page(dpi, i + 1) for i in range(self.feeder_pages * sides)]
             else:

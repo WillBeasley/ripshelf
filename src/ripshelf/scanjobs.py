@@ -376,9 +376,15 @@ class ScansMixin:
     def _scanner_busy(self) -> bool:
         return bool(self._scanner_task and not self._scanner_task.done())
 
+    def _scanner_busy_message(self) -> str:
+        if self._scanner_job is not None:
+            return f"the scanner is scanning for job {self._scanner_job}; wait for it to finish"
+        return "the scanner is busy; wait for it to finish"
+
     async def scanner_info(self) -> ScannerInfo:
         info = ScannerInfo(enabled=self.s.scanner_enabled, url=self.s.scanner_url,
-                           busy_job=self._scanner_job if self._scanner_busy() else None)
+                           busy_job=self._scanner_job if self._scanner_busy() else None,
+                           busy_shelf=self._stack_scanning())
         if p := self.vision_provider():
             info.vision, info.vision_cloud = p.describe(), p.cloud
         if not (self.s.scanner_enabled and self.s.scanner_url):
@@ -403,7 +409,7 @@ class ScansMixin:
         job = self._job(job_id)
         client = self._escl()
         if self._scanner_busy():
-            raise ValueError(f"the scanner is scanning for job {self._scanner_job}; wait for it to finish")
+            raise ValueError(self._scanner_busy_message())
         source = body.source or self.s.scanner_source
         run = ScannerRun(state="scanning", kind=body.kind, source=source,
                          duplex=body.duplex and source == "feeder", started_at=now())
