@@ -6,9 +6,7 @@ from __future__ import annotations
 
 import json
 import shutil
-import stat
 import sys
-import textwrap
 
 import pytest
 from PIL import Image, ImageDraw
@@ -17,7 +15,7 @@ from ripshelf import proc
 from ripshelf.models import ScanSplit
 from ripshelf.scanner import ocr
 
-from .conftest import posix_only
+from .conftest import fake_program
 
 HEADER = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext"
 
@@ -35,8 +33,7 @@ def tesseract(tmp_path):
     """A stand-in tesseract: ``mode`` picks how it behaves, ``calls`` what it was asked."""
     calls = tmp_path / "calls.jsonl"
     mode = tmp_path / "mode"
-    script = tmp_path / "tesseract"
-    script.write_text(f"#!{sys.executable}\n" + textwrap.dedent(f"""\
+    exe = fake_program(tmp_path / "tesseract", f"""\
         import json, sys, time
         args = sys.argv[1:]
         data = sys.stdin.buffer.read()
@@ -56,12 +53,11 @@ def tesseract(tmp_path):
             print("Page number: 0\\nOrientation in degrees: 270\\nRotate: 90\\nOrientation confidence: 7.25")
         else:
             sys.stdout.write({TSV!r})
-    """))
-    script.chmod(script.stat().st_mode | stat.S_IXUSR)
+    """)
     mode.write_text("ok")
 
     class T:
-        command = str(script)
+        command = exe
 
         @staticmethod
         def set(m: str) -> None:
@@ -74,7 +70,6 @@ def tesseract(tmp_path):
     return T
 
 
-@posix_only
 async def test_version_is_the_first_line_and_asked_once(tesseract):
     t = ocr.Tesseract(tesseract.command)
     assert await t.version() == "tesseract 5.3.4"
@@ -82,7 +77,6 @@ async def test_version_is_the_first_line_and_asked_once(tesseract):
     assert [c["args"] for c in tesseract.calls()] == [["--version"]]
 
 
-@posix_only
 async def test_read_sends_a_png_and_parses_the_words(tesseract):
     t = ocr.Tesseract(tesseract.command, languages="eng+deu")
     lines = await t.read(Image.new("L", (120, 60), 255), psm=11)
@@ -93,13 +87,11 @@ async def test_read_sends_a_png_and_parses_the_words(tesseract):
     assert call["stdin"] == b"\x89PNG\r\n\x1a\n".hex(), "the picture goes in as a PNG"
 
 
-@posix_only
 async def test_no_languages_means_english(tesseract):
     await ocr.Tesseract(tesseract.command, languages="").read(Image.new("L", (40, 40), 255))
     assert tesseract.calls()[0]["args"][-2] == "eng"
 
 
-@posix_only
 async def test_orientation(tesseract):
     t = ocr.Tesseract(tesseract.command)
     assert await t.orientation(Image.new("L", (40, 40), 255)) == (90, 7.25)
@@ -109,15 +101,11 @@ async def test_orientation(tesseract):
     assert await t.orientation(Image.new("L", (40, 40), 255)) == (0, 0.0)
 
 
-@posix_only
 async def test_orientation_reply_without_numbers(tmp_path):
-    script = tmp_path / "tesseract"
-    script.write_text(f"#!{sys.executable}\nimport sys; sys.stdin.buffer.read(); print('Page number: 0')\n")
-    script.chmod(0o755)
-    assert await ocr.Tesseract(str(script)).orientation(Image.new("L", (40, 40), 255)) == (0, 0.0)
+    script = fake_program(tmp_path / "tesseract", "import sys; sys.stdin.buffer.read(); print('Page number: 0')")
+    assert await ocr.Tesseract(script).orientation(Image.new("L", (40, 40), 255)) == (0, 0.0)
 
 
-@posix_only
 @pytest.mark.parametrize(("mode", "message"), [
     ("fail", "Tesseract failed: Error opening data file eng.traineddata"),
     ("quiet-fail", "Tesseract failed: exit 3"),
@@ -128,7 +116,6 @@ async def test_tesseract_failing_says_why(tesseract, mode, message):
         await ocr.Tesseract(tesseract.command).read(Image.new("L", (40, 40), 255))
 
 
-@posix_only
 async def test_tesseract_that_hangs_is_stopped(tesseract, monkeypatch):
     monkeypatch.setattr(ocr, "TIMEOUT_S", 0.5)
     tesseract.set("hang")
@@ -136,7 +123,6 @@ async def test_tesseract_that_hangs_is_stopped(tesseract, monkeypatch):
         await ocr.Tesseract(tesseract.command).version()
 
 
-@posix_only
 async def test_tesseract_that_cannot_start(tmp_path):
     not_a_program = tmp_path / "tesseract"
     not_a_program.write_text("just a file")  # found, but not executable

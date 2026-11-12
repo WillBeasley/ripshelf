@@ -55,7 +55,7 @@ async def test_dvd_is_ripped_as_titles_in_backup_mode(settings: Settings):
         assert any("Blu-ray and UHD discs only" in e.message for e in db.events(job.id))
         await m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
         done = await until(lambda: (j := db.get_job(job.id)) and j.state == JobState.done and j)
-        assert done.destination.endswith("Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv")
+        assert Path(done.destination).as_posix().endswith("Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv")
     finally:
         await m.stop()
         db.close()
@@ -71,7 +71,7 @@ async def test_per_drive_mode_overrides_the_default(settings: Settings):
         assert job.mode == "backup"
         # Planned while ripping, then kept, as the backup folder, not an .mkv
         await m.confirm(job.id, Candidate(source="manual", title="The Brass Heron", year=2024))
-        assert db.get_job(job.id).destination.endswith("Disc backups/The Brass Heron (2024) - 2160p")
+        assert Path(db.get_job(job.id).destination).as_posix().endswith("Disc backups/The Brass Heron (2024) - 2160p")
         with pytest.raises(ValueError, match="no episodes"):
             await m.set_media(job.id, "tv")
         await until(lambda: db.get_job(job.id).state == JobState.done)

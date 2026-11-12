@@ -163,6 +163,11 @@ class TranscodeMixin:
     async def _transcode_file(self, job_id: int, idx: int, src: Path, encoder: str, of: str = "") -> TranscodeFile:
         job = self.db.get_job(job_id)
         rec = TranscodeFile(title_index=idx, size_before=src.stat().st_size if src.exists() else None)
+        off = transcode.kind_off(self.s, job.disc.kind.value if job.disc.kind else None)
+        if off:  # no need to read the file
+            rec.note = off
+            self._event(job, "info", f"Title {idx}: no transcode ({off})")
+            return rec
         self._set_step(job, f"Checking whether title {idx} needs transcoding{of}",
                        "Reading the video format (ffprobe)")
         info = await transcode.probe(self.s.ffprobe, src)

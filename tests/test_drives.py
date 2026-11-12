@@ -181,6 +181,7 @@ def test_eject_missing_device_raises(tmp_path):
         SysfsDrives().eject(str(tmp_path / "sr9"))
 
 
+@posix_only  # O_NONBLOCK
 async def test_disc_identity_without_blkid(sysfs, tmp_path):
     sysfs({"sr0": {"size": "8388608"}})
     ident = await SysfsDrives(blkid=str(tmp_path / "no-blkid")).disc_identity("/dev/sr0")

@@ -149,9 +149,9 @@ def test_bundle_of_a_job_with_everything(client, settings):
     m.db.add_event(job.id, "error", "MakeMKV stopped at 41%")
     work = m.work_dir(job)
     (work / "scans").mkdir(parents=True)
-    (work / "scan.log").write_text(f"MSG:5021,0,0,\"key {MAKEMKV_KEY}\"\nTINFO:0,2,0,\"The Brass Heron\"\n")
-    (work / "rip.log").write_text("GET https://api.test/movie?api_key=s3cr3tvalue\nfailed at 41%\n")
-    (work / "transcode-0.log").write_text(f"ffmpeg -i in.mkv out.mkv tmdb {TMDB_KEY}\n")
+    (work / "scan.log").write_text(f"MSG:5021,0,0,\"key {MAKEMKV_KEY}\"\nTINFO:0,2,0,\"The Brass Heron\"\n", newline="\n")
+    (work / "rip.log").write_text("GET https://api.test/movie?api_key=s3cr3tvalue\nfailed at 41%\n", newline="\n")
+    (work / "transcode-0.log").write_text(f"ffmpeg -i in.mkv out.mkv tmdb {TMDB_KEY}\n", newline="\n")
     (work / "scans" / "a1.vision.json").write_text(json.dumps({"title": "The Brass Heron",
                                                                "api_key": "s3cr3tvalue"}))
     (work / "scans" / "a1.jpg").write_bytes(b"\xff\xd8small")

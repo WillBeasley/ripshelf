@@ -21,9 +21,39 @@ FIXTURES = Path(__file__).parent / "fixtures"
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX only")
 
 
+def fake_program(path: Path, code: str) -> str:
+    """A stand-in for a program (7z, ffmpeg, tesseract, makemkvcon...) written in Python,
+    and the command that runs it. On POSIX that's the script at ``path``. Windows can't
+    run a script by its path, so there it's an .exe beside it, made the way pip makes a
+    console script: a launcher that runs this Python on the script, and ends it if killed."""
+    code = textwrap.dedent(code)
+    if sys.platform != "win32":
+        path.write_text(f"#!{sys.executable}\n{code}")
+        path.chmod(0o755)
+        return str(path)
+    from pip._vendor.distlib.scripts import ScriptMaker
+
+    src = path.with_name(f"{path.name}.src")
+    src.mkdir()
+    (src / path.name).write_text(f"#!python\n{code}")
+    maker = ScriptMaker(str(src), str(path.parent))
+    maker.executable = sys.executable
+    [exe] = maker.make(path.name)
+    return exe
+
+
 def private(path: Path) -> bool:
     """Readable by its owner only (Windows has no mode bits for that, so there it's always True)."""
     return sys.platform == "win32" or path.stat().st_mode & 0o777 == 0o600
+
+
+def read_picture(path):
+    """The picture in a file, read whole so the file isn't left open (Windows can't delete
+    an open file, and the app replaces thumbnails and covers)."""
+    from PIL import Image
+
+    with Image.open(path) as im:
+        return im.copy()
 
 
 # Read-only folders. Windows has no mode bits for that, and root ignores them.
