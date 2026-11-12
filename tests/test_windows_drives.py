@@ -157,3 +157,13 @@ def test_copy_structure_from_a_mounted_disc(tmp_path):
     files = discfs.copy_structure(disc, out)
     assert files == ["AACS/Unit_Key_RO.inf", "BDMV/PLAYLIST/00800.mpls", "BDMV/index.bdmv"]
     assert discfs.read_sizes(out) == [("BDMV/STREAM/00001.m2ts", 10)]
+
+
+async def test_disc_identity_of_an_audio_cd(fake):
+    from tests.test_sgio import toc
+
+    assert not (await fake.disc_identity("G:")).audio_cd  # no TOC reply
+    fake.w.drives["G:"]["replies"][(0x43, 0)] = toc((1, 0), (2, 0))
+    assert (await fake.disc_identity("G:")).audio_cd
+    fake.w.drives["G:"]["replies"][(0x43, 0)] = toc((1, 0x04))
+    assert not (await fake.disc_identity("G:")).audio_cd

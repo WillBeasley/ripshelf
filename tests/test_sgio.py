@@ -109,3 +109,23 @@ def test_command_status_checks(monkeypatch):
     monkeypatch.setattr(sgio.fcntl, "ioctl", ioctl_check_condition)
     with pytest.raises(sgio.ScsiError):
         sgio._command(3, b"\x12\x00\x00\x00\x04\x00", 4)
+
+
+def toc(*tracks: tuple[int, int]) -> bytes:
+    """A READ TOC reply for (track number, control) pairs, with the lead-out last."""
+    body = b"".join(bytes([0, 0x10 | control, n, 0]) + bytes(4) for n, control in (*tracks, (0xAA, 0x04)))
+    return (2 + len(body)).to_bytes(2, "big") + bytes([1, len(tracks)]) + body
+
+
+@pytest.mark.parametrize(("tracks", "want"), [
+    ([(1, 0), (2, 0), (3, 0x02)], (3, 0)),  # an audio CD (one track with copying allowed)
+    ([(1, 0), (2, 0), (3, 0x04)], (2, 1)),  # an enhanced CD
+    ([(1, 0x04)], (0, 1)),  # a DVD or Blu-ray: drives report one data track
+])
+def test_toc_tracks(tracks, want):
+    assert sgio.toc_tracks(toc(*tracks)) == want
+
+
+def test_toc_tracks_of_a_short_reply():
+    assert sgio.toc_tracks(b"") == (0, 0)
+    assert sgio.toc_tracks(toc((1, 0))[:10]) == (0, 0)

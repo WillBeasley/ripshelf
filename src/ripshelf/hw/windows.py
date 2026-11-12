@@ -261,8 +261,13 @@ class WindowsDrives:
                                       "little") or None
             except OSError:
                 size = None
+            try:
+                audio, _ = sgio.toc_tracks(self._with(device, lambda h: self.w.scsi(h, sgio.READ_TOC, 0x324)))
+            except OSError:
+                audio = 0
             fs_type = {"CDFS": "iso9660"}.get(fs or "", (fs or "").lower() or None)
-            return DiscIdentity(label=label, uuid=serial, fs_type=fs_type, fs_version=None, size_bytes=size)
+            return DiscIdentity(label=label, uuid=serial, fs_type=fs_type, fs_version=None, size_bytes=size,
+                                audio_cd=audio > 0)
 
         return await asyncio.to_thread(read)
 

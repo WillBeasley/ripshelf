@@ -138,7 +138,8 @@ class WorkerHub:
                 rd.status = DriveStatus.error
             i = d.get("ident")
             rd.ident = DiscIdentity(label=i.get("label"), uuid=i.get("uuid"), fs_type=i.get("fs_type"),
-                                    fs_version=i.get("fs_version"), size_bytes=i.get("size_bytes")) if i else None
+                                    fs_version=i.get("fs_version"), size_bytes=i.get("size_bytes"),
+                                    audio_cd=bool(i.get("audio_cd"))) if i else None
         return w
 
     def given_up(self, worker_id: str, run_ids: list[int]) -> list[int]:

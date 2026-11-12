@@ -191,3 +191,20 @@ def test_without_a_serial_the_port_id_stays(sysfs, monkeypatch):
     [d] = SysfsDrives().discover(UHD)
     assert d.serial is None and d.legacy_id is None and d.id == drives.port_id("iHAS122", d.port)
 
+
+@posix_only
+@pytest.mark.parametrize(("disc_status", "want"), [
+    (drives.CDS_AUDIO, True), (drives.CDS_MIXED, True), (101, False), (OSError(5, "I/O error"), False),
+])
+def test_audio_cd_from_the_disc_status(monkeypatch, disc_status, want):
+    monkeypatch.setattr(drives.os, "open", lambda path, flags: 99)
+    monkeypatch.setattr(drives.os, "close", lambda fd: None)
+
+    def ioctl(fd, code, arg):
+        assert code == drives.CDROM_DISC_STATUS
+        if isinstance(disc_status, Exception):
+            raise disc_status
+        return disc_status
+
+    monkeypatch.setattr(drives.fcntl, "ioctl", ioctl)
+    assert SysfsDrives().audio_cd("/dev/sr0") is want

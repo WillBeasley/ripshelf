@@ -28,6 +28,9 @@ CDROM_DRIVE_STATUS = 0x5326
 CDROMEJECT = 0x5309
 CDROMCLOSETRAY = 0x5319
 CDROM_LOCKDOOR = 0x5329
+CDROM_DISC_STATUS = 0x5327
+CDS_AUDIO = 100
+CDS_MIXED = 105  # audio tracks and a data track (an enhanced CD)
 CDSL_CURRENT = 0x7FFFFFFF
 _STATUS = {
     1: DriveStatus.empty,
@@ -66,6 +69,8 @@ class DiscIdentity:
     fs_type: str | None
     fs_version: str | None
     size_bytes: int | None
+    # A music CD (audio tracks, perhaps with a data track too), which MakeMKV can't rip.
+    audio_cd: bool = False
 
 
 def _read(p: Path) -> str:
@@ -208,6 +213,19 @@ class SysfsDrives:
         finally:
             os.close(fd)
 
+    def audio_cd(self, device: str) -> bool:
+        """Whether the kernel's reading of the disc's track list finds audio tracks."""
+        try:
+            fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
+        except OSError:
+            return False
+        try:
+            return fcntl.ioctl(fd, CDROM_DISC_STATUS, 0) in (CDS_AUDIO, CDS_MIXED)
+        except OSError:
+            return False
+        finally:
+            os.close(fd)
+
     async def disc_identity(self, device: str) -> DiscIdentity:
         props: dict[str, str] = {}
         try:
@@ -231,4 +249,5 @@ class SysfsDrives:
             fs_type=props.get("TYPE"),
             fs_version=props.get("VERSION"),
             size_bytes=size,
+            audio_cd=await asyncio.to_thread(self.audio_cd, device),
         )

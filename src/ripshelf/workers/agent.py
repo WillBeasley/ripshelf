@@ -291,7 +291,8 @@ class Agent:
             elif self.idents.get(local_id) is None:
                 i = await self.backend.disc_identity(hw.device)
                 self.idents[local_id] = {"label": i.label, "uuid": i.uuid, "fs_type": i.fs_type,
-                                         "fs_version": i.fs_version, "size_bytes": i.size_bytes}
+                                         "fs_version": i.fs_version, "size_bytes": i.size_bytes,
+                                         "audio_cd": i.audio_cd}
             out.append({"id": local_id, "status": status.value, "ident": self.idents.get(local_id)})
         return out
 
