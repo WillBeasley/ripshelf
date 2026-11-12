@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +18,20 @@ from ..hw.drives import DiscIdentity, DriveHw
 from ..models import Capability, DriveStatus
 
 FIXTURES = Path(os.environ.get("RIPSHELF_FAKE_FIXTURES", Path(__file__).parents[3] / "tests" / "fixtures"))
+
+
+def roomy_disks() -> None:
+    """Every disk has at least 1 TiB free (RIPSHELF_FAKE_ROOMY_DISK=1). The fake discs claim
+    titles of up to 60 GB, so the scratch check before a rip would refuse them on a small
+    disk, such as a CI runner's, though the fake rips write next to nothing."""
+    real = shutil.disk_usage
+
+    def roomy(path):
+        u = real(path)
+        free = max(u.free, 2**40)
+        return type(u)(max(u.total, u.used + free), u.used, free)
+
+    shutil.disk_usage = roomy
 
 
 @dataclass
