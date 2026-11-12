@@ -1,0 +1,41 @@
+# Weekly version updates, grouped so each ecosystem opens one pull request a week at
+# most. Security updates are switched on in the repository settings and open their own
+# pull requests as soon as an advisory lands. Python isn't here: Dependabot doesn't read
+# the uv-made requirements*.lock files, so scripts/lock-deps.sh --upgrade refreshes them
+# and the audit workflow checks them for advisories. See CONTRIBUTING.md.
+version: 2
+updates:
+  # The UI's packages (web/package.json and its lockfile).
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    groups:
+      web:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    commit-message:
+      prefix: web
+
+  # The actions in .github/workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+
+  # The Dockerfile's base images, pinned by digest, so a new Debian or Python patch
+  # release arrives as a pull request instead of silently at the next build.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      images:
+        patterns: ["*"]
+    commit-message:
+      prefix: build
