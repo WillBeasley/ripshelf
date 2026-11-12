@@ -128,6 +128,12 @@ class Settings(BaseSettings):
     library_dir: Annotated[Path, UI(
         "library", "Library", "Films go in its Movies folder and TV in TV, unless set below.",
         keywords="folder path share")] = DEFAULT_LIBRARY
+    # A failed job's rip stays in scratch so Retry needn't rip again. After this many days
+    # untouched it's deleted (0 keeps it until the job is retried or deleted).
+    failed_scratch_days: Annotated[int, Field(ge=0, le=365), UI(
+        "library", "Clear failed jobs' scratch after (days)",
+        "Deletes a failed job's ripped files from scratch; Retry then rips the disc again. 0 never does.",
+        advanced=True, keywords="clean up delete disk space leftover")] = 0
     # Separate roots for films and TV (e.g. on different disks). When unset they are the
     # Movies/ and TV/ folders inside library_dir. When set, the folder must exist.
     movies_dir: Annotated[Path | None, UI(

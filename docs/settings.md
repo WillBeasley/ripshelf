@@ -18,7 +18,7 @@ Settings has nine sections, each at its own address (`/settings/identify` and so
 | **Identify** | the metadata providers and their order, the TMDB, TheTVDB and OMDb keys, when a match is confirmed without review, web search (SearXNG and catalogue numbers), reading cryptic labels with an AI model, contributing to TheDiscDB |
 | **Drives and ripping** | the MakeMKV key, what to rip, ejecting, [which audio and subtitle tracks are kept](#which-audio-and-subtitle-tracks-are-kept), each drive (grouped by the machine it's on), MakeMKV private data. Advanced: scan time limits, the poll interval, UHD drive models, MakeMKV's own selection rule |
 | **Scanner and covers** | the network scanner, reading the box (Tesseract and a vision model), copying scans to the library. Advanced: text languages |
-| **Library and filing** | the library, films and TV folders, how TV extras and the extras a box names are filed. Advanced: the scratch and disc backups folders |
+| **Library and filing** | the library, films and TV folders, how TV extras and the extras a box names are filed. Advanced: the scratch and disc backups folders, clearing failed jobs' scratch |
 | **Media servers** | Emby, Jellyfin and Plex, one at a time |
 | **Transcoding** | whether and what to transcode, the encoder and quality, the hardware found. Advanced: codecs, cropping, transcodes at once, the GPU |
 | **Notifications** | Pushover, which events notify, batching, and this browser's alert sound |

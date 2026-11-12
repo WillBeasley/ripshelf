@@ -1461,6 +1461,10 @@ class TvMixin:
             self._fail(job, Problem(code="rip_incomplete", message="ripped files missing for titles "
                                     + ", ".join(map(str, missing)), actions=["retry"]))
             return
+        originals = self._originals(job)
+        if self._library_full(job, "tv", [Path(job.rip.files[i]) for i, _, _ in targets]
+                              + [Path(originals[i]) for i, _, _ in targets if i in originals]):
+            return
         overwrite = {f.path for f in job.clash.files} if job.clash and job.clash.decision == "overwrite" else set()
         if self._check_clash(job):  # appeared since the check at identification
             return
