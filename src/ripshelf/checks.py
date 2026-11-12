@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 
 from . import integrations
-from .config import EULA_PENDING, Settings
+from .config import EULA_PENDING, Settings, vision_model_for
 from .identify import ai_label
 from .identify import catalogue as catalogue_lookup
 from .identify.tmdb import API as TMDB_API
@@ -290,7 +290,7 @@ async def vision_model(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
     """Send the vision model a small made-up back cover and see a listing come back."""
     kind = v.vision_provider or s.vision_provider
     url = _value(s, v, "vision_url")
-    model = _value(s, v, "vision_model")
+    model = vision_model_for(kind, _value(s, v, "vision_model"))
     if kind != "anthropic" and not url:
         return _fail("No address for the vision model")
     if not model:
@@ -309,7 +309,7 @@ async def label_ai(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
     """Ask the label model what a well-known cryptic label stands for."""
     kind = v.vision_provider or s.vision_provider
     url = _value(s, v, "vision_url")
-    model = _value(s, v, "label_ai_model") or _value(s, v, "vision_model")
+    model = _value(s, v, "label_ai_model") or vision_model_for(kind, _value(s, v, "vision_model"))
     if kind != "anthropic" and not url:
         return _fail("No address for the AI model (Settings → Scanner and covers)")
     if not model:

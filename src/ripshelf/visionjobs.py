@@ -82,14 +82,14 @@ class VisionMixin:
         """The provider set up in Settings, or None when it's off or not set up."""
         if self.s.vision_mode == "off":
             return None
-        return self._model_provider(self.s.vision_model)
+        return self._model_provider(self.s.vision_model_name)
 
     def label_provider(self) -> vision.Provider | None:
         """The model that reads cryptic labels: the vision model's connection, with the
         label model if one is set. None when it's off or not set up."""
         if self.s.label_ai == "off":
             return None
-        return self._model_provider((self.s.label_ai_model or "").strip() or self.s.vision_model)
+        return self._model_provider((self.s.label_ai_model or "").strip() or self.s.vision_model_name)
 
     def _model_provider(self, model: str | None) -> vision.Provider | None:
         s = self.s

@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Settings → Scanner and covers: the network scanner, reading the box (Tesseract and a
 	// vision model), and copying scans to the library.
+	import { untrack } from 'svelte';
 	import TestButton from '#lib/components/TestButton.svelte';
 	import Advanced from '../Advanced.svelte';
 	import Field from '../Field.svelte';
@@ -9,6 +10,18 @@
 	let { form }: { form: SettingsForm } = $props();
 	const f = $derived(form.f);
 	const local = $derived(f.vision_provider === 'local');
+	// Blank is the provider's default model; a hosted OpenAI-compatible service has none.
+	const defaults = $derived(form.view?.vision_models ?? {});
+	const defaultModel = $derived(defaults[f.vision_provider] ?? '');
+	// Another provider's default model isn't one this provider has (Ollama's name sent
+	// to Anthropic), so switching clears it and the new provider's default shows instead.
+	$effect(() => {
+		const provider = f.vision_provider;
+		untrack(() => {
+			const typed = f.vision_model.trim();
+			if (typed && Object.values(defaults).includes(typed) && typed !== defaults[provider]) form.f.vision_model = '';
+		});
+	});
 </script>
 
 <section class="card stack" aria-labelledby="scanner">
@@ -59,10 +72,17 @@
 		{#if f.vision_provider !== 'anthropic'}
 			<Field {form} name="vision_url" placeholder={local ? 'http://ollama:11434' : 'https://api.example.com/v1'} />
 		{/if}
-		<Field {form} name="vision_model" placeholder={local ? 'qwen3-vl:4b-instruct' : 'the model name from the service'}>
+		<Field {form} name="vision_model" placeholder={defaultModel || 'the model name from the service'}
+			help={defaultModel ? `Blank uses ${defaultModel}.` : 'The service has no default: name one of its models.'}>
 			{#snippet more()}
-				On a desktop CPU, qwen3-vl:4b-instruct takes a minute or two a picture (qwen2.5vl:7b reads more carefully, at
-				twice the time). It waits while a transcode runs. Use an instruct model, not a "thinking" one.
+				{#if local}
+					On a desktop CPU, qwen3-vl:4b-instruct takes a minute or two a picture (qwen2.5vl:7b reads more carefully, at
+					twice the time). It waits while a transcode runs. Use an instruct model, not a "thinking" one.
+				{:else if f.vision_provider === 'anthropic'}
+					Any Claude model reads pictures; a smaller one, such as claude-haiku-5-5, costs less a scan.
+				{:else}
+					Use a model the service lists as reading images.
+				{/if}
 			{/snippet}
 		</Field>
 		<Field {form} name="vision_api_key" label={local ? 'Key (if the server needs one)' : 'API key'} />

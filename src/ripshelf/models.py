@@ -1155,6 +1155,7 @@ class SettingsViewBase(BaseModel):
     makemkv_drive_data: dict[str, bool] = Field(description="drive id -> has imported private data")
     makemkv_drive_dumps: dict[str, bool] = Field({}, description="drive id -> has a firmware dump (dump_*.tgz)")
     backups_dir: str = Field("", description="where the database backups go")
+    vision_models: dict[str, str] = Field({}, description="vision provider -> the model it uses when none is set")
 
 
 def _view_model() -> type[BaseModel]:
