@@ -1,4 +1,5 @@
-# Tests on every push and pull request (ruff, pytest, svelte-check). See docs/ci-github.md.
+# Tests on every push and pull request (ruff, pytest, svelte-check, and the UI's unit and
+# browser tests). See docs/ci-github.md.
 name: test
 on:
   push:
@@ -55,3 +56,46 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm run check
+
+  ui:
+    # The UI's unit tests (Vitest), then its browser tests (Playwright) against the backend
+    # on the simulated drives. On the runner itself rather than in a container, because
+    # Playwright installs Chromium's libraries with apt for the runner's Ubuntu.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg mkvtoolnix
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pip
+          key: pip-noble-${{ hashFiles('requirements-dev.lock') }}
+      - name: Python
+        # Ubuntu 24.04's Python is 3.12, the image's. test/e2e/backend.sh runs .venv/bin/ripshelf.
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -q -r requirements-dev.lock && .venv/bin/pip install -q --no-deps -e .
+      - name: Unit tests
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+      - name: Browser tests
+        working-directory: web
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+          retention-days: 14
