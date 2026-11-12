@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 import httpx
 import respx
 from fastapi.testclient import TestClient
@@ -17,7 +15,7 @@ from ripshelf.main import create_app
 from ripshelf.makemkv import runner
 from ripshelf.models import SettingsUpdate
 
-from .conftest import posix_only
+from .conftest import fake_program
 
 
 def client(settings):
@@ -86,13 +84,16 @@ async def test_emby(settings):
     assert not (await checks.emby(settings, SettingsUpdate())).ok
 
 
-@posix_only
 async def test_makemkv_key(settings, tmp_path):
-    fake = tmp_path / "makemkvcon"
-    fake.write_text("#!/bin/sh\n[ \"$2\" = good ] && { echo 'Registration key saved.'; exit 0; }\n"
-                    "echo 'Key not found or invalid'; exit 1\n")
-    fake.chmod(0o755)
-    settings.makemkvcon, settings.fake_hardware = str(fake), False
+    fake = fake_program(tmp_path / "makemkvcon", """
+        import sys
+        if sys.argv[2] == "good":
+            print("Registration key saved.")
+            sys.exit(0)
+        print("Key not found or invalid")
+        sys.exit(1)
+    """)
+    settings.makemkvcon, settings.fake_hardware = fake, False
     assert (await checks.makemkv(settings, SettingsUpdate(makemkv_key="good"))).ok
     r = await checks.makemkv(settings, SettingsUpdate(makemkv_key="bad"))
     assert not r.ok and "not valid" in r.message
@@ -107,12 +108,9 @@ async def test_makemkv_key(settings, tmp_path):
     assert "not checked" in (await checks.makemkv(settings, SettingsUpdate(makemkv_key="k"))).message
 
 
-@posix_only
 async def test_check_key_timeout(tmp_path):
-    slow = tmp_path / "slow"
-    slow.write_text(f"#!{sys.executable}\nimport time; time.sleep(30)\n")
-    slow.chmod(0o755)
-    ok, msg = await runner.check_key(str(slow), "k", timeout=0.5)
+    slow = fake_program(tmp_path / "slow", "import time; time.sleep(30)")
+    ok, msg = await runner.check_key(slow, "k", timeout=0.5)
     assert not ok and "did not answer" in msg
 
 

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import sys
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -16,7 +14,7 @@ from pydantic import SecretStr
 from ripshelf.models import Episode, EpisodeRef, JobState, MediaKind, TitleInfo, TitleRole
 from ripshelf.tv import split
 
-from .conftest import until
+from .conftest import fake_program, until
 from .tvfix import mock_show
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
@@ -224,25 +222,21 @@ def test_parse_chapters():
     assert split.parse_chapters(b"{}") == [] and split.parse_chapters(b"nope") is None
 
 
-def fake_mkvmerge(where: Path, exit_code: int = 0) -> str:
-    """A stand-in mkvmerge, copying its source once per part, as one executable path."""
+def fake_mkvmerge(where: Path, exit_code: int = 0, parts: int | None = None) -> str:
+    """A stand-in mkvmerge, copying its source once per part (or ``parts`` times), as one
+    executable path."""
     where.mkdir(parents=True, exist_ok=True)
-    script = where / "mkvmerge_stub.py"
-    script.write_text(textwrap.dedent(f"""\
+    return fake_program(where / "mkvmerge", f"""
         import shutil, sys
         from pathlib import Path
         a = sys.argv[1:]
         out, src = Path(a[a.index("-o") + 1]), a[-1]
-        n = len(a[a.index("--split") + 1].split(":", 1)[1].split(",")) + 1
+        n = {parts} or len(a[a.index("--split") + 1].split(":", 1)[1].split(",")) + 1
         for k in range(1, n + 1):
             shutil.copy(src, out.with_name(f"{{out.stem}}-{{k:03d}}.mkv"))
         print("Error: no space" if {exit_code} else "ok")
         sys.exit({exit_code})
-    """))
-    exe = where / "mkvmerge"
-    exe.write_text(f"#!/bin/sh\nexec {sys.executable} {script} \"$@\"\n")
-    exe.chmod(0o755)
-    return str(exe)
+    """)
 
 
 async def test_split_file(tmp_path):
@@ -257,8 +251,7 @@ async def test_split_file(tmp_path):
     with pytest.raises(split.SplitError, match="mkvmerge failed: Error: no space"):
         await split.split_file(fake_mkvmerge(tmp_path / "bad", exit_code=2), src, out, [2])
     # Fewer files than parts (here the stub only ever writes two).
-    short = fake_mkvmerge(tmp_path / "short")
-    Path(short).write_text(Path(short).read_text().replace('"$@"', '-o "$3" --split chapters:2 "$6"'))
+    short = fake_mkvmerge(tmp_path / "short", parts=2)
     with pytest.raises(split.SplitError, match="made 2 parts, not 3"):
         await split.split_file(short, src, out, [2, 4])
 

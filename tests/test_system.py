@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import shutil
 import stat
-import sys
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -14,7 +13,7 @@ from ripshelf import system
 from ripshelf.dev.fake import FakeDrives
 from ripshelf.main import create_app
 
-from .conftest import posix_only
+from .conftest import fake_program, posix_only
 
 ENCODERS = """\
 Encoders:
@@ -100,8 +99,7 @@ def test_devices_from_sysfs(tmp_path):
 
 def _fake_ffmpeg(tmp_path: Path, working: set[str]) -> str:
     """An 'ffmpeg' that lists ENCODERS and succeeds only for encoders in `working`."""
-    script = tmp_path / "ffmpeg"
-    script.write_text(f"""#!{sys.executable}
+    return fake_program(tmp_path / "ffmpeg", f"""
 import sys
 args = sys.argv[1:]
 if "-encoders" in args:
@@ -111,8 +109,6 @@ if enc in {sorted(working)!r} and not ("main10" in args and enc == "hevc_vaapi")
     sys.exit(0)
 print(f"[{{enc}} @ 0x1] Cannot open {{enc}}", file=sys.stderr); sys.exit(1)
 """)
-    script.chmod(0o755)
-    return str(script)
 
 
 @posix_only
@@ -142,7 +138,6 @@ def test_hardware_without_ffmpeg(settings, tmp_path):
     assert not hw.ffmpeg_found and hw.encoder == "x265" and hw.encoders == []
 
 
-@posix_only  # a script as ffmpeg
 def test_api(settings, tmp_path):
     settings.ffmpeg = _fake_ffmpeg(tmp_path, set())
     app = create_app(settings, backend=FakeDrives(present=set()))

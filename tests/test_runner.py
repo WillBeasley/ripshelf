@@ -23,6 +23,20 @@ def script(tmp_path: Path, body: str) -> str:
 
 
 def alive(pid: int) -> bool:
+    if sys.platform == "win32":
+        import ctypes
+
+        k32 = ctypes.WinDLL("kernel32")
+        k32.OpenProcess.restype = ctypes.c_void_p
+        k32.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+        k32.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        k32.GetExitCodeProcess(handle, ctypes.byref(code))
+        k32.CloseHandle(handle)
+        return code.value == 259  # STILL_ACTIVE
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -54,7 +68,6 @@ async def test_home_is_passed_as_HOME(tmp_path):
     assert lines == [f"{tmp_path / 'home'}\n"]
 
 
-@posix_only
 async def test_timeout_with_no_output_kills_the_whole_process_group(tmp_path):
     pidfile = tmp_path / "child.pid"
     cmd = script(tmp_path, f"""
@@ -168,7 +181,6 @@ async def test_cancel_mid_run(tmp_path):
     assert res.cancelled and res.returncode != 0
 
 
-@posix_only
 async def test_task_cancellation_kills_makemkv(tmp_path):
     cmd = script(tmp_path, "import os, time\nprint(os.getpid(), flush=True)\ntime.sleep(60)")
     m = runner.MakeMKV(cmd)
@@ -209,7 +221,6 @@ async def test_kill_and_cancel_when_not_running_are_harmless(tmp_path):
 # --- MakeMKV homes and private data -------------------------------------------------
 
 
-@posix_only
 def test_prepare_home_sets_and_replaces_key(tmp_path):
     home = runner.prepare_home(tmp_path, "drive-a", "KEY-1")
     conf = home / ".MakeMKV" / "settings.conf"
@@ -355,15 +366,17 @@ def test_a_tar_makemkv_wrote_itself_is_not_an_import(tmp_path):
     assert runner.has_private_data(tmp_path, "lg")
 
 
-@posix_only
 async def test_leftover_helper_holding_the_pipe_does_not_hang_the_run(tmp_path):
     # makemkvcon's BD-J helper (java) can outlive it with our stdout open.
-    script = tmp_path / "mkv"
-    script.write_text("#!/bin/sh\necho 'TCOUNT:1'\nsleep 60 &\necho 'MSG:5011,0,0,\"Operation successfully completed\"'\n")
-    script.chmod(0o755)
+    cmd = script(tmp_path, """
+        import subprocess, sys
+        print("TCOUNT:1", flush=True)
+        subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        print('MSG:5011,0,0,"Operation successfully completed"')
+    """)
     loop = asyncio.get_running_loop()
     started = loop.time()
-    res = await runner.MakeMKV(str(script)).run(["info"], tmp_path, tmp_path / "log.txt", timeout=30)
+    res = await runner.MakeMKV(cmd).run(["info"], tmp_path, tmp_path / "log.txt", timeout=30)
     assert res.returncode == 0 and not res.timed_out
     assert loop.time() - started < runner.EXIT_DRAIN_S + 2
     assert "Operation successfully completed" in (tmp_path / "log.txt").read_text()
