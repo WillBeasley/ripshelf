@@ -334,9 +334,9 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
     def _be(self, d: DriveRuntime):
         return d.backend or self.backend
 
-    def _runner(self, d: DriveRuntime):
+    def _runner(self, d: DriveRuntime, disc_kind: DiscKind | None = None):
         if d.remote:
-            return RemoteMakeMKV(self.hub, *d.remote)
+            return RemoteMakeMKV(self.hub, *d.remote, disc_kind=disc_kind)
         return runner.MakeMKV(self.s.makemkvcon, self.open_gate, label=d.hw.device)
 
     def write_default_key(self) -> None:
@@ -1316,7 +1316,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 self._progress(job_id, tracker.snapshot(), last_save)
 
         home = self._home(d)
-        d.rip = self._runner(d)
+        d.rip = self._runner(d, job.disc.kind)
         log_path = self.work_dir(job) / "rip.log"
         tracks = selection.conf(self.s)  # which audio and subtitle tracks are kept
         started = time.monotonic()

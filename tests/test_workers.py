@@ -16,8 +16,8 @@ from pydantic import SecretStr
 from ripshelf.config import Settings
 from ripshelf.dev.fake import FakeDrives
 from ripshelf.main import begin_shutdown, create_app
+from ripshelf.models import DiscKind
 from ripshelf.workers import agent as agentmod
-from ripshelf.workers import api as workers_api
 from ripshelf.workers import hub as hubmod
 from ripshelf.workers.agent import Agent, ControllerGone
 
@@ -175,14 +175,14 @@ def test_worker_api_validation(settings):
         assert d["status"] in ("error", "empty") and d["capabilities"] == ["dvd"]
 
 
-async def test_uploads_over_the_limit_are_refused(controller, tmp_path, monkeypatch):
+async def test_uploads_over_the_limit_are_refused(controller, tmp_path):
     url, app = controller
-    monkeypatch.setattr(workers_api, "MAX_UPLOAD_BYTES", 10)
     h = {"Authorization": f"Bearer {TOKEN}"}
     out = tmp_path / "out"
     async with httpx.AsyncClient(base_url=url, headers=h) as c:
         assert (await c.post("/api/workers/register", json={"id": "w", "name": "W", "drives": []})).status_code == 200
-        run = app.state.manager.hub.start_run("w", {"type": "makemkv"}, tmp_path / "log", out, None)
+        run = app.state.manager.hub.start_run("w", {"type": "makemkv"}, tmp_path / "log", out, None,
+                                              max_file_bytes=10)
         files = f"/api/workers/w/runs/{run.id}/files"
 
         async def chunked():
@@ -190,12 +190,23 @@ async def test_uploads_over_the_limit_are_refused(controller, tmp_path, monkeypa
                 yield b"abcd"
 
         r = await c.put(f"{files}/big.mkv", content=b"x" * 11)
-        assert r.status_code == 413 and "larger than" in r.json()["detail"], "refused from its length"
+        assert r.status_code == 413 and "more than a disc" in r.json()["detail"], "refused from its length"
         r = await c.put(f"{files}/big.mkv", content=chunked())
         assert r.status_code == 413, "refused part-way when no length is given"
         assert not out.exists() or not list(out.iterdir()), "nothing is left behind"
         assert (await c.put(f"{files}/ok.mkv", content=b"x" * 10)).status_code == 200
         assert (out / "ok.mkv").read_bytes() == b"x" * 10
+
+
+def test_upload_limit_follows_the_disc_kind():
+    hub = hubmod.WorkerHub()
+    gb = 1000**3
+    limits = {k: hubmod.RemoteMakeMKV(hub, "w", "d", disc_kind=k).max_file_bytes
+              for k in (DiscKind.dvd, DiscKind.bluray, DiscKind.uhd, DiscKind.other, None)}
+    assert limits[DiscKind.dvd] == 10 * gb, "a DVD-9 holds 8.5 GB"
+    assert 50 * gb < limits[DiscKind.bluray] < 66 * gb, "a BD-50 holds 50 GB"
+    assert 100 * gb < limits[DiscKind.uhd] < 128 * gb, "a BD-100 holds 100 GB, so 80 GB+ 4K titles fit"
+    assert limits[DiscKind.other] == limits[None] > 128 * gb, "unknown discs get the biggest (BD-XL)"
 
 
 @pytest.mark.parametrize("name, ok", [("title_t00.mkv", True), ("C1_t01.mkv", True), ("../etc/passwd", False),
