@@ -2117,6 +2117,10 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                         "if you accept it, add this under environment: in each worker's compose.yaml "
                         "(or RIPSHELF_ACCEPT_MAKEMKV_EULA=yes in an env file) and restart it",
                 command='RIPSHELF_ACCEPT_MAKEMKV_EULA: "yes"'))
+        for msg in getattr(self.backend, "device_problems", []):
+            out.append(SetupProblem(code="drive_device", message=msg))
+        for w in self.hub.workers.values():
+            out += [SetupProblem(code="drive_device", message=f"{w.name}: {m}") for m in w.device_problems if w.online]
         if not self.s.secret("tmdb_api_key"):
             tv = [providers.label(n) for n in providers.enabled(self.s, "tv") if n in ("tvdb", "tvmaze")]
             out.append(SetupProblem(code="tmdb_key", message=(

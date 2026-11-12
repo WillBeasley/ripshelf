@@ -167,6 +167,7 @@ class Agent:
         body = {"id": self.worker_id, "name": self.name, "encoders": encoders,
                 "shared_scratch": self.s.worker_shared_scratch,
                 "makemkv_eula_pending": self.s.makemkv_eula_pending(),
+                "device_problems": getattr(self.backend, "device_problems", []),
                 "drives": [{"id": hw.id, "device": hw.device, "sg_device": hw.sg_device, "vendor": hw.vendor,
                             "model": hw.model, "revision": hw.revision, "serial": hw.serial,
                             "capabilities": [c.value for c in hw.capabilities], "port": hw.port, "virtual": hw.virtual,

@@ -429,3 +429,20 @@ def test_worker_without_the_makemkv_eula_is_held_and_shown(settings):
         assert c.post("/api/workers/register", json=body, headers=h).status_code == 200
         assert not any(p.code == "worker_makemkv_eula" for p in m.problems())
         assert not m._held(m.drives["d1"])
+
+
+def test_worker_drive_device_problems_are_shown(settings):
+    """A worker whose sr and sg numbers changed after a reboot says so on the controller."""
+    from fastapi.testclient import TestClient
+
+    settings.worker_token = SecretStr(TOKEN)
+    h = {"Authorization": f"Bearer {TOKEN}"}
+    msg = "/dev/sr0 (iHAS122) is passed in without its own /dev/sg6, so MakeMKV can't use it"
+    body = {"id": "w", "name": "Attic", "drives": [{"id": "d1", "device": "/dev/sr0"}]}
+    with TestClient(create_app(settings, backend=NoDrives(present=set()))) as c:
+        m = c.app.state.manager
+        assert c.post("/api/workers/register", json=body | {"device_problems": [msg]}, headers=h).status_code == 200
+        [problem] = [p for p in m.problems() if p.code == "drive_device"]
+        assert problem.message == f"Attic: {msg}"
+        assert c.post("/api/workers/register", json=body, headers=h).status_code == 200
+        assert not any(p.code == "drive_device" for p in m.problems())
