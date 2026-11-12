@@ -33,8 +33,9 @@ def test_fake_hardware_runs_the_fake_makemkvcon(settings):
     assert settings.makemkvcon == "/opt/stub-makemkvcon"
 
 
-def test_linux_uses_sysfs_with_the_configured_tools(settings):
+def test_linux_uses_sysfs_with_the_configured_tools(settings, monkeypatch):
     settings.fake_hardware = False
+    monkeypatch.setattr(proc, "WINDOWS", False)  # the Windows runner gets drive letters
     settings.blkid, settings.sevenzip = "/sbin/blkid", "/usr/bin/7zz"
     backend = main.drive_backend(settings)
     assert isinstance(backend, drives.SysfsDrives)
