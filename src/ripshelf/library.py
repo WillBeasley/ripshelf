@@ -114,6 +114,36 @@ def check_library(library: Path, what: str = "library folder") -> None:
         raise LibraryError(f"{what} {library} is not writable")
 
 
+# A copy needs the files' size plus this much, for the filesystem's own overhead and the
+# .disc folder written beside them.
+COPY_MARGIN = 1.02
+
+
+def gib(n: int) -> str:
+    """Sizes as MakeMKV prints them (binary units, labelled GB/MB)."""
+    if n >= 1024**3:
+        return f"{n / 1024**3:.1f} GB"
+    return f"{n / 1024**2:.0f} MB"
+
+
+def space_shortfall(root: Path, sources: list[Path], what: str = "library folder") -> str | None:
+    """Why copying ``sources`` (files or folders) into ``root`` won't fit, or None.
+
+    A copy is written in full before anything is replaced, so even an overwrite needs the
+    whole size free. When the free space can't be read (an odd share), the copy is tried.
+    """
+    try:
+        free = shutil.disk_usage(root).free
+        size = sum(tree_size(p) if p.is_dir() else p.stat().st_size for p in sources)
+    except OSError:
+        return None
+    need = int(size * COPY_MARGIN)
+    if free >= need:
+        return None
+    return (f"Not enough space in the {what} {root} to copy this rip. It needs about {gib(need)}, and "
+            f"{gib(free)} is free. Free some space, then retry.")
+
+
 def movie_paths(movies: Path, title: str, year: int | None, uhd: bool) -> tuple[Path, Path]:
     """``movies`` is the films root (``<library>/Movies`` or a separate folder)."""
     base = safe_name(f"{title} ({year})" if year else title)

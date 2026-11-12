@@ -23,6 +23,7 @@
 		<Field {form} name="scratch_dir" help="Rips in progress; a UHD disc needs about 100 GB. Can't move while jobs run.">
 			<FolderStatus path={f.scratch_dir} />
 		</Field>
+		<Field {form} name="failed_scratch_days" />
 		<Field {form} name="disc_backups_dir" placeholder={`${f.library_dir}${sep}Disc backups`}>
 			<FolderStatus path={f.disc_backups_dir} />
 		</Field>

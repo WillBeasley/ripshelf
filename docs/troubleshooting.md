@@ -140,6 +140,12 @@ ripshelf never creates the Movies, TV or disc-backup folders, so an unmounted di
 
 A UHD rip needs about 100 GB of scratch, a Blu-ray about 50 GB. Free space, or point scratch at a bigger disk, then Retry.
 
+A failed job keeps its rip in scratch, so that Retry carries on from it instead of ripping the disc again. Deleting the job deletes the rip. To have them cleared on their own, set **Clear failed jobs' scratch after (days)** under Settings → Library and filing → Advanced: a failed job's rip is deleted once the job and its files have sat that many days untouched, and Retry then rips the disc again. It's 0 (never) unless you set it.
+
+## "Not enough space in the library folder"
+
+Before a rip is copied, ripshelf checks that the films, TV or disc backups folder it goes to has room for it, so a full disk fails the job at once rather than part way through a long copy. The rip stays in scratch. Free space on that disk, then Retry.
+
 ## "ripshelf restarted while this job was running"
 
 The container restarted mid-rip, because of an update, Watchtower or a reboot. Retry the job. To avoid it, pin a version tag and don't update while ripping ([installation.md](installation.md#updating)).

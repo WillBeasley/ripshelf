@@ -2542,6 +2542,7 @@ export interface SettingsTestRequest {
 export interface SettingsUpdate {
   scratch_dir?: string | null;
   library_dir?: string | null;
+  failed_scratch_days?: number | null;
   movies_dir?: string | null;
   tv_dir?: string | null;
   disc_backups_dir?: string | null;
@@ -2673,6 +2674,7 @@ export interface SettingsTestResult {
 export interface SettingsUpdate1 {
   scratch_dir?: string | null;
   library_dir?: string | null;
+  failed_scratch_days?: number | null;
   movies_dir?: string | null;
   tv_dir?: string | null;
   disc_backups_dir?: string | null;
@@ -2829,6 +2831,7 @@ export interface SettingsView {
   vision_models: {
     [k: string]: string;
   };
+  failed_scratch_days: number;
   setup_complete: boolean;
   metadata_providers: {
     [k: string]: ProviderSlot[];

@@ -38,6 +38,7 @@ from .db import Database, JobRecord, now
 from .hw.drives import DiscIdentity, DriveHw
 from .identify import ai_label, catalogue, scoring
 from .identify.label import clean_bdmt_title, name_differs_from_label, parse_label
+from .library import gib
 from .makemkv import runner, selection
 from .makemkv.diagnose import diagnose
 from .makemkv.files import SupportFiles
@@ -91,6 +92,7 @@ from .providers import films, thediscdb
 from .readjobs import ReadingMixin
 from .refilejobs import RefileMixin
 from .scanjobs import ScansMixin
+from .scratchjobs import ScratchMixin
 from .transcodejobs import TranscodeMixin
 from .tv import naming, verify
 from .tvjobs import TvMixin
@@ -159,7 +161,7 @@ class DriveRuntime:
 
 
 class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin, MatchMixin, VisionMixin, PendingMixin, ShowFromScanMixin,
-              RefileMixin):
+              RefileMixin, ScratchMixin):
     def __init__(self, settings: Settings, db: Database, backend: DriveBackend, bus: EventBus):
         self.s = settings
         self.db = db
@@ -328,6 +330,10 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                     log.info("deleted %d poster(s) cached more than %d days ago", n, art.MAX_AGE_S // 86400)
             except OSError:
                 log.exception("poster clean-up failed")
+            try:
+                await self.clear_failed_scratch()
+            except OSError:
+                log.exception("clearing failed jobs' scratch failed")
             await asyncio.sleep(BACKUP_CHECK_S)
 
     # --- remote workers -------------------------------------------------------
@@ -1479,6 +1485,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             self._fail(job, Problem(code="library_missing", message=str(e), actions=["retry"]))
             return
         total = src.stat().st_size
+        if self._library_full(job, "movie", [src, *map(Path, self._originals(job).values())]):
+            return
         on_copy = self._copy_progress(job.id, "Copying to library")
         try:
             sha = await asyncio.to_thread(library.copy_verified, src, dest, on_copy, overwrite)
@@ -1540,6 +1548,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             library.check_library(*self.s.output_root("backup"))
         except library.LibraryError as e:
             self._fail(job, Problem(code="library_missing", message=str(e), actions=["retry"]))
+            return
+        if self._library_full(job, "backup", [src]):
             return
         exists = Problem(code="destination_exists",
                          message=f"{dest} already exists; remove it or identify the disc differently",
@@ -2293,13 +2303,6 @@ def _span(seconds: int) -> str:
     if seconds % 3600 == 0:
         return f"{seconds // 3600} h"
     return f"{seconds // 60} min" if seconds % 60 == 0 else f"{seconds} s"
-
-
-def gib(n: int) -> str:
-    """Sizes as MakeMKV prints them (binary units, labelled GB/MB)."""
-    if n >= 1024**3:
-        return f"{n / 1024**3:.1f} GB"
-    return f"{n / 1024**2:.0f} MB"
 
 
 def humanise_log_line(line: str) -> str:
