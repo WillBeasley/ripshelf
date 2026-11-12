@@ -1,11 +1,12 @@
 # Build the image for linux/amd64 and linux/arm64 and push it to GHCR, for
-# release tags only. See docs/ci-github.md.
+# release tags only, once the tests pass. See docs/ci-github.md.
 #   tag vX.Y.Z      -> :X.Y.Z, :X.Y and :latest
 #   tag vX.Y.Z-rc.N -> :X.Y.Z-rc.N only
 # Run by hand from a tag ("Use workflow from" -> the tag) to rebuild that
 # release, for example for a new MakeMKV; run from a branch, it does nothing.
 # Each platform builds on its own native runner (no QEMU); a last job joins the
 # two into one multi-arch tag. The image is ghcr.io/willbeasley/ripshelf.
+# Nothing is pushed until test.yml's tests pass and each platform's image starts.
 name: images
 on:
   push:
@@ -20,7 +21,14 @@ concurrency:
   group: images-${{ github.ref }}
 
 jobs:
+  test:
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/test.yml
+    with:
+      image: false
+
   build:
+    needs: test
     if: startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
@@ -51,6 +59,16 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Built into the local Docker first and started, then pushed from the same cache.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: localhost/ripshelf:smoke
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+      - name: Start it
+        run: scripts/smoke-image.sh localhost/ripshelf:smoke
       # Pushed by digest only; the merge job gives the digests their tags.
       - id: build
         uses: docker/build-push-action@v7

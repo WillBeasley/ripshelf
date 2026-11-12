@@ -12,13 +12,25 @@ from typing import Annotated, Any, get_args
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from . import applog, art, checks, integrations, proc, providers, scanjobs, system, transcode
+from . import (
+    applog,
+    art,
+    checks,
+    debugbundle,
+    integrations,
+    proc,
+    providers,
+    scanjobs,
+    system,
+    transcode,
+)
 from .bus import next_item
-from .config import EDITABLE, FOLDERS, REQUIRED_FOLDERS, SECRETS, Settings
+from .config import EDITABLE, FOLDERS, REQUIRED_FOLDERS, SECRETS, VISION_MODELS, Settings
 from .identify import catalogue
 from .makemkv import files as mkfiles
 from .makemkv import runner
 from .models import (
+    TERMINAL_STATES,
     Candidate,
     ClashRequest,
     Collection,
@@ -36,6 +48,7 @@ from .models import (
     DriveNameUpdate,
     DriveStats,
     Filesystem,
+    FinishedPage,
     FolderRequest,
     FolderState,
     Hardware,
@@ -43,6 +56,7 @@ from .models import (
     Job,
     JobDetail,
     JobState,
+    LabelReading,
     Listing,
     ListingView,
     LogPage,
@@ -107,6 +121,19 @@ def bad_request(e: Exception) -> HTTPException:
 
 
 api = APIRouter(prefix="/api")
+
+
+@api.get("/health", include_in_schema=False)
+async def get_health(request: Request):
+    """For container healthchecks: 200 while the server answers and the database reads,
+    503 once shutdown has started or the database fails."""
+    if request.app.state.closing.is_set():
+        raise HTTPException(status_code=503, detail="shutting down")
+    try:
+        await asyncio.to_thread(manager(request).db.conn.execute, "SELECT 1")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"database: {e}") from e
+    return {"status": "ok"}
 
 
 @api.get("/status", response_model=Status)
@@ -190,9 +217,20 @@ async def rescan(drive_id: str, request: Request):
 
 @api.get("/jobs", response_model=list[Job])
 async def list_jobs(request: Request, state: Annotated[list[JobState] | None, Query()] = None,
-                    limit: int = 100):
-    jobs = manager(request).db.list_jobs([s.value for s in state] if state else None, limit)
+                    limit: Annotated[int, Query(ge=1, le=1000)] = 100, before: int | None = None):
+    jobs = manager(request).db.list_jobs([s.value for s in state] if state else None, limit, before)
     return [j.public() for j in jobs]
+
+
+@api.get("/jobs/finished", response_model=FinishedPage)
+async def finished_jobs(request: Request, before: int | None = None,
+                        limit: Annotated[int, Query(ge=0, le=1000)] = 100):
+    """A page of the history older than job ``before``. A limit of 0 only counts them."""
+    db = manager(request).db
+    states = [s.value for s in TERMINAL_STATES]
+    jobs = db.list_jobs(states, limit, before) if limit else []
+    older = db.count_jobs(states, jobs[-1].id if jobs else before)
+    return FinishedPage(jobs=[j.public() for j in jobs], older=older)
 
 
 @api.post("/jobs/delete", response_model=DeleteJobsResult)
@@ -251,6 +289,17 @@ async def job_log(job_id: int, request: Request, kind: str = "rip", lines: int =
     return out
 
 
+@api.get("/jobs/{job_id}/debug-bundle", include_in_schema=False)
+async def debug_bundle(job_id: int, request: Request):
+    """Everything ripshelf has about the job, in a zip, with secrets taken out (see debugbundle)."""
+    try:
+        name, fh = await debugbundle.build(manager(request), job_id)
+    except KeyError:
+        raise HTTPException(404) from None
+    return StreamingResponse(debugbundle.chunks(fh), media_type="application/zip",
+                             headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
 async def _job_action(request: Request, job_id: int, coro_fn) -> Job:
     try:
         job = await coro_fn(job_id)
@@ -272,6 +321,19 @@ async def search(job_id: int, body: SearchRequest, request: Request):
         raise HTTPException(404)
     try:
         return await m.search(job_id, body.query, body.year)
+    except ValueError as e:
+        raise bad_request(e) from None
+
+
+@api.post("/jobs/{job_id}/read-label", response_model=LabelReading)
+async def read_label(job_id: int, request: Request):
+    """Ask the AI model what a cryptic label stands for. A film disc's candidates are
+    searched for and ranked again; for a TV disc, search shows with the titles."""
+    m = manager(request)
+    if not m.db.get_job(job_id):
+        raise HTTPException(404)
+    try:
+        return await m.read_label(job_id)
     except ValueError as e:
         raise bad_request(e) from None
 
@@ -802,7 +864,7 @@ def settings_view(s: Settings) -> SettingsView:
         custom_disc_backups_dir=str(s.disc_backups_dir or ""),
         makemkv_drive_data={d: runner.has_private_data(m_dir, d) for d in drive_ids},
         makemkv_drive_dumps={d: runner.has_dump(m_dir, d) for d in drive_ids},
-        backups_dir=str(s.backups),
+        backups_dir=str(s.backups), vision_models=VISION_MODELS,
     )
 
 

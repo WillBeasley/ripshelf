@@ -24,6 +24,7 @@ from . import library
 from .db import now
 from .identify.scoring import title_similarity
 from .identify.tmdb import TmdbError
+from .makemkv import selection
 from .models import (
     BonusEpisode,
     DiscKind,
@@ -133,7 +134,7 @@ class MatchMixin:
         old = job.scan_match.model_dump(exclude={"made_at"}) if job.scan_match else None
         if (m.model_dump(exclude={"made_at"}) if m else None) != old:
             job.scan_match = m
-            self._save_scans(job)
+            self._save(job)
         return job.scan_match
 
     # --- using it ---------------------------------------------------------------------
@@ -186,12 +187,12 @@ class MatchMixin:
         out_dir.mkdir(parents=True, exist_ok=True)
         self._event(job, "rip", f"Ripping {len(indices)} extra{'s' if len(indices) != 1 else ''} the box names")
         home = self._home(d)
-        d.rip = self._runner(d)
+        d.rip = self._runner(d, job.disc.kind)
         log_path = self.work_dir(job) / "rip-extras.log"
         try:
             for idx in indices:
                 res = await d.rip.run(["-r", "--progress=-same", "mkv", f"dev:{d.hw.device}", str(idx), str(out_dir)],
-                                      home, log_path)
+                                      home, log_path, conf=selection.conf(self.s))
                 if res.cancelled:
                     return
                 if res.returncode != 0:
@@ -256,7 +257,7 @@ class MatchMixin:
         if d.barcode and job.listing:
             if job.listing.upc_title is None:
                 job.listing.upc_title = await self._upc_title(d.barcode)
-                self._save_scans(job)
+                self._save(job)
             if job.listing.upc_title:
                 name = product_name(job.listing.upc_title)
                 if name and all(title_similarity(name, n) < 0.9 for n in hints.names):
@@ -296,7 +297,7 @@ class MatchMixin:
         if not (d.title or d.barcode) or job.listing.identified_from == key:
             return
         job.listing.identified_from = key
-        self._save_scans(job)
+        self._save(job)
         self._event(job, "info", "Identifying again with what the cover scan says")
         d_rt = self.drives.get(job.drive_id)
         if d_rt:

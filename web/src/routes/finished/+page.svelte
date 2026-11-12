@@ -8,6 +8,8 @@
 	import { Action } from '#lib/actions.svelte.ts';
 
 	const act = new Action();
+	const more = new Action();
+	const PAGE = 100;
 	let selecting = $state(false);
 	let picked = $state<Set<number>>(new Set());
 	let filter = $state<'all' | 'done' | 'failed' | 'cancelled'>('all');
@@ -72,7 +74,7 @@
 		{#if selecting}<p class="small muted">Only the history is deleted. Files in the library are kept.</p>{/if}
 		{#if act.error}<p class="small error-text">{act.error}</p>{/if}
 	{/if}
-	{#if live.loaded && !live.finishedJobs.length}
+	{#if live.loaded && !live.finishedJobs.length && !live.olderFinished}
 		<p class="muted">No finished jobs yet.</p>
 	{/if}
 	<ul class="list">
@@ -102,6 +104,17 @@
 			</li>
 		{/each}
 	</ul>
+	{#if live.olderFinished}
+		<div class="row more">
+			<span class="small muted">
+				Showing the newest {live.finishedJobs.length} of {live.finishedJobs.length + live.olderFinished} finished jobs.
+			</span>
+			<button disabled={more.busy} onclick={() => more.run(() => live.loadOlderFinished(PAGE))}>
+				Load {Math.min(PAGE, live.olderFinished)} older
+			</button>
+		</div>
+		{#if more.error}<p class="small error-text">{more.error}</p>{/if}
+	{/if}
 </div>
 
 <style>
@@ -112,6 +125,9 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+	}
+	.more {
+		justify-content: space-between;
 	}
 	.picked .item {
 		outline: 2px solid var(--accent, currentColor);

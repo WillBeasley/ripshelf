@@ -27,7 +27,7 @@ from .. import discfs
 from ..bus import next_item
 from ..hw.drives import DiscIdentity, DriveHw
 from ..makemkv.runner import RunResult
-from ..models import Capability, DriveStatus
+from ..models import Capability, DiscKind, DriveStatus
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +49,18 @@ class RemoteDrive:
     ident: DiscIdentity | None = None
 
 
+# The most one uploaded file may be. A title can't be bigger than its disc, so each kind gets
+# its largest disc plus a little room: DVD-9 holds 8.5 GB, BD-50 50 GB and BD-100 100 GB. An
+# unknown kind (or a structure read) gets the biggest disc of all, four-layer BD-XL's 128 GB.
+# This stops a runaway or hostile upload filling the controller's disk.
+MAX_FILE_BYTES = {DiscKind.dvd: 10 * 1000**3, DiscKind.bluray: 55 * 1000**3, DiscKind.uhd: 110 * 1000**3}
+MAX_ANY_FILE_BYTES = 140 * 1000**3
+
+
+def max_file_bytes(kind: DiscKind | None) -> int:
+    return MAX_FILE_BYTES.get(kind, MAX_ANY_FILE_BYTES)
+
+
 @dataclass
 class Run:
     """One remote makemkvcon (or structure read) in flight."""
@@ -62,6 +74,7 @@ class Run:
     kind: str = "makemkv"
     log_fh: object = None
     files: list[str] = field(default_factory=list)
+    max_file_bytes: int = MAX_ANY_FILE_BYTES
 
 
 @dataclass
@@ -71,6 +84,7 @@ class Worker:
     encoders: list[str]
     shared_scratch: bool
     makemkv_eula_pending: bool = False  # MakeMKV's licence isn't accepted on the worker, so it won't rip
+    device_problems: list[str] = field(default_factory=list)  # drives passed in without their /dev/sgN
     drives: dict[str, RemoteDrive] = field(default_factory=dict)
     commands: asyncio.Queue = field(default_factory=asyncio.Queue)
     last_seen: float = field(default_factory=time.monotonic)
@@ -102,12 +116,14 @@ class WorkerHub:
         return local_id
 
     def register(self, worker_id: str, name: str, drives: list[dict], encoders: list[str],
-                 shared_scratch: bool, makemkv_eula_pending: bool = False) -> Worker:
+                 shared_scratch: bool, makemkv_eula_pending: bool = False,
+                 device_problems: list[str] | None = None) -> Worker:
         old = self.workers.get(worker_id)
         if old:
             self._fail_runs(worker_id, "the worker restarted")
         w = Worker(id=worker_id, name=name, encoders=encoders, shared_scratch=shared_scratch,
-                   makemkv_eula_pending=makemkv_eula_pending, loop=asyncio.get_running_loop())
+                   makemkv_eula_pending=makemkv_eula_pending, device_problems=list(device_problems or []),
+                   loop=asyncio.get_running_loop())
         for d in drives:
             caps = [Capability(c) for c in d.get("capabilities", []) if c in Capability.__members__]
             hw = DriveHw(id=self.drive_id(worker_id, d["id"]), device=d["device"], sg_device=d.get("sg_device"),
@@ -190,10 +206,10 @@ class WorkerHub:
     # --- runs ----------------------------------------------------------------------------
 
     def start_run(self, worker_id: str, command: dict, log_path: Path, out_dir: Path | None,
-                  on_line: Callable[[str], None] | None) -> Run:
+                  on_line: Callable[[str], None] | None, max_file_bytes: int = MAX_ANY_FILE_BYTES) -> Run:
         loop = asyncio.get_running_loop()
         run = Run(id=next(self._ids), worker=worker_id, log_path=log_path, out_dir=out_dir, on_line=on_line,
-                  done=loop.create_future(), kind=command["type"])
+                  done=loop.create_future(), kind=command["type"], max_file_bytes=max_file_bytes)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         run.log_fh = log_path.open("w", encoding="utf-8")
         self.runs[run.id] = run
@@ -258,15 +274,17 @@ class WorkerHub:
 class RemoteMakeMKV:
     """``runner.MakeMKV`` for a drive on a worker."""
 
-    def __init__(self, hub: WorkerHub, worker_id: str, local_drive: str):
+    def __init__(self, hub: WorkerHub, worker_id: str, local_drive: str, disc_kind: DiscKind | None = None):
         self.hub, self.worker_id, self.local_drive = hub, worker_id, local_drive
+        self.max_file_bytes = max_file_bytes(disc_kind)  # the disc's kind bounds each file uploaded
         self._run: Run | None = None
         self._cancelled = False
         self.waiting = False
 
     async def run(self, args: list[str], home: Path, log_path: Path,
                   on_line: Callable[[str], None] | None = None, timeout: float | None = None,
-                  idle_timeout: float | None = None) -> RunResult:
+                  idle_timeout: float | None = None,
+                  conf: dict[str, str | None] | None = None) -> RunResult:
         self._cancelled = False
         w = self.hub.workers.get(self.worker_id)
         if not w or not w.online:
@@ -278,9 +296,9 @@ class RemoteMakeMKV:
         # A backup is only sent to a worker that shares scratch (it is a folder tree).
         out_dir = Path(args[-1]) if "mkv" in args or "backup" in args else None
         cmd = {"type": "makemkv", "drive": self.local_drive, "args": args, "timeout": timeout,
-               "idle_timeout": idle_timeout,
+               "idle_timeout": idle_timeout, "conf": conf,
                "out_dir": str(out_dir) if out_dir else None}
-        self._run = self.hub.start_run(self.worker_id, cmd, log_path, out_dir, on_line)
+        self._run = self.hub.start_run(self.worker_id, cmd, log_path, out_dir, on_line, self.max_file_bytes)
         try:
             return await self._run.done
         except asyncio.CancelledError:

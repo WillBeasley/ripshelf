@@ -47,7 +47,9 @@ def _finished(db: Database, drive: str, state: JobState, ripped: bool, kind=Disc
 def test_backfill_from_history(tmp_path):
     path = tmp_path / "ripshelf.db"
     db = Database(path)
-    db.conn.execute("DROP TABLE rip_stats")  # history from before the statistics existed
+    # History from before the statistics existed, which was before the schema had a version.
+    db.conn.execute("DROP TABLE rip_stats")
+    db.conn.execute("PRAGMA user_version=0")
     a = _finished(db, "d1", JobState.done, True, DiscKind.uhd, 50 * 2**30)
     _finished(db, "d1", JobState.done, True, DiscKind.dvd, 5 * 2**30)
     _finished(db, "d1", JobState.failed, False)

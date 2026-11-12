@@ -112,6 +112,8 @@ class Candidate(BaseModel):
     vote_count: int | None = None
     popularity: float | None = None
     excluded: bool = Field(False, description="a making-of, short or other extra; never auto-confirms")
+    from_ai: bool = Field(False, description="only the AI model's reading of the label supports it; never "
+                                             "auto-confirms")
     score: float = 0.0
     evidence: list[Evidence] = []
 
@@ -191,6 +193,8 @@ class Show(BaseModel):
     vote_count: int | None = None
     providers: list[str] = Field(default=[], description="metadata providers that found it, best first")
     excluded: bool = False
+    from_ai: bool = Field(False, description="found by searching for the AI model's reading of the label; "
+                                             "never auto-confirms")
     score: float = 0.0
     evidence: list[Evidence] = []
 
@@ -1010,7 +1014,7 @@ class SetupProblem(BaseModel):
 
 TvUnmatched = Literal["extras", "specials", "skip"]
 SettingsCheck = Literal["tmdb", "tvdb", "tvmaze", "omdb", "thediscdb", "pushover", "emby", "jellyfin", "plex",
-                        "catalogue", "makemkv", "paths", "scanner", "ocr", "vision"]
+                        "catalogue", "makemkv", "paths", "scanner", "ocr", "vision", "label_ai"]
 VisionMode = Literal["off", "struggles", "every", "manual"]
 VisionProvider = Literal["local", "openai", "anthropic"]
 MediaServer = Literal["emby", "jellyfin", "plex"]
@@ -1151,6 +1155,7 @@ class SettingsViewBase(BaseModel):
     makemkv_drive_data: dict[str, bool] = Field(description="drive id -> has imported private data")
     makemkv_drive_dumps: dict[str, bool] = Field({}, description="drive id -> has a firmware dump (dump_*.tgz)")
     backups_dir: str = Field("", description="where the database backups go")
+    vision_models: dict[str, str] = Field({}, description="vision provider -> the model it uses when none is set")
 
 
 def _view_model() -> type[BaseModel]:
@@ -1333,6 +1338,17 @@ class WebResult(BaseModel):
     suggestion: str | None = Field(None, description="the film or show name in the page title, to search TMDB for")
 
 
+class LabelReading(BaseModel):
+    """What the AI model made of a cryptic disc label, from the button in Review."""
+
+    titles: list[str] = Field(description="full titles the label may stand for, most likely first")
+    kind: Literal["movie", "tv"] | None = None
+    model: str
+    seconds: float
+    candidates: list[Candidate] = Field(default=[], description="a film disc's candidates, ranked again with "
+                                                                "these titles")
+
+
 class TitleSnapshots(BaseModel):
     """Frames from one of the disc's titles, from its file in scratch."""
 
@@ -1463,6 +1479,7 @@ class Status(BaseModel):
     problems: list[SetupProblem]
     review_count: int
     web_search: bool = Field(False, description="a SearXNG address is set, so Review can search the web")
+    label_ai: bool = Field(False, description="an AI model can read labels, so Review shows its button")
 
 
 class Tool(BaseModel):
@@ -1516,6 +1533,12 @@ class DeleteJobsRequest(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=1000)
     delete_files: bool = Field(False, description="also delete the files the jobs put in the library (a "
                                                   "full disc backup's are kept)")
+
+
+class FinishedPage(BaseModel):
+    """Finished, failed and cancelled jobs, newest first, for paging back through the history."""
+    jobs: list[Job]
+    older: int = Field(description="finished jobs older than these (or than ``before``, if there are none)")
 
 
 class DeleteJobsResult(BaseModel):
