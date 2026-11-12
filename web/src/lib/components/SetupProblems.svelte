@@ -11,7 +11,7 @@
 		<h2>Setup</h2>
 		<ul>
 			{#each problems as p, i (i)}
-				<li class:serious={['makemkv_eula', 'worker_makemkv_eula', 'volume_key_unknown', 'decrypt_failed', 'makemkv_key', 'makemkv_missing'].includes(p.code)}>
+				<li class:serious={['makemkv_eula', 'worker_makemkv_eula', 'drive_device', 'volume_key_unknown', 'decrypt_failed', 'makemkv_key', 'makemkv_missing'].includes(p.code)}>
 					{p.message}
 					{#if p.command}<Command text={p.command} />{/if}
 				</li>

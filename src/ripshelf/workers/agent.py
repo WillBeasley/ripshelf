@@ -167,6 +167,7 @@ class Agent:
         body = {"id": self.worker_id, "name": self.name, "encoders": encoders,
                 "shared_scratch": self.s.worker_shared_scratch,
                 "makemkv_eula_pending": self.s.makemkv_eula_pending(),
+                "device_problems": getattr(self.backend, "device_problems", []),
                 "drives": [{"id": hw.id, "device": hw.device, "sg_device": hw.sg_device, "vendor": hw.vendor,
                             "model": hw.model, "revision": hw.revision, "serial": hw.serial,
                             "capabilities": [c.value for c in hw.capabilities], "port": hw.port, "virtual": hw.virtual,
@@ -413,7 +414,7 @@ class Agent:
                 try:
                     res = await m.run(args, home, Path(self.s.data_dir) / "worker-logs" / f"run-{run_id}.log",
                                       on_line=pending.append, timeout=cmd.get("timeout"),
-                                      idle_timeout=cmd.get("idle_timeout"))
+                                      idle_timeout=cmd.get("idle_timeout"), conf=cmd.get("conf"))
                 finally:
                     self.runs.pop(run_id, None)
                     flush_task.cancel()
@@ -456,9 +457,12 @@ class Agent:
                     yield chunk
 
         # A new body each try, because an upload cut off part-way starts again (the controller drops
-        # the partial file). The write timeout notices a connection that died silently.
+        # the partial file). The write timeout notices a connection that died silently. The length
+        # goes first so the controller can refuse a file over its limit before any of it is sent.
+        size = path.stat().st_size
         r = await self._retrying(lambda: self.client.put(
             f"{self.api}/runs/{run_id}/files/{path.name}", content=body(),
+            headers={"Content-Length": str(size)},
             timeout=httpx.Timeout(None, connect=10, write=120)), f"uploading {path.name}", run_id)
         self._check_run(r, run_id)
 

@@ -17,6 +17,14 @@ set "ROOT=%~dp0..\.."
 pushd "%ROOT%"
 set "ROOT=%CD%"
 popd
+rem The host and port set below would outrank ripshelf.env (the environment wins over the
+rem env file), so take them from the file first.
+set "ENV_FILE=%ROOT%\ripshelf.env"
+if defined RIPSHELF_ENV_FILE set "ENV_FILE=%RIPSHELF_ENV_FILE%"
+if exist "%ENV_FILE%" for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%ENV_FILE%") do (
+  if /i "%%A"=="RIPSHELF_HOST" if not defined RIPSHELF_HOST set "RIPSHELF_HOST=%%B"
+  if /i "%%A"=="RIPSHELF_PORT" if not defined RIPSHELF_PORT set "RIPSHELF_PORT=%%B"
+)
 if not defined RIPSHELF_HOST set "RIPSHELF_HOST=127.0.0.1"
 if not defined RIPSHELF_PORT set "RIPSHELF_PORT=8380"
 rem Titles with accents in the console.

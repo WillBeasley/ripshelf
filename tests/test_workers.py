@@ -16,6 +16,7 @@ from pydantic import SecretStr
 from ripshelf.config import Settings
 from ripshelf.dev.fake import FakeDrives
 from ripshelf.main import begin_shutdown, create_app
+from ripshelf.models import DiscKind
 from ripshelf.workers import agent as agentmod
 from ripshelf.workers import hub as hubmod
 from ripshelf.workers.agent import Agent, ControllerGone
@@ -122,13 +123,17 @@ async def test_shared_scratch_skips_the_upload(controller, tmp_path, monkeypatch
         return await real_put(self, u, *a, **k)
 
     monkeypatch.setattr(httpx.AsyncClient, "put", counting_put)
-    agent = Agent(worker_settings(tmp_path, url, shared=app.state.settings.scratch_dir), FakeDrives(present={PM}))
+    app.state.settings.track_selection = True  # the controller's track rule goes with the run
+    ws = worker_settings(tmp_path, url, shared=app.state.settings.scratch_dir)
+    agent = Agent(ws, FakeDrives(present={PM}))
     task = asyncio.create_task(agent.run_forever())
     try:
         job = await asyncio.to_thread(wait_http, lambda: next(
             (j for j in api(url, "/api/jobs") if j["rip"]["state"] == "done"), None))
         assert job["rip"]["file"] and Path(job["rip"]["file"]).exists()
         assert uploads == []
+        conf = (ws.makemkv_dir / "fake-ihas122" / ".MakeMKV" / "settings.conf").read_text()
+        assert "app_DefaultSelectionString = \"+sel:all," in conf
     finally:
         task.cancel()
 
@@ -168,6 +173,40 @@ def test_worker_api_validation(settings):
                                                                    {"id": "nope"}]}, headers=h).status_code == 200
         d = next(x for x in c.get("/api/drives").json() if x["id"] == "d1")
         assert d["status"] in ("error", "empty") and d["capabilities"] == ["dvd"]
+
+
+async def test_uploads_over_the_limit_are_refused(controller, tmp_path):
+    url, app = controller
+    h = {"Authorization": f"Bearer {TOKEN}"}
+    out = tmp_path / "out"
+    async with httpx.AsyncClient(base_url=url, headers=h) as c:
+        assert (await c.post("/api/workers/register", json={"id": "w", "name": "W", "drives": []})).status_code == 200
+        run = app.state.manager.hub.start_run("w", {"type": "makemkv"}, tmp_path / "log", out, None,
+                                              max_file_bytes=10)
+        files = f"/api/workers/w/runs/{run.id}/files"
+
+        async def chunked():
+            for _ in range(5):
+                yield b"abcd"
+
+        r = await c.put(f"{files}/big.mkv", content=b"x" * 11)
+        assert r.status_code == 413 and "more than a disc" in r.json()["detail"], "refused from its length"
+        r = await c.put(f"{files}/big.mkv", content=chunked())
+        assert r.status_code == 413, "refused part-way when no length is given"
+        assert not out.exists() or not list(out.iterdir()), "nothing is left behind"
+        assert (await c.put(f"{files}/ok.mkv", content=b"x" * 10)).status_code == 200
+        assert (out / "ok.mkv").read_bytes() == b"x" * 10
+
+
+def test_upload_limit_follows_the_disc_kind():
+    hub = hubmod.WorkerHub()
+    gb = 1000**3
+    limits = {k: hubmod.RemoteMakeMKV(hub, "w", "d", disc_kind=k).max_file_bytes
+              for k in (DiscKind.dvd, DiscKind.bluray, DiscKind.uhd, DiscKind.other, None)}
+    assert limits[DiscKind.dvd] == 10 * gb, "a DVD-9 holds 8.5 GB"
+    assert 50 * gb < limits[DiscKind.bluray] < 66 * gb, "a BD-50 holds 50 GB"
+    assert 100 * gb < limits[DiscKind.uhd] < 128 * gb, "a BD-100 holds 100 GB, so 80 GB+ 4K titles fit"
+    assert limits[DiscKind.other] == limits[None] > 128 * gb, "unknown discs get the biggest (BD-XL)"
 
 
 @pytest.mark.parametrize("name, ok", [("title_t00.mkv", True), ("C1_t01.mkv", True), ("../etc/passwd", False),
@@ -429,3 +468,20 @@ def test_worker_without_the_makemkv_eula_is_held_and_shown(settings):
         assert c.post("/api/workers/register", json=body, headers=h).status_code == 200
         assert not any(p.code == "worker_makemkv_eula" for p in m.problems())
         assert not m._held(m.drives["d1"])
+
+
+def test_worker_drive_device_problems_are_shown(settings):
+    """A worker whose sr and sg numbers changed after a reboot says so on the controller."""
+    from fastapi.testclient import TestClient
+
+    settings.worker_token = SecretStr(TOKEN)
+    h = {"Authorization": f"Bearer {TOKEN}"}
+    msg = "/dev/sr0 (iHAS122) is passed in without its own /dev/sg6, so MakeMKV can't use it"
+    body = {"id": "w", "name": "Attic", "drives": [{"id": "d1", "device": "/dev/sr0"}]}
+    with TestClient(create_app(settings, backend=NoDrives(present=set()))) as c:
+        m = c.app.state.manager
+        assert c.post("/api/workers/register", json=body | {"device_problems": [msg]}, headers=h).status_code == 200
+        [problem] = [p for p in m.problems() if p.code == "drive_device"]
+        assert problem.message == f"Attic: {msg}"
+        assert c.post("/api/workers/register", json=body, headers=h).status_code == 200
+        assert not any(p.code == "drive_device" for p in m.problems())

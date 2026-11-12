@@ -139,22 +139,43 @@ def test_sniff():
 
 @respx.mock
 async def test_download_cover_guards():
-    public = lambda host: host == "img.example"  # noqa: E731
-    respx.get("https://img.example/ok.jpg").mock(return_value=httpx.Response(200, content=JPEG))
-    respx.get("https://img.example/page").mock(return_value=httpx.Response(200, content=b"<html>"))
-    respx.get("https://img.example/moved").mock(return_value=httpx.Response(302, headers={"location": "/x"}))
-    pic = await release_info.download_cover("https://img.example/ok.jpg", public_host=public)
+    public = lambda host, port: "93.184.215.14" if host == "img.example" else None  # noqa: E731
+    respx.get("https://93.184.215.14/ok.jpg").mock(return_value=httpx.Response(200, content=JPEG))
+    respx.get("https://93.184.215.14/page").mock(return_value=httpx.Response(200, content=b"<html>"))
+    respx.get("https://93.184.215.14/moved").mock(return_value=httpx.Response(302, headers={"location": "/x"}))
+    pic = await release_info.download_cover("https://img.example/ok.jpg", public_address=public)
     assert pic.ext == "jpg" and pic.data == JPEG
     for url, why in (("http://img.example/ok.jpg", "only https"), ("https://192.168.1.2/x.jpg", "public internet"),
                      ("https://img.example/page", "isn't a JPEG"), ("https://img.example/moved", "redirects"),
                      ("https://u:p@img.example/ok.jpg", "only https")):
         with pytest.raises(release_info.ReleaseLookupError, match=why):
-            await release_info.download_cover(url, public_host=public)
+            await release_info.download_cover(url, public_address=public)
+
+
+@respx.mock
+async def test_download_cover_connects_to_the_checked_address():
+    # The name is looked up once. A second lookup could answer with a LAN address (DNS
+    # rebinding), so the request goes to the address that passed, named for Host and TLS.
+    looked_up = []
+
+    def public(host, port):
+        looked_up.append((host, port))
+        return "2606:2800:21f:cb07:6820:80da:af6b:8b2c"
+
+    route = respx.get("https://[2606:2800:21f:cb07:6820:80da:af6b:8b2c]:8443/ok.jpg").mock(
+        return_value=httpx.Response(200, content=JPEG))
+    await release_info.download_cover("https://img.example:8443/ok.jpg", public_address=public)
+    assert looked_up == [("img.example", 8443)]
+    sent = route.calls.last.request
+    assert sent.headers["host"] == "img.example:8443"
+    assert sent.extensions["sni_hostname"] == "img.example"
 
 
 def test_private_hosts_are_not_public():
-    assert not release_info._public_host("localhost")
-    assert not release_info._public_host("127.0.0.1")
+    assert release_info._public_address("localhost") is None
+    assert release_info._public_address("127.0.0.1") is None
+    assert release_info._public_address("10.0.0.1") is None
+    assert release_info._public_address("8.8.8.8") == "8.8.8.8"
 
 
 # --- the payload and sending ------------------------------------------------------------

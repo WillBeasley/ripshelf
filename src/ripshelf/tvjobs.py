@@ -22,7 +22,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import __version__, library, providers
-from .identify.label import clean_bdmt_title
+from .identify import ai_label
+from .identify.label import clean_bdmt_title, parse_label
 from .identify.scoring import title_similarity
 from .identify.tmdb import Tmdb, TmdbError
 from .models import (
@@ -178,6 +179,22 @@ class TvMixin:
                 if c:
                     await c.aclose()
 
+    async def _shows_from_label(self, job: JobRecord, tmdb: Tmdb | None, episode_s: float | None) -> list[Show]:
+        """Shows for what the AI model reads the label as, weighted down and marked."""
+        try:
+            reading = await self._read_label(job, True)
+        except ai_label.LabelError as e:
+            self._event(job, "warning", f"The AI model couldn't read the label: {e}")
+            return []
+        shows: list[Show] = []
+        for guess in reading.titles[:2]:
+            for x in await self._find_shows(tmdb, guess, episode_s):
+                if not any(o.key == x.key for o in shows):
+                    shows.append(x)
+        shows = ai_label.weigh_shows(shows, reading.titles)
+        self._event(job, "info", f"{self._show_sources()}: {len(shows)} shows for the AI model's reading")
+        return sorted(shows, key=lambda x: (x.excluded, -x.score))
+
     async def _disc_match_show(self, tmdb: Tmdb | None, match: DiscMatch, episode_s: float | None) -> Show | None:
         """The show a disc database says this disc is, from TMDB (or without a key, TVmaze
         or TheTVDB), scored as certain."""
@@ -223,10 +240,13 @@ class TvMixin:
             self._event(job, "info", f"Searching for the show the cover scan names: {name}")
         match = job.disc_match if job.disc_match and job.disc_match.media == MediaKind.tv \
             and "thediscdb" in providers.enabled(self.s, "tv") else None
+        # The AI model may read a label nothing else could.
+        ai = self.s.label_ai == "auto" and self.label_provider() is not None and not match and not hints.names \
+            and not parse_label(job.disc.label).generic
         if not searchable:
             self._event(job, "warning", "No TV show search is on (a TMDB key, or TVmaze or TheTVDB in "
                                         "Settings → Identify), so pick the show by hand")
-        elif not name and not match:
+        elif not name and not match and not ai:
             self._event(job, "warning", "The disc label is generic; search for the show by hand")
         else:
             try:
@@ -238,6 +258,13 @@ class TvMixin:
                 shows = await self._find_shows(tmdb, name, typical) if name else []
                 if name:
                     self._event(job, "info", f"{self._show_sources()}: {len(shows)} shows for “{name}”")
+                if ai and not (found and found.names) and not any(
+                        not x.excluded and x.score >= self.s.tv_auto_threshold for x in shows):
+                    by_key = {x.key: x for x in shows}
+                    for x in await self._shows_from_label(job, tmdb, typical):
+                        if x.key not in by_key or by_key[x.key].excluded or by_key[x.key].score < x.score:
+                            by_key[x.key] = x
+                    shows = sorted(by_key.values(), key=lambda x: (x.excluded, -x.score))
                 known = None
                 if match:
                     try:
@@ -1051,6 +1078,8 @@ class TvMixin:
             return False, ["set from the cover scan, so it needs a look"]
         if plan.compilation:
             return False, ["a compilation, so episodes need picking by hand"]
+        if plan.show.from_ai:
+            return False, ["the show was found from the AI model's reading of the label"]
         if plan.show.excluded or plan.show.score < self.s.tv_auto_threshold:
             return False, [f"show match {plan.show.score:.2f} is below {self.s.tv_auto_threshold:.2f}"]
         why.append(f"{plan.show.name} matched at {plan.show.score:.2f}")

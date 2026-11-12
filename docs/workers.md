@@ -3,7 +3,7 @@
 A worker is the same image run as `ripshelf worker`. It owns a machine's optical drives and runs MakeMKV on them. The controller keeps the UI, the database, identification, transcoding and the library.
 
 - **In the UI.** Worker drives appear like local ones, marked "on <worker name>", with live progress and logs.
-- **Files.** Rips are uploaded to the controller over HTTP. On the same host they can instead be written straight into the controller's scratch folder, if it's mounted at the same path.
+- **Files.** Rips are uploaded to the controller over HTTP. On the same host they can instead be written straight into the controller's scratch folder, if it's mounted at the same path. Each uploaded file is capped at the most its kind of disc can hold (10 GB for a DVD, 55 GB for a Blu-ray, 110 GB for a 4K Blu-ray, 140 GB otherwise).
 - **If a worker goes quiet.** A short network drop ends nothing, because the worker retries until the controller answers. After 45 s without a heartbeat its jobs fail with that reason, ready to retry. When the worker is back, it stops the rips the controller gave up on and deletes their files, so the drive is free for the retry.
 
 ## Add a remote worker
@@ -40,7 +40,7 @@ services:
 
 **MakeMKV setup comes from the controller.** Each time a worker connects it fetches the MakeMKV key and the files imported in Settings → Drives and ripping → MakeMKV private data (`_private_data.tar` for its drives, every `dump_*.tgz`), and installs what is missing or changed into each drive's MakeMKV home. Nothing is copied by hand, and the worker needs no `RIPSHELF_MAKEMKV_KEY` (one set on the worker still wins). A file is installed again only when a new copy is imported on the controller, so MakeMKV's own changes to its `_private_data.tar` are kept. Deleting a file in Settings stops offering it, but drives that have it keep it.
 
-**Tokens.** Each worker has its own, and it works for that worker id only. Only its sha256 is stored. **Revoke** in Settings refuses it at once, and the worker's jobs fail with that reason. The worker logs that its token was refused, and checks again only every 5 minutes. To bring it back, add it again and give it the new token. A shared `RIPSHELF_WORKER_TOKEN` (or token file, as in compose.per-drive.yaml) works for any worker id.
+**Tokens.** Each worker has its own, and it works for that worker id and its runs only, so one worker can't send log lines, files or a result for another's rip. Only its sha256 is stored. **Revoke** in Settings refuses it at once, and the worker's jobs fail with that reason. The worker logs that its token was refused, and checks again only every 5 minutes. To bring it back, add it again and give it the new token. A shared `RIPSHELF_WORKER_TOKEN` (or token file, as in compose.per-drive.yaml) works for any worker id.
 
 **Over the network.** The controller has no login and speaks plain HTTP, so the token, the MakeMKV key and the private data cross the LAN in the clear. For a worker on another machine, do one of these.
 

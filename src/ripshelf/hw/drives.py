@@ -129,6 +129,14 @@ def sbin_fallback(command: str, dirs: tuple[str, ...] = ("/usr/sbin", "/sbin")) 
     return command
 
 
+def _sg_name(entry: Path) -> str | None:
+    """The SCSI generic device (sgN) of a drive's sysfs block entry."""
+    try:
+        return next((entry / "device" / "scsi_generic").iterdir()).name
+    except (OSError, StopIteration):
+        return None
+
+
 class SysfsDrives:
     """Real hardware."""
 
@@ -136,6 +144,8 @@ class SysfsDrives:
         self.blkid = sbin_fallback(blkid)
         self.sevenzip = sevenzip
         self.dev_root = dev_root
+        # Drives passed in without their /dev/sgN (or the reverse), from the last discover().
+        self.device_problems: list[str] = []
 
     async def extract_structure(self, device: str, out_dir: Path) -> list[str]:
         from ..discfs import extract_structure
@@ -144,6 +154,9 @@ class SysfsDrives:
 
     def discover(self, uhd_models: list[str]) -> list[DriveHw]:
         out = []
+        self.device_problems = problems = []
+        # Every optical drive's sg name on the host, to name the drive an sg passed in alone belongs to.
+        sg_owner = {sg: entry.name for entry in SYS_BLOCK.glob("sr*") if (sg := _sg_name(entry))}
         for entry in sorted(SYS_BLOCK.glob("sr*")):
             name = entry.name
             # sysfs shows every drive on the host; a container only has the
@@ -154,8 +167,18 @@ class SysfsDrives:
             vendor = _read(dev / "vendor")
             model = _read(dev / "model")
             rev = _read(dev / "rev")
-            sgs = list((dev / "scsi_generic").glob("sg*")) if (dev / "scsi_generic").exists() else []
-            sg = f"/dev/{sgs[0].name}" if sgs else None
+            what = f"/dev/{name} ({' '.join(f'{vendor} {model}'.split()) or 'optical drive'})"
+            sg_name = _sg_name(entry)
+            sg = f"/dev/{sg_name}" if sg_name else None
+            if not sg_name:
+                problems.append(f"{what} has no /dev/sgN, so MakeMKV can't use it. Load the sg module on the "
+                                "host (sudo modprobe sg)")
+            elif not (self.dev_root / sg_name).exists():
+                # Its numbers changed since compose.yaml was written (a reboot, or a drive or disk added).
+                problems.append(f"{what} is passed in without its own {sg}, so MakeMKV can't use it. Add {sg} "
+                                "under devices: (the sr and sg numbers can change between boots, see "
+                                "docs/troubleshooting.md)")
+                sg = None
             port = os.path.realpath(dev)
             ident = None
             if sg:
@@ -176,6 +199,12 @@ class SysfsDrives:
                 capabilities=capabilities_for(vendor, model, ident, uhd_models), port=port,
                 legacy_id=legacy if legacy != did else None, virtual=is_virtual(vendor, model),
             ))
+        for sg_name, sr in sorted(sg_owner.items()):
+            if (self.dev_root / sg_name).exists() and not (self.dev_root / sr).exists():
+                problems.append(f"/dev/{sg_name} is passed in, but it belongs to /dev/{sr}, which isn't. The "
+                                "numbers may have changed since compose.yaml was written")
+        for p in problems:
+            log.warning("%s", p)
         return out
 
     def status(self, device: str) -> DriveStatus:

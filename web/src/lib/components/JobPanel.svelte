@@ -274,6 +274,10 @@
 						onclick={reidentify}>Wrong title? Identify again</button>
 				{/if}
 			{/if}
+			<a class="button" href="/api/jobs/{jobId}/debug-bundle" download
+				title="A zip of everything ripshelf has about this job (logs, titles, identification, settings), with keys and passwords taken out, for working out what went wrong">
+				Download debug bundle
+			</a>
 			{#if job.refile}
 				<!-- Keep it as it was (above) is its cancel; its files are in the library, so it stays in the history. -->
 			{:else if active}

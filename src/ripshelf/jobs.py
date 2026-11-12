@@ -34,11 +34,11 @@ from . import __version__, art, discfs, integrations, library, providers, snapsh
 from .bus import EventBus
 from .config import EULA_PENDING, Settings
 from .contributejobs import ContributeMixin
-from .db import SCAN_FIELDS, Database, JobRecord, now
+from .db import Database, JobRecord, now
 from .hw.drives import DiscIdentity, DriveHw
-from .identify import catalogue, scoring
+from .identify import ai_label, catalogue, scoring
 from .identify.label import clean_bdmt_title, name_differs_from_label, parse_label
-from .makemkv import runner
+from .makemkv import runner, selection
 from .makemkv.diagnose import diagnose
 from .makemkv.files import SupportFiles
 from .makemkv.parse import (
@@ -72,6 +72,7 @@ from .models import (
     JobState,
     JobStep,
     JobUpdated,
+    LabelReading,
     MediaKind,
     Preset,
     Problem,
@@ -167,8 +168,6 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         self._locks: dict[int, asyncio.Lock] = {}
         self._poller: asyncio.Task | None = None
         self._last_progress: dict[int, float] = {}
-        # Presets set (or cleared to None) by hand. They win over a job copy saved meanwhile.
-        self._presets: dict[int, Preset | None] = {}
         self.makemkv_version: str | None = None
         self.java_missing = False  # a scan said MakeMKV has no Java runtime
         self.open_gate = runner.OpenGate()
@@ -335,9 +334,9 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
     def _be(self, d: DriveRuntime):
         return d.backend or self.backend
 
-    def _runner(self, d: DriveRuntime):
+    def _runner(self, d: DriveRuntime, disc_kind: DiscKind | None = None):
         if d.remote:
-            return RemoteMakeMKV(self.hub, *d.remote)
+            return RemoteMakeMKV(self.hub, *d.remote, disc_kind=disc_kind)
         return runner.MakeMKV(self.s.makemkvcon, self.open_gate, label=d.hw.device)
 
     def write_default_key(self) -> None:
@@ -519,25 +518,13 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         self._save(fresh)
 
     def _save(self, job: JobRecord) -> None:
-        cur = self.db.get_job(job.id)
-        if cur and cur.scans_rev > job.scans_rev:
-            # Read before a scan arrived (the pipeline holds its copy across a scan or a rip):
-            # keep the scans as they are now.
-            for f in SCAN_FIELDS:
-                setattr(job, f, getattr(cur, f))
-        if job.id in self._presets:
-            job.preset = self._presets[job.id]
+        # Only what this copy changed is written (db.save_job), so a copy the pipeline has held
+        # across a scan or a rip doesn't undo the scans, the preset or anything else saved meanwhile.
         self.db.save_job(job)
         self.bus.publish(JobUpdated(job=job.public()))
         d = self.drives.get(job.drive_id)
         if d and d.job_id == job.id:
             self.publish_drive(d)
-
-    def _save_scans(self, job: JobRecord) -> None:
-        """Save a change to the scans' fields (SCAN_FIELDS), made on a copy just read."""
-        cur = self.db.get_job(job.id)
-        job.scans_rev = max(job.scans_rev, cur.scans_rev if cur else 0) + 1
-        self._save(job)
 
     def _set_state(self, job: JobRecord, state: JobState, message: str | None = None) -> None:
         if state == job.state:
@@ -957,10 +944,14 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 if max(scoring.title_similarity(n, c.title), scoring.title_similarity(n, c.original_title or "")) >= 0.9:
                     c.evidence.append(Evidence(ok=True, text=f"From the cover scan: {why[0].lower()}{why[1:]}"))
                     break
+        best = next((c for c in candidates if not c.excluded), None)
+        if self.s.label_ai == "auto" and searches and queries and not match and not hints.names \
+                and not (found and found.names) and (best is None or best.score < self.s.auto_confirm_threshold):
+            candidates = await self._films_from_label(job, facts, candidates)
         job = self.db.get_job(job_id)  # the rip task may have saved meanwhile
         job.candidates = candidates[:8]
         best = candidates[0] if candidates else None
-        if best and not best.excluded and best.score >= self.s.auto_confirm_threshold:
+        if best and not best.excluded and not best.from_ai and best.score >= self.s.auto_confirm_threshold:
             await self._settle_identity(job, best, "auto")
         else:
             if best:
@@ -972,7 +963,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         """Identify from what the user said before the scan finished (False to identify as usual)."""
         job = self.db.get_job(job_id)
         p = job.preset
-        self._presets[job.id] = job.preset = None
+        job.preset = None
         if p.media == MediaKind.tv:
             if job.mode == "backup":
                 self._event(job, "warning", f"You said this is {p.show.name}, but a full disc backup has no "
@@ -1003,13 +994,75 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 return await self.tv_propose(job_id, preset.show.key, preset.season, preset.disc_number,
                                              preset.start_episode, False)
             raise ValueError("the scan has finished, so identify the disc in Review")
-        self._presets[job_id] = job.preset = preset
+        job.preset = preset
         if preset:
             self._event(job, "info", f"You said this disc is {preset_label(preset)}: used once the scan is done")
         else:
             self._event(job, "info", "Forgot what you said this disc is, so it will be identified automatically")
         self._save(job)
         return job
+
+    async def _read_label(self, job: JobRecord, tv: bool) -> ai_label.Reading:
+        """The AI model's reading of the label (LabelError when it isn't set up or fails)."""
+        provider = self.label_provider()
+        if provider is None:
+            raise ai_label.LabelError(
+                "reading labels with an AI model is off (Settings → Identify)" if self.s.label_ai == "off" else
+                "the AI model has no connection set up (Settings → Scanner and covers)")
+        durations = [t.duration_s for t in sorted(job.titles, key=lambda t: t.index) if t.duration_s >= 5 * 60]
+        reading = await ai_label.read(provider, self.disc_facts(job), clean_bdmt_title(job.disc.name),
+                                      durations, tv)
+        if reading.titles:
+            self._event(job, "info", f"{reading.model} read the label as "
+                                     + " / ".join(f"“{t}”" for t in reading.titles) + f" ({reading.seconds:.0f} s)")
+        else:
+            self._event(job, "info", f"{reading.model} couldn't say what the label stands for")
+        return reading
+
+    async def _films_from_label(self, job: JobRecord, facts: DiscFacts, candidates: list[Candidate],
+                                reading: ai_label.Reading | None = None) -> list[Candidate]:
+        """Search for the films the AI model reads the label as, and rank every candidate
+        again with both readings."""
+        if reading is None:
+            try:
+                reading = await self._read_label(job, False)
+            except ai_label.LabelError as e:
+                self._event(job, "warning", f"The AI model couldn't read the label: {e}")
+                return candidates
+        if not reading.titles:
+            return candidates
+        got, notes = await films.search(self.s, reading.titles[:3], facts.label_year)
+        for level, note in notes:
+            self._event(job, level, note)
+        pool = [c.model_copy(deep=True) for c in candidates]
+        new = films.merge(pool, got)
+        ranked = ai_label.weigh_films(pool, facts, reading.titles, new)
+        films.cross_check(ranked)
+        return ranked
+
+    async def read_label(self, job_id: int) -> LabelReading:
+        """The button in Review: ask the AI model what the label stands for. A film disc's
+        candidates are searched for and ranked again; a TV disc's titles are for the UI
+        to search shows with."""
+        job = self.db.get_job(job_id)
+        if job is None:
+            raise ValueError("no such job")
+        if job.state != JobState.review:
+            raise ValueError("the disc isn't waiting for review")
+        tv = job.media == MediaKind.tv
+        try:
+            reading = await self._read_label(job, tv)
+        except ai_label.LabelError as e:
+            raise ValueError(f"The AI model couldn't read the label: {e}") from None
+        out = LabelReading(titles=reading.titles, kind=reading.kind, model=reading.model,
+                           seconds=round(reading.seconds, 1))
+        if not tv and reading.titles and any(n != "thediscdb" for n in providers.enabled(self.s, "movie")):
+            facts = self.disc_facts(job)
+            ranked = await self._films_from_label(job, facts, job.candidates, reading)
+            job = self.db.get_job(job_id)
+            job.candidates = out.candidates = ranked[:8]
+        self._save(job)
+        return out
 
     async def _catalogue_lookup(self, job: JobRecord) -> catalogue.Lookup | None:
         """Look a catalogue-number label ("EO51710") up on the web, when it is one."""
@@ -1263,13 +1316,14 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 self._progress(job_id, tracker.snapshot(), last_save)
 
         home = self._home(d)
-        d.rip = self._runner(d)
+        d.rip = self._runner(d, job.disc.kind)
         log_path = self.work_dir(job) / "rip.log"
+        tracks = selection.conf(self.s)  # which audio and subtitle tracks are kept
         started = time.monotonic()
         saved_ok = True
         try:
             for run_args in runs:  # one run, or one per unfinished title after a pause
-                res = await d.rip.run(run_args, home, log_path, on_line=on_line)
+                res = await d.rip.run(run_args, home, log_path, on_line=on_line, conf=tracks)
                 job = self.db.get_job(job_id)
                 if job.state == JobState.cancelled or res.cancelled or job.rip.paused:
                     return
@@ -1284,7 +1338,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 for i in late:
                     self._event(job, "rip", f"Ripping title {i}, an extra the cover scan names")
                     late_res = await d.rip.run([*args[:4], str(i), str(out_dir)], home,
-                                               self.work_dir(job) / "rip-extras.log")
+                                               self.work_dir(job) / "rip-extras.log", conf=tracks)
                     if late_res.cancelled:
                         return
                 extras = [*extras, *late]
@@ -2119,6 +2173,10 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                         "if you accept it, add this under environment: in each worker's compose.yaml "
                         "(or RIPSHELF_ACCEPT_MAKEMKV_EULA=yes in an env file) and restart it",
                 command='RIPSHELF_ACCEPT_MAKEMKV_EULA: "yes"'))
+        for msg in getattr(self.backend, "device_problems", []):
+            out.append(SetupProblem(code="drive_device", message=msg))
+        for w in self.hub.workers.values():
+            out += [SetupProblem(code="drive_device", message=f"{w.name}: {m}") for m in w.device_problems if w.online]
         if not self.s.secret("tmdb_api_key"):
             tv = [providers.label(n) for n in providers.enabled(self.s, "tv") if n in ("tvdb", "tvmaze")]
             out.append(SetupProblem(code="tmdb_key", message=(
@@ -2172,7 +2230,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         return Status(version=__version__, makemkv_version=self.makemkv_version,
                       fake_hardware=self.s.fake_hardware, problems=self.problems(),
                       review_count=self.db.count_state(JobState.review),
-                      web_search=bool((self.s.searxng_url or "").strip()))
+                      web_search=bool((self.s.searxng_url or "").strip()),
+                      label_ai=self.label_provider() is not None)
 
     def publish_status(self) -> None:
         st = self.status()

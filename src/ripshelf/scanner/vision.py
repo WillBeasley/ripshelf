@@ -288,28 +288,36 @@ class Provider:
 
     async def read(self, jpeg: bytes, prompt: str = PROMPT) -> tuple[dict, float]:
         """The model's reply (parsed JSON) and how long it took."""
+        return await self.ask(prompt, jpeg)
+
+    async def ask(self, prompt: str, jpeg: bytes | None = None, schema: dict = SCHEMA,
+                  name: str = "listing") -> tuple[dict, float]:
+        """The model's reply to ``prompt`` (and the picture, if any) as JSON in ``schema``,
+        and how long it took. Without a picture, any chat model will do."""
         if not self.model:
             raise VisionError("no model is set")
         started = time.monotonic()
         if self.kind == "anthropic":
-            out = await self._anthropic(jpeg, prompt)
+            out = await self._anthropic(jpeg, prompt, schema)
         else:
-            out = await self._openai(jpeg, prompt)
+            out = await self._openai(jpeg, prompt, schema, name)
         return out, time.monotonic() - started
 
-    async def _openai(self, jpeg: bytes, prompt: str) -> dict:
+    async def _openai(self, jpeg: bytes | None, prompt: str, schema: dict, name: str) -> dict:
         if not self.url:
             raise VisionError("no address is set")
         base = self.url.rstrip("/")
         if not base.endswith("/v1"):
             base += "/v1"
+        content: str | list = prompt
+        if jpeg is not None:
+            content = [{"type": "text", "text": prompt},
+                       {"type": "image_url", "image_url": {
+                           "url": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()}}]
         body = {"model": self.model, "temperature": 0, "max_tokens": MAX_TOKENS,
-                "messages": [{"role": "user", "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {
-                        "url": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()}}]}],
+                "messages": [{"role": "user", "content": content}],
                 "response_format": {"type": "json_schema",
-                                    "json_schema": {"name": "listing", "strict": True, "schema": SCHEMA}}}
+                                    "json_schema": {"name": name, "strict": True, "schema": schema}}}
         headers = {"Authorization": f"Bearer {self.key}"} if self.key else {}
         try:
             async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as c:
@@ -334,7 +342,7 @@ class Provider:
                               "instruct one)")
         return _json(text)
 
-    async def _anthropic(self, jpeg: bytes, prompt: str) -> dict:
+    async def _anthropic(self, jpeg: bytes | None, prompt: str, schema: dict) -> dict:
         import anthropic
 
         kw = {"api_key": self.key, "timeout": self.timeout, "max_retries": 1}
@@ -343,14 +351,15 @@ class Provider:
         if self.transport is not None:
             kw["http_client"] = anthropic.DefaultAsyncHttpxClient(transport=self.transport)
         client = anthropic.AsyncAnthropic(**kw)
+        content: list[dict] = [{"type": "text", "text": prompt}]
+        if jpeg is not None:
+            content.insert(0, {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                           "data": base64.b64encode(jpeg).decode()}})
         try:
             response = await client.messages.create(
                 model=self.model, max_tokens=MAX_TOKENS,
-                output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
-                messages=[{"role": "user", "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
-                                                 "data": base64.b64encode(jpeg).decode()}},
-                    {"type": "text", "text": prompt}]}])
+                output_config={"format": {"type": "json_schema", "schema": schema}},
+                messages=[{"role": "user", "content": content}])
         except anthropic.AuthenticationError:
             raise VisionError("Anthropic refused the key") from None
         except anthropic.NotFoundError:
@@ -366,7 +375,7 @@ class Provider:
         finally:
             await client.close()
         if response.stop_reason == "refusal":
-            raise VisionError("the model declined to read the picture")
+            raise VisionError("the model declined to answer")
         if response.stop_reason == "max_tokens":
             raise VisionError("the model ran out of room before finishing")
         text = next((b.text for b in response.content if b.type == "text"), "")

@@ -4,7 +4,7 @@
 # The base images are pinned by digest, so a rebuild gets the same Debian and Python;
 # Dependabot opens a pull request when a newer one is published (.github/dependabot.yml).
 
-FROM docker.io/library/node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS web
+FROM docker.io/library/node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
@@ -17,7 +17,7 @@ RUN npx svelte-kit sync && npm run build
 # which may not be combined with MakeMKV's proprietary makemkvcon, so it gets its
 # own LGPL build (no --enable-gpl, no external libraries), linked in statically.
 # Debian's ffmpeg program stays for transcoding, as a separate program.
-FROM docker.io/library/python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS ffmpeg-lgpl
+FROM docker.io/library/python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9 AS ffmpeg-lgpl
 ARG FFMPEG_VERSION=7.1.5
 ARG FFMPEG_SHA256=de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f
 RUN apt-get update \
@@ -35,7 +35,7 @@ RUN apt-get update \
  && make -j"$(nproc)" && make install \
  && mkdir -p /opt/sources && mv /build/ffmpeg-${FFMPEG_VERSION}.tar.xz /opt/sources/
 
-FROM docker.io/library/python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
+FROM docker.io/library/python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9
 
 ARG MAKEMKV_VERSION=2.0.0
 # Releases other than the newest live under /download/old (pass --build-arg for them).

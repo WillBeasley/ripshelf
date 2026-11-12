@@ -19,6 +19,7 @@ Start with [Installation](installation.md).
 | [Contributing to TheDiscDB](thediscdb-contributing.md) | sending discs you confirmed back to TheDiscDB (opt-in), what is sent and what never is |
 | [TV discs in one title](tv-splitting.md) | discs with every episode in one long title: how they're cut into episodes, and reviewing the cuts |
 | [Cover scans](cover-scans.md) | scanning or photographing the box from a job: a network scanner (eSCL), uploads and phone photos, TheDiscDB covers, and copies in the library |
+| [Cryptic labels](cryptic-labels.md) | reading labels such as `BTTF2` with an AI model (local or cloud), which only ever sees what the disc says |
 | [Catalogue numbers](catalogue.md) | looking up labels that are a publisher's catalogue number, via a self-hosted SearXNG web search |
 
 ## Ripping and running
