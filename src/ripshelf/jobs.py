@@ -93,6 +93,7 @@ from .readjobs import ReadingMixin
 from .refilejobs import RefileMixin
 from .scanjobs import ScansMixin
 from .scratchjobs import ScratchMixin
+from .shelf import ShelfMixin
 from .transcodejobs import TranscodeMixin
 from .tv import naming, verify
 from .tvjobs import TvMixin
@@ -161,7 +162,7 @@ class DriveRuntime:
 
 
 class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin, MatchMixin, VisionMixin, PendingMixin, ShowFromScanMixin,
-              RefileMixin, ScratchMixin):
+              RefileMixin, ScratchMixin, ShelfMixin):
     def __init__(self, settings: Settings, db: Database, backend: DriveBackend, bus: EventBus):
         self.s = settings
         self.db = db
@@ -182,6 +183,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         self._init_reading()
         self._init_vision()
         self._init_pending()
+        self._init_shelf()
         self._show_tasks: dict[int, asyncio.Task] = {}
         self._driveless_tasks: set[asyncio.Task] = set()
         self.support = SupportFiles(settings.makemkv_files_dir)
@@ -212,6 +214,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                            for d in self.drives.values()) or "none")
         self._poller = asyncio.create_task(self._poll_loop())
         self._backups = asyncio.create_task(self._backup_loop())
+        self.read_shelf()  # covers added before a restart, not read yet
 
     async def stop(self) -> None:
         self.notifier.cancel()
@@ -224,7 +227,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             self._scanner_task.cancel()
             tasks.append(self._scanner_task)
         for t in [*self._read_tasks.values(), *self._vision_tasks.values(), *self._show_tasks.values(),
-                  *self._driveless_tasks]:
+                  *self._driveless_tasks, *(t for t in (self._shelf_task, self._stack_task) if t)]:
             t.cancel()
             tasks.append(t)
         for d in self.drives.values():

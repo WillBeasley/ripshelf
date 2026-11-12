@@ -36,6 +36,7 @@ Installed with pip from PyPI, unmodified. All are permissive.
 | python-multipart, opentelemetry-api | Apache-2.0 |
 | certifi | MPL-2.0 (unmodified) |
 | typing-extensions | PSF-2.0 |
+| pypdfium2 (with the PDFium library it bundles, to read PDF uploads on the covers shelf) | Apache-2.0 and BSD-3-Clause; PDFium's own third-party licences are in the wheel's `licenses/` folder |
 
 ### Web UI
 
