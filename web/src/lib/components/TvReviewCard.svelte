@@ -8,6 +8,7 @@
 	import Evidence from './Evidence.svelte';
 	import CoverScans from './CoverScans.svelte';
 	import EpisodePicker from './EpisodePicker.svelte';
+	import LabelReader from './LabelReader.svelte';
 	import Poster from './Poster.svelte';
 	import RefileBanner from './RefileBanner.svelte';
 	import Snapshots from './Snapshots.svelte';
@@ -293,6 +294,7 @@
 				<p class="small muted">No show picked yet. Search for it below, search the web for the label, or eject the disc to look at it.</p>
 				<WebSearch {job} onUse={useName} useLabel="Search shows for" />
 			{/if}
+			{#if !job.refile}<LabelReader {job} onUse={useName} useLabel="Search shows for" />{/if}
 			{#if job.media_evidence.length && !job.refile}<p class="small muted">{job.media_evidence.slice(0, 3).join(' · ')}</p>{/if}
 			{#if plan?.candidates?.length && plan.candidates.length > 1}
 				<p class="small muted">Other shows ({plan.candidates.length - 1})</p>

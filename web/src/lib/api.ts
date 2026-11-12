@@ -6,6 +6,7 @@ import type {
 	ContributionExtra,
 	ContributionView,
 	CoverScan,
+	LabelReading,
 	Listing,
 	ListingView,
 	PendingScan,
@@ -101,6 +102,7 @@ export const api = {
 	search: (id: number, query: string, year: number | null) =>
 		call<Candidate[]>('POST', `/jobs/${id}/search`, { query, year }),
 	webSearch: (query: string) => call<WebResult[]>('POST', '/web-search', { query }),
+	readLabel: (id: number) => call<LabelReading>('POST', `/jobs/${id}/read-label`),
 	snapshots: (id: number) => call<Snapshots>('GET', `/jobs/${id}/snapshots`),
 	snapshotUrl: (id: number, title: number, frame: number) => `/api/jobs/${id}/snapshots/${title}/${frame}.jpg`,
 	retry: (id: number) => call<Job>('POST', `/jobs/${id}/retry`),

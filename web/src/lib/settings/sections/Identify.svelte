@@ -106,6 +106,33 @@
 	<TestButton check="catalogue" values={form.body} label="Test (looks up EO51710)" />
 </section>
 
+<section class="card stack" aria-labelledby="label-ai">
+	<h2 id="label-ai">Cryptic labels</h2>
+	<Field {form} name="label_ai">
+		{#snippet more()}
+			The model expands the label into a few likely titles, which are searched for and scored as usual; the runtime
+			still has to fit. A match only its reading supports always waits for review. Nothing the searches return is
+			sent to it.
+		{/snippet}
+	</Field>
+	{#if f.label_ai !== 'off'}
+		<p class="small muted">
+			It uses the vision model's connection in
+			<a href="/settings/scanner#setting-vision_provider">Settings → Scanner and covers</a>{f.vision_provider !== 'local'
+				? ', so labels are sent to that service, outside your network'
+				: ''}.
+		</p>
+		<Advanced>
+			<Field {form} name="label_ai_model">
+				{#snippet more()}
+					A small text model is enough: qwen2.5:3b reads most labels in a few seconds on a CPU.
+				{/snippet}
+			</Field>
+		</Advanced>
+		<TestButton check="label_ai" values={form.body} label="Test (reads BTTF2)" />
+	{/if}
+</section>
+
 <section class="card stack" aria-labelledby="contribute">
 	<h2 id="contribute">Contribute to TheDiscDB</h2>
 	<Field {form} name="thediscdb_contribute"
