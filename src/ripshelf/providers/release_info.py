@@ -292,30 +292,45 @@ def sniff(data: bytes) -> str | None:
     return None
 
 
-def _public_host(host: str) -> bool:
-    """The host resolves only to public addresses, so a product picture's address can't
-    be used to reach something on the LAN."""
+def _public_address(host: str, port: int = 443) -> str | None:
+    """An address for the host, if it resolves only to public addresses (so a product
+    picture's address can't be used to reach something on the LAN), else None."""
     try:
-        infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except OSError:
-        return False
-    addrs = {ipaddress.ip_address(i[4][0]) for i in infos}
-    return bool(addrs) and all(a.is_global for a in addrs)
+        return None
+    addrs = [ipaddress.ip_address(i[4][0]) for i in infos]
+    if not addrs or not all(a.is_global for a in addrs):
+        return None
+    return str(addrs[0])
 
 
 async def download_cover(url: str, client: httpx.AsyncClient | None = None,
-                         public_host=_public_host) -> Picture:
+                         public_address=_public_address) -> Picture:
     """A product picture, for use as a cover. Only https addresses on public hosts, no
-    redirects, at most 20 MB, and only JPEG, PNG or WebP (checked from the bytes)."""
+    redirects, at most 20 MB, and only JPEG, PNG or WebP (checked from the bytes).
+
+    The connection goes to the address that was checked, not to a second lookup of the
+    name, so a host that answers with a public address and then a private one (DNS
+    rebinding) can't slip past the check. TLS is still checked against the name."""
     parts = urlsplit(url)
     if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
         raise ReleaseLookupError("only https picture addresses can be used")
-    if not public_host(parts.hostname):
+    addr = public_address(parts.hostname, parts.port or 443)
+    if not addr:
         raise ReleaseLookupError("that picture's address isn't on the public internet")
+    ip = ipaddress.ip_address(addr)
+    netloc = f"[{ip}]" if ip.version == 6 else str(ip)
+    if parts.port:
+        netloc += f":{parts.port}"
+    pinned = parts._replace(netloc=netloc).geturl()
+    named = httpx.URL(url)  # the name as it goes on the wire (IDNA), for Host and SNI
+    headers = {"User-Agent": f"ripshelf/{__version__}", "Host": named.netloc.decode("ascii")}
     own = client is None
     client = client or httpx.AsyncClient(timeout=TIMEOUT_S, follow_redirects=False)
     try:
-        async with client.stream("GET", url, headers={"User-Agent": f"ripshelf/{__version__}"}) as r:
+        async with client.stream("GET", pinned, headers=headers,
+                                 extensions={"sni_hostname": named.raw_host.decode("ascii")}) as r:
             if r.is_redirect:
                 raise ReleaseLookupError("the picture's address redirects elsewhere")
             if r.status_code >= 400:
