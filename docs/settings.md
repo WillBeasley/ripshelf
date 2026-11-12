@@ -7,7 +7,7 @@ Most settings are changed on the Settings page. A fresh install opens a short se
 - **Secrets.** Keys and tokens are stored, but never sent back to the browser. Clear removes one when you save.
 - **Outside a container,** folders that aren't set are next to ripshelf (the source checkout). These are `data/`, `scratch/`, `library/` and the env file `ripshelf.env`. You can change them in Settings. A checkout that already has state in `var/` keeps using it.
 - **Environment.** Any setting can also be set as an environment variable. The name is `RIPSHELF_` followed by the setting's name in capitals. Put it in the `environment:` section of compose.yaml, or in `/data/ripshelf.env`.
-- **Test buttons.** Each connection (TMDB, TheTVDB, OMDb, TheDiscDB, TVmaze, MakeMKV key, Pushover, Emby, Jellyfin, Plex, the scanner, text reading, the vision model) and the folders have a Test button. It tries the values as typed, without saving them.
+- **Test buttons.** Each connection (TMDB, TheTVDB, OMDb, TheDiscDB, TVmaze, MakeMKV key, Pushover, Emby, Jellyfin, Plex, the scanner, text reading, the vision model, the label model) and the folders have a Test button. It tries the values as typed, without saving them.
 
 ## The Settings page
 
@@ -15,7 +15,7 @@ Settings has nine sections, each at its own address (`/settings/identify` and so
 
 | Section | What's in it |
 |---|---|
-| **Identify** | the metadata providers and their order, the TMDB, TheTVDB and OMDb keys, when a match is confirmed without review, web search (SearXNG and catalogue numbers), contributing to TheDiscDB |
+| **Identify** | the metadata providers and their order, the TMDB, TheTVDB and OMDb keys, when a match is confirmed without review, web search (SearXNG and catalogue numbers), reading cryptic labels with an AI model, contributing to TheDiscDB |
 | **Drives and ripping** | the MakeMKV key, what to rip, ejecting, [which audio and subtitle tracks are kept](#which-audio-and-subtitle-tracks-are-kept), each drive (grouped by the machine it's on), MakeMKV private data. Advanced: scan time limits, the poll interval, UHD drive models, MakeMKV's own selection rule |
 | **Scanner and covers** | the network scanner, reading the box (Tesseract and a vision model), copying scans to the library. Advanced: text languages |
 | **Library and filing** | the library, films and TV folders, how TV extras and the extras a box names are filed. Advanced: the scratch and disc backups folders |
@@ -95,6 +95,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_TV_EPISODE_ORDER` | `tvdb_aired` | an old setting, not on the Settings page. It's only read, from the environment or an old settings.json, to set up the provider lists and TheTVDB's episode order for an install that has neither yet. `tmdb` puts TMDB first for episodes, and `tvdb_dvd` means DVD order |
 | `RIPSHELF_AUTO_CONFIRM_THRESHOLD` | 0.90 | films |
 | `RIPSHELF_TV_AUTO_CONFIRM` / `TV_AUTO_THRESHOLD` | on / 0.90 | TV |
+| `RIPSHELF_LABEL_AI` / `LABEL_AI_MODEL` | `off` / none | read cryptic labels with an AI model: `off`, `manual` (a button in Review) or `auto` (also when nothing found fits); the model, on the vision model's connection (blank uses the vision model) ([cryptic-labels.md](cryptic-labels.md)) |
 | `RIPSHELF_VERIFY_ORDER` | on | check a TV disc's episode order against its play-all title after ripping (Settings → Identify) |
 | `RIPSHELF_SCANNER_ENABLED` / `SCANNER_URL` | off / none | a network scanner (eSCL, AirScan) for scanning a disc's box, as `http://printer/eSCL` ([cover-scans.md](cover-scans.md)) |
 | `RIPSHELF_SCANNER_DPI` / `SCANNER_SOURCE` | 300 / `platen` | the scan's resolution, and `platen` (the glass) or `feeder` |
