@@ -80,14 +80,26 @@ class VisionMixin:
 
     def vision_provider(self) -> vision.Provider | None:
         """The provider set up in Settings, or None when it's off or not set up."""
+        if self.s.vision_mode == "off":
+            return None
+        return self._model_provider(self.s.vision_model)
+
+    def label_provider(self) -> vision.Provider | None:
+        """The model that reads cryptic labels: the vision model's connection, with the
+        label model if one is set. None when it's off or not set up."""
+        if self.s.label_ai == "off":
+            return None
+        return self._model_provider((self.s.label_ai_model or "").strip() or self.s.vision_model)
+
+    def _model_provider(self, model: str | None) -> vision.Provider | None:
         s = self.s
-        if s.vision_mode == "off" or not s.vision_model or (s.vision_provider != "anthropic" and not s.vision_url):
+        if not model or (s.vision_provider != "anthropic" and not s.vision_url):
             return None
         # Anthropic's API has its own address: an address left from a local model (the
         # Settings page hides it for Anthropic) would send the request there, as the Test
         # button doesn't.
         url = None if s.vision_provider == "anthropic" else s.vision_url
-        return vision.Provider(kind=s.vision_provider, url=url, model=s.vision_model,
+        return vision.Provider(kind=s.vision_provider, url=url, model=model,
                                key=s.secret("vision_api_key"), transport=self.vision_transport)
 
     def _vision_path(self, job: JobRecord, scan_id: str) -> Path:
