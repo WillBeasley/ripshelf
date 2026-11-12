@@ -14,7 +14,7 @@ from ripshelf.dev.fake import FakeDrives
 from ripshelf.jobs import Manager
 from ripshelf.models import Candidate, JobState
 
-from .conftest import until
+from .conftest import insert, until
 
 
 async def run_manager(settings: Settings, present: set[str]):
@@ -59,7 +59,7 @@ async def test_same_disc_again_is_recognised_from_cache(settings: Settings):
         await until(lambda: db.get_job(job.id).state == JobState.done)
         # Remove the first copy so the second can land, then insert the disc again.
         Path(db.get_job(job.id).destination).unlink()
-        backend.insert("/dev/fake-sr1")
+        await insert(m, backend, "/dev/fake-sr1")
         second = await until(lambda: next((j for j in db.list_jobs() if j.id != job.id), None))
         second = await until(lambda: (j := db.get_job(second.id)) and j.state == JobState.done and j)
         assert second.identity_source == "cache"

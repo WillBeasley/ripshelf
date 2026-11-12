@@ -121,7 +121,7 @@ async def test_search_identify_again_and_cache(harness, keyed):
             # Remembered, so the same disc again is recognised without TMDB.
             Path(done.destination).unlink()
             router.get(f"{API}/search/movie").mock(side_effect=AssertionError("TMDB not needed"))
-            h.backend.insert(PM)
+            await h.insert(PM)
             second = await until(lambda: next((j for j in h.db.list_jobs() if j.id != job.id
                                                and j.state == JobState.done), None))
             assert second.identity_source == "cache"
