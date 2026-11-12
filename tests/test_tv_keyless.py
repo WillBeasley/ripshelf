@@ -219,6 +219,139 @@ async def test_disc_match_show_without_tmdb():
     assert (tvdb.key, tvdb.name, tvdb.year) == ("tvdb:270001", "Pippa & Goose", 2013)
 
 
+def test_tvmaze_show_with_gaps():
+    s = keyless.tvmaze_show({"id": 7, "name": "  ", "premiered": None, "averageRuntime": None, "runtime": 22,
+                             "weight": "high", "image": "not a dict", "type": "Talk Show"})
+    assert (s.name, s.year, s.episode_runtime, s.vote_count, s.poster_url) == ("?", None, 22, None, None)
+    assert s.genre_ids == [keyless.TALK], "kept apart from the show it is about"
+
+
+def test_tvdb_show_with_gaps():
+    s = keyless.tvdb_show({"tvdb_id": "270001", "name": "Pippa & Goose", "first_air_time": "2013-02-18",
+                           "thumbnail": "http://insecure.example/p.jpg", "genres": ["Documentary"],
+                           "translations": {"spa": "Pipa y Ganso"}, "remote_ids": [{"id": "EP0001"}, "junk"]})
+    assert (s.name, s.original_name, s.year, s.imdb_id, s.poster_url) == (
+        "Pippa & Goose", None, 2013, None, None), "no English translation, no https poster, no IMDb id"
+    assert s.genre_ids == [keyless.DOCUMENTARY]
+    assert keyless.tvdb_show({"id": "series-9", "translations": "eng"}).name == "?"
+
+
+class FakeTvdb:
+    language = "eng"
+
+    def __init__(self, results=None, fail=False, episodes=None):
+        self.results, self.fail, self.queries = results or {}, fail, []
+        self.episode_lists = episodes or {}
+        self.asked: list[tuple] = []
+
+    async def search_series(self, q):
+        self.queries.append(q)
+        if self.fail:
+            raise keyless.TvdbError("401 Unauthorized")
+        return self.results.get(q, [])
+
+    async def episodes(self, series, season, order):
+        self.asked.append((series, season, order))
+        return self.episode_lists.get(order, [])
+
+    async def all_episodes(self, series, order):
+        self.asked.append((series, order))
+        return ["every episode"]
+
+
+class FakeMaze:
+    def __init__(self, results=None, fail=False, found=None):
+        self.results, self.fail, self.found, self.queries = results or {}, fail, found, []
+
+    async def search(self, q):
+        self.queries.append(q)
+        if self.fail:
+            raise keyless.TvmazeError("TVmaze is down")
+        return self.results.get(q, [])
+
+    async def lookup(self, tvdb_id, imdb_id):
+        if self.fail:
+            raise keyless.TvmazeError("TVmaze is down")
+        return self.found
+
+    async def episodes(self, show_id, season):
+        return [f"{show_id} s{season}"]
+
+    async def all_episodes(self, show_id):
+        return [f"all of {show_id}"]
+
+
+async def test_find_shows_moves_on_when_a_provider_fails(caplog):
+    tvdb = FakeTvdb(fail=True)
+    maze = FakeMaze({"Pippa & Goose": [PIPPA]})
+    shows = await keyless.find_shows("Pippa & Goose", None, sources=["tvdb", "tvmaze"], tvdb=tvdb, tvmaze=maze)
+    assert [s.key for s in shows] == [f"tvmaze:{MAZE_ID}"]
+    assert "TheTVDB search for 'Pippa & Goose' failed: 401 Unauthorized" in caplog.text
+
+
+async def test_find_shows_tries_a_shorter_name_and_keeps_one_of_each():
+    """A compilation's label adds an episode name; the show is found by a shorter name,
+    and a show listed twice is kept once."""
+    maze = FakeMaze({"Pippa & Goose": [PIPPA, PIPPA_DOC, PIPPA]})
+    shows = await keyless.find_shows("Pippa & Goose Kite Tram", None, sources=["tvmaze"], tvmaze=maze)
+    assert maze.queries == ["Pippa & Goose Kite Tram", "Pippa & Goose Kite"], "two names at most"
+    assert shows == []
+    maze.results["Pippa & Goose Kite"] = [PIPPA, PIPPA_DOC, PIPPA]
+    shows = await keyless.find_shows("Pippa & Goose Kite Tram", None, sources=["tvmaze"], tvmaze=maze)
+    assert sorted(s.key for s in shows) == [f"tvmaze:{MAZE_ID}", "tvmaze:5502"]
+
+
+async def test_find_shows_skips_a_provider_without_a_client():
+    tvdb = FakeTvdb({"Pippa & Goose": [{"tvdb_id": "270001", "name": "Pippa & Goose", "year": "2013"},
+                                       {"name": "no id, so left out"}]})
+    assert await keyless.find_shows("Pippa & Goose", None, sources=["tvmaze"], tvdb=tvdb) == []
+    shows = await keyless.find_shows("Pippa & Goose", None, year=2013, tvdb=tvdb)
+    assert [s.key for s in shows] == ["tvdb:270001"]
+    assert any(e.text == "First aired 2013" for e in shows[0].evidence)
+
+
+async def test_disc_match_show_falls_through_the_providers(caplog):
+    match = DiscMatch(media=MediaKind.tv, title="Pippa & Goose", year=2013, tvdb_id=270001, imdb_id="tt9000001")
+    down = FakeMaze(fail=True)
+    show = await keyless.disc_match_show(match, ["tvmaze", "tvdb"], down)
+    assert show.key == "tvdb:270001" and "TVmaze lookup of Pippa & Goose failed" in caplog.text
+    unknown = FakeMaze(found=None)
+    assert (await keyless.disc_match_show(match, ["tvmaze", "tvdb"], unknown)).key == "tvdb:270001"
+    assert await keyless.disc_match_show(match, ["tvmaze"], unknown) is None
+    no_ids = DiscMatch(media=MediaKind.tv, title="Pippa & Goose")
+    assert await keyless.disc_match_show(no_ids, ["tvmaze", "tvdb"], FakeMaze(found=PIPPA)) is None
+
+
+async def test_season_episodes_come_from_the_shows_own_provider():
+    maze_show, tvdb_show = keyless.tvmaze_show(PIPPA), Show(source="tvdb", tvdb_id=270001, name="Pippa & Goose")
+    assert await keyless.season_episodes(maze_show, 2, None, FakeMaze()) == ([f"{MAZE_ID} s2"], "aired order")
+    with pytest.raises(keyless.TvmazeError, match="off"):
+        await keyless.season_episodes(maze_show, 2, FakeTvdb(), None)
+    with pytest.raises(keyless.TvdbError, match="no TheTVDB key"):
+        await keyless.season_episodes(tvdb_show, 2, None, FakeMaze())
+
+    tvdb = FakeTvdb(episodes={"dvd": ["dvd ep"], "default": ["aired ep"]})
+    assert await keyless.season_episodes(tvdb_show, 1, tvdb, None, dvd=True) == (["dvd ep"], "DVD order")
+    assert await keyless.season_episodes(tvdb_show, 1, tvdb, None) == (["aired ep"], "aired order")
+    no_dvd = FakeTvdb(episodes={"default": ["aired ep"]})
+    assert await keyless.season_episodes(tvdb_show, 1, no_dvd, None, dvd=True) == (
+        ["aired ep"], "aired order (no DVD order)")
+    assert no_dvd.asked == [(270001, 1, "dvd"), (270001, 1, "default")]
+
+
+async def test_all_episodes_come_from_the_shows_own_provider():
+    maze_show, tvdb_show = keyless.tvmaze_show(PIPPA), Show(source="tvdb", tvdb_id=270001, name="Pippa & Goose")
+    assert await keyless.all_episodes(maze_show, None, FakeMaze()) == [f"all of {MAZE_ID}"]
+    with pytest.raises(keyless.TvmazeError):
+        await keyless.all_episodes(maze_show, FakeTvdb(), None)
+    with pytest.raises(keyless.TvdbError):
+        await keyless.all_episodes(tvdb_show, None, FakeMaze())
+    tvdb = FakeTvdb()
+    await keyless.all_episodes(tvdb_show, tvdb, None, dvd=True)
+    await keyless.all_episodes(tvdb_show, tvdb, None)
+    assert tvdb.asked == [(270001, "dvd"), (270001, "default")]
+
+
 # --- the pipeline, end to end -------------------------------------------------------------------
 
 
