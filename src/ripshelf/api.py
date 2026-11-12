@@ -123,6 +123,19 @@ def bad_request(e: Exception) -> HTTPException:
 api = APIRouter(prefix="/api")
 
 
+@api.get("/health", include_in_schema=False)
+async def get_health(request: Request):
+    """For container healthchecks: 200 while the server answers and the database reads,
+    503 once shutdown has started or the database fails."""
+    if request.app.state.closing.is_set():
+        raise HTTPException(status_code=503, detail="shutting down")
+    try:
+        await asyncio.to_thread(manager(request).db.conn.execute, "SELECT 1")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"database: {e}") from e
+    return {"status": "ok"}
+
+
 @api.get("/status", response_model=Status)
 async def get_status(request: Request):
     return manager(request).status()

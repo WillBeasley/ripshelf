@@ -30,6 +30,8 @@ By default films go to `./movies` and TV to `./tv` next to the compose file. To 
 
 There's no login on the UI, so keep it on your LAN or VPN. It does refuse changes sent by web pages on other sites, and answers only to the names a LAN uses, so a page open in your browser can't use it behind your back. If you open it by a public name (through a reverse proxy, or a Tailscale name), set that address in Settings → System or add the name to `RIPSHELF_ALLOWED_HOSTS` ([settings.md](settings.md#settings-that-arent-on-the-settings-page)).
 
+The compose files have a healthcheck, so `docker compose ps` shows the controller as `healthy` once it answers and its database opens. It asks `GET /api/health` (200, or 503 while shutting down or when the database fails), which monitoring tools such as Uptime Kuma can use too. In `compose.per-drive.yaml` the drive workers wait for it.
+
 ## First-run configuration
 
 Everything is in Settings, and anything still missing shows as a yellow Setup box on the Overview page. Each connection has a Test button that tries the values as typed.

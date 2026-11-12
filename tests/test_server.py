@@ -69,3 +69,17 @@ def test_ui_is_served(server):
     ]:
         r = httpx.get(f"{server}/{path}")
         assert r.status_code == 200 and r.headers["content-type"].startswith(kind), path
+
+
+def test_access_log_leaves_out_passing_health_probes():
+    import logging
+
+    from ripshelf.main import QuietHealth
+
+    def record(path, status):
+        return logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
+                                 ("127.0.0.1:5000", "GET", path, "1.1", status), None)
+
+    f = QuietHealth()
+    assert not f.filter(record("/api/health", 200))
+    assert f.filter(record("/api/health", 503)) and f.filter(record("/api/status", 200))
