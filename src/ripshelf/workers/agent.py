@@ -456,9 +456,12 @@ class Agent:
                     yield chunk
 
         # A new body each try, because an upload cut off part-way starts again (the controller drops
-        # the partial file). The write timeout notices a connection that died silently.
+        # the partial file). The write timeout notices a connection that died silently. The length
+        # goes first so the controller can refuse a file over its limit before any of it is sent.
+        size = path.stat().st_size
         r = await self._retrying(lambda: self.client.put(
             f"{self.api}/runs/{run_id}/files/{path.name}", content=body(),
+            headers={"Content-Length": str(size)},
             timeout=httpx.Timeout(None, connect=10, write=120)), f"uploading {path.name}", run_id)
         self._check_run(r, run_id)
 
