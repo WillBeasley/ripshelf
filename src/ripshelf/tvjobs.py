@@ -1192,7 +1192,7 @@ class TvMixin:
         self._refiling(job, f"become {'a TV disc' if media == MediaKind.tv else 'a film'}")
         if job.mode == "backup":
             raise ValueError("a full disc backup keeps the whole disc, so it has no episodes to map")
-        d = self.drives[job.drive_id]
+        d = self.drives.get(job.drive_id)
         job.media = media
         job.identity = job.identity_source = job.destination = None
         self._event(job, "info", f"Marked as {'a TV disc' if media == MediaKind.tv else 'a film'}")
@@ -1252,13 +1252,13 @@ class TvMixin:
 
     async def _rerip_all(self, job: JobRecord, d) -> None:
         """Rip every title (the first rip only took the main one)."""
-        if d.rip:
+        if d and d.rip:
             d.rip.cancel()
             for _ in range(100):
                 if d.rip is None:
                     break
                 await asyncio.sleep(0.1)
-        if await self._drive_status(d) != "disc":
+        if not d or await self._drive_status(d) != "disc":
             job.rip.state = RipState.done if job.rip.file else job.rip.state
             self._event(job, "warning", "Put the disc back in to rip the episodes")
             self._save(job)
