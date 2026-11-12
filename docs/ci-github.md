@@ -3,7 +3,7 @@
 Run the tests and publish multi-arch images to GHCR with GitHub Actions.
 
 There are two workflows in `.github/workflows/`:
-- **`test.yml`** runs on pushes to `main`, on `v*` tags and on pull requests. It runs ruff, pytest (12 at a time, with pytest-xdist) and svelte-check, with Node 22. It runs in the image's base, `python:3.12-slim-bookworm`, so the tests use the same Python and the same Debian ffmpeg the image transcodes with, and pytest runs as a normal user so the file-permission tests aren't skipped. Changes only to `docs/` or Markdown files don't start it, and a newer push to the same branch or pull request cancels a run still going. Run it by hand from Actions → test → Run workflow.
+- **`test.yml`** runs on pushes to `main`, on `v*` tags and on pull requests. It runs ruff, pytest (12 at a time, with pytest-xdist) and svelte-check, with Node 22. It runs in the image's base, `python:3.12-slim-bookworm`, so the tests use the same Python and the same Debian ffmpeg the image transcodes with, and pytest runs as a normal user so the file-permission tests aren't skipped. Changes only to `docs/` or Markdown files don't start it, and a newer push to the same branch or pull request cancels a run still going. A second job, `ui`, runs the UI's unit tests and its browser tests (Playwright, Chromium) against the backend on the simulated drives, directly on the Ubuntu runner, and keeps the Playwright report when they fail. Run it by hand from Actions → test → Run workflow.
 - **`images.yml`** builds the image for `linux/amd64` and `linux/arm64` and pushes it to the GitHub Container Registry as `ghcr.io/willbeasley/ripshelf`. It runs only for release tags, so pushes to `main` and pull requests build no image. The tags are:
 
   | Event | Tags |
@@ -30,7 +30,7 @@ There's nothing to configure. The workflow logs in with the job's own `GITHUB_TO
 
 ## Releasing
 
-1. Make sure `main` is what you want to ship and the tests pass: `ruff check src tests && pytest -q`, and `npm run check` in `web/`.
+1. Make sure `main` is what you want to ship and the tests pass: `ruff check src tests && pytest -q`, and `npm run check && npm test && npm run test:e2e` in `web/`.
 2. Pick the version. While it's `0.x`, raise the minor (`0.3.0` → `0.4.0`) for new features or anything that changes settings or the database, and the patch (`0.4.0` → `0.4.1`) for fixes only.
 3. Set it in three places, `version` in `pyproject.toml`, `__version__` in `src/ripshelf/__init__.py` and the release badge at the top of `README.md` (its text and link), and commit: `git commit -am "release 0.4.0"`.
 4. Tag that commit and push both. An annotated tag carries a message and, with signing set up, a signature:

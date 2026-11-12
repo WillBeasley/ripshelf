@@ -1,7 +1,7 @@
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 // `npm run dev` proxies the API to a running backend (default the fake-hardware port).
 const backend = process.env.RIPSHELF_BACKEND ?? 'http://127.0.0.1:8381';
@@ -14,5 +14,9 @@ export default defineConfig({
 			adapter: adapter({ fallback: 'index.html' })
 		})
 	],
-	server: { proxy: { '/api': { target: backend, changeOrigin: true } } }
+	server: { proxy: { '/api': { target: backend, changeOrigin: true } } },
+	// `npm test`: the UI's logic, without a browser. The browser tests are test/e2e (Playwright).
+	test: { include: ['test/unit/**/*.test.ts'] },
+	// Svelte's browser build in tests, so $state and $derived react as they do in the page.
+	resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined
 });

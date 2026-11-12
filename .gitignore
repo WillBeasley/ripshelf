@@ -26,6 +26,9 @@ htmlcov/
 web/node_modules/
 web/.svelte-kit/
 web/build/
+web/test/e2e/.state/
+web/test-results/
+web/playwright-report/
 src/ripshelf/static/
 
 # Local tooling
