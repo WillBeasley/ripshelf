@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from . import __version__, art, discfs, integrations, library, providers, snapshots
+from . import __version__, art, backups, discfs, integrations, library, providers, snapshots
 from .bus import EventBus
 from .config import EULA_PENDING, Settings
 from .contributejobs import ContributeMixin
@@ -303,14 +303,20 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         return None
 
     def backup_now(self) -> Path | None:
-        """Write today's database backup and prune old ones. Returns the file."""
+        """Write today's database backup, and the settings and MakeMKV files beside it
+        (backups.py), and prune old ones. Returns the database file."""
         if self.s.backup_keep <= 0 or self.backup_problem():
             return None
-        folder = self.s.backups
-        dest = folder / f"ripshelf-{now().strftime('%Y-%m-%d')}.db"
+        folder, date = self.s.backups, now().strftime('%Y-%m-%d')
+        dest = folder / f"ripshelf-{date}.db"
         self.db.backup(dest)
-        for old in sorted(folder.glob("ripshelf-*.db"))[:-self.s.backup_keep]:
-            old.unlink(missing_ok=True)
+        try:
+            backups.write_files(self.s, folder / backups.files_name(date))
+        except OSError as e:  # e.g. MakeMKV rewrote a file mid-read; the database copy still counts
+            log.warning("could not back up the settings and MakeMKV files: %s", e)
+        for pattern in ("ripshelf-*.db", backups.FILES_GLOB):
+            for old in sorted(folder.glob(pattern))[:-self.s.backup_keep]:
+                old.unlink(missing_ok=True)
         return dest
 
     def _backup_due(self) -> bool:

@@ -23,7 +23,7 @@ Settings has nine sections, each at its own address (`/settings/identify` and so
 | **Transcoding** | whether and what to transcode, the encoder and quality, the hardware found. Advanced: codecs, cropping, transcodes at once, the GPU |
 | **Notifications** | Pushover, which events notify, batching, and this browser's alert sound |
 | **Workers** | remote workers, and what they take from this machine |
-| **System** | this UI's address (for notification links), database backups, about ripshelf |
+| **System** | this UI's address (for notification links), daily backups, about ripshelf |
 
 - **Wider than a phone,** a sidebar lists the sections. A dot marks a section with changes not saved yet, and **!** one a setup problem points to. On a phone, Settings opens on the list of sections, each with a line on what it's set to.
 - **Search** at the top of the sidebar (or the phone's list) finds a setting by its name or what it's about, and jumps to it, opening its Advanced fold or media server if need be. A link to `/settings/<section>#setting-<name>` does the same.
@@ -63,7 +63,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_ENV_FILE` | `<data>/ripshelf.env` in a container, `ripshelf.env` in the ripshelf folder otherwise | the env file to read |
 | `RIPSHELF_HOST` / `PORT` | `0.0.0.0` / 8380 | the address and port the web UI listens on. `0.0.0.0` is every network the machine is on. The Windows batch file sets `127.0.0.1`, so only that PC can open the UI ([windows.md](windows.md)) |
 | `RIPSHELF_ALLOWED_HOSTS` | none | more names the UI is opened by, comma separated (`.example.com` for every name under it, `*` for any). IP addresses, `localhost`, names with no dots, names under `.local`, `.lan`, `.home`, `.home.arpa` and `.internal`, and the public URL's name work without it ([troubleshooting.md](troubleshooting.md#ripshelf-isnt-served-at)) |
-| `RIPSHELF_BACKUP_DIR` | `/backups` | where daily database backups go. How many are kept is set in Settings |
+| `RIPSHELF_BACKUP_DIR` | `/backups` | where [daily backups](#daily-backups) go. How many are kept is set in Settings |
 | `RIPSHELF_MAKEMKVCON`, `FFMPEG`, `FFPROBE`, `SEVENZIP`, `BLKID`, `MKVMERGE` | the program name, found on the PATH | the programs ripshelf runs |
 | `RIPSHELF_ACCEPT_MAKEMKV_EULA` | `no` | set `yes` once you have read and accepted MakeMKV's licence. Only needed where MakeMKV came with ripshelf (the image), and on every container that runs MakeMKV. Until it is set, MakeMKV isn't run and discs wait |
 | `RIPSHELF_MAKEMKV_EULA_FILE` | none (the image sets it) | the licence of the MakeMKV that came with ripshelf. Setting it is what makes `ACCEPT_MAKEMKV_EULA` necessary |
@@ -119,7 +119,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_TRANSCODE_ENABLED` | on | also `TRANSCODE_CODECS` (`["vc1"]`), `TRANSCODE_CROP` (`off`, `when_transcoding` or `always`), `TRANSCODE_HDR`, `TRANSCODE_SOURCES` (per disc type, e.g. `{"bluray": {"transcode": true, "crop": false}}`), `TRANSCODE_ENCODER` (`auto`, `qsv`, `vaapi`, `nvenc` or `x265`; `auto` uses the first of Quick Sync, VAAPI and NVENC whose test encode works, else x265), `VAAPI_DEVICE` (the render node Quick Sync and VAAPI use, `/dev/dri/renderD128`), `TRANSCODE_QUALITY` (21), `TRANSCODE_KEEP_ORIGINAL` and `TRANSCODE_PARALLEL` (1, how many jobs transcode at once, up to 8) |
 | `RIPSHELF_TV_RIP_EXTRAS` | on | TV titles that look like extras start as Extra in review. Off, they start as Skip |
 | `RIPSHELF_TV_UNMATCHED` | `extras` | where a TV disc's extras go when the cover scan doesn't name them: `extras` (the show's extras folder), `specials` (Season 00, numbered after the specials already there) or `skip` (not copied to the library, and named extras aren't either). "TV extras go" in Settings → Library and filing |
-| `RIPSHELF_BACKUP_KEEP` | 7 | daily database backups kept, 0 turns them off (Settings → System) |
+| `RIPSHELF_BACKUP_KEEP` | 7 | [daily backups](#daily-backups) kept, 0 turns them off (Settings → System) |
 | `RIPSHELF_PUBLIC_URL` | none | this UI's address, used in notification links |
 | `RIPSHELF_PUSHOVER_USER_KEY` / `PUSHOVER_APP_TOKEN` / `PUSHOVER_DEVICE` | none | notifications (Pushover only) |
 | `RIPSHELF_NOTIFY_EVENTS` | `{"disc": null, "review": 1, "exists": 1, "ripped": 0, "transcoded": null, "copied": null, "done": 0, "failed": 1, "setup": 0}` | which events notify, with their Pushover priority (-2 to 1). `null` is off, and an event left out gets its default ([how-it-works.md](how-it-works.md#notifications)) |
@@ -131,3 +131,12 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_CATALOGUE_SEARCH` / `SEARXNG_URL` | off / none | looks catalogue-number labels up on the web ([catalogue.md](catalogue.md)) |
 | `RIPSHELF_WORKER_TOKEN`, `CONTROLLER_URL`, `CONTROLLER_CA_FILE`, `WORKER_ID`, `WORKER_NAME`, `WORKER_SHARED_SCRATCH` | see [above](#settings-that-arent-on-the-settings-page) | remote workers ([workers.md](workers.md)) |
 | `RIPSHELF_UHD_MODELS` | the Pioneer BDR-S11JX | the `VENDOR MODEL` of each LibreDrive drive. Each machine reads its own: set it on a worker for that worker's drives |
+
+## Daily backups
+
+Once a day ripshelf writes two files to the backups folder (`/backups`, or `RIPSHELF_BACKUP_DIR`), and keeps the newest of each as set in **Settings → System** (7 unless changed, 0 turns them off):
+
+- `ripshelf-<date>.db`, a copy of the database, taken safely while ripshelf runs.
+- `ripshelf-<date>-files.tar.gz`, with `settings.json`, the per-drive MakeMKV folders (`makemkv/`, LibreDrive data and firmware dumps) and the files kept for remote workers (`makemkv-files/`). It holds the API keys, the MakeMKV key and worker tokens, so it is readable only by ripshelf's user. Keep the backups folder as private as `data/`.
+
+To restore, stop ripshelf, copy the `.db` file to `data/ripshelf.db`, and extract the archive into `data/` (`tar -xzf backups/ripshelf-<date>-files.tar.gz -C data`). With `RIPSHELF_MAKEMKV_PATH` set, move the extracted `makemkv/` folder there.

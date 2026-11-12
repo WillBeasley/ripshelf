@@ -42,7 +42,7 @@ services:
       - ./movies:/movies                # <-- where films go (your movies library)
       - ./tv:/tv                        # <-- where TV goes (can be on another disk)
       - ./disc-backups:/disc-backups    # <-- full disc backups (Settings → "What to rip"), ~50 to 100 GB each
-      - ./backups:/backups              # <-- daily database backups; off the data disk if you can
+      - ./backups:/backups              # <-- daily backups (database, settings, MakeMKV data); off the data disk if you can
       # One library folder holding Movies/ and TV/ also works. Mount it at /library
       # and delete the two RIPSHELF_*_DIR lines and the /movies and /tv mounts.
     ports:

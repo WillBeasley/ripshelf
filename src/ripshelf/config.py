@@ -162,7 +162,7 @@ class Settings(BaseSettings):
     mkvmerge: str = "mkvmerge"
     # Reads the text on scans of the box.
     tesseract: str = "tesseract"
-    # Where the daily database backups go (backup_keep says how many). In the container
+    # Where the daily backups (database, settings and MakeMKV data) go (backup_keep says how many). In the container
     # this is /backups, a bind mount that must exist; unset (development) they go to
     # <data>/backups.
     backup_dir: Path | None = None
@@ -485,9 +485,11 @@ class Settings(BaseSettings):
     public_url: Annotated[str | None, Field(max_length=300), UI(
         "system", "This UI's address from a phone", "So every notification links to its job.",
         placeholder="http://192.168.1.10:8380", keywords="url link")] = None
-    # Daily database backups. The newest backup_keep are kept (0 turns them off).
+    # Daily backups of the database, settings.json and the MakeMKV data (backups.py).
+    # The newest backup_keep are kept (0 turns them off).
     backup_keep: Annotated[int, Field(ge=0, le=365), UI(
-        "system", "Daily database backups to keep", "0 turns them off.", keywords="database")] = 7
+        "system", "Daily backups to keep", "The database, settings and MakeMKV data. 0 turns them off.",
+        keywords="database settings makemkv")] = 7
 
     @property
     def settings_file(self) -> Path:

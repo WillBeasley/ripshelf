@@ -58,7 +58,7 @@ services:
       - ./movies:/movies                # <-- where films go (your movies library)
       - ./tv:/tv                        # <-- where TV goes
       - ./disc-backups:/disc-backups    # <-- full disc backups (Settings → "What to rip"), ~50 to 100 GB each
-      - ./backups:/backups              # <-- daily database backups
+      - ./backups:/backups              # <-- daily backups (database, settings, MakeMKV data)
     ports:
       - "8380:8380"                     # no login, so keep it on your LAN or VPN
     healthcheck:                        # /api/health answers once the database is open
