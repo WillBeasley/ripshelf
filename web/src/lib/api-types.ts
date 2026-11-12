@@ -1444,9 +1444,17 @@ export interface ScanListing {
    */
   edited_from: string | null;
   /**
-   * the product UPCitemdb names for the box's barcode ("" when none; looked up once)
+   * what the box's barcode names ("" when no source knows it; None until every source has answered)
    */
   upc_title: string | null;
+  /**
+   * the barcode upc_title is for (it is looked up again when the box's barcode changes)
+   */
+  upc_code: string | null;
+  /**
+   * where upc_title came from: thediscdb, upcitemdb, barcodelookup, eansearch or web
+   */
+  upc_source: string | null;
   /**
    * what the box said when the disc was last identified again from it
    */
@@ -2562,6 +2570,8 @@ export interface SettingsUpdate {
   verify_order?: boolean | null;
   searxng_url?: string | null;
   catalogue_search?: ("off" | "searxng") | null;
+  barcode_service?: ("off" | "barcodelookup" | "eansearch") | null;
+  barcode_service_key?: string | null;
   label_ai?: ("off" | "manual" | "auto") | null;
   label_ai_model?: string | null;
   thediscdb_contribute?: ("off" | "ask" | "auto") | null;
@@ -2694,6 +2704,8 @@ export interface SettingsUpdate1 {
   verify_order?: boolean | null;
   searxng_url?: string | null;
   catalogue_search?: ("off" | "searxng") | null;
+  barcode_service?: ("off" | "barcodelookup" | "eansearch") | null;
+  barcode_service_key?: string | null;
   label_ai?: ("off" | "manual" | "auto") | null;
   label_ai_model?: string | null;
   thediscdb_contribute?: ("off" | "ask" | "auto") | null;
@@ -2848,6 +2860,8 @@ export interface SettingsView {
   verify_order: boolean;
   searxng_url: string | null;
   catalogue_search: "off" | "searxng";
+  barcode_service: "off" | "barcodelookup" | "eansearch";
+  barcode_service_key_set: boolean;
   label_ai: "off" | "manual" | "auto";
   label_ai_model: string | null;
   thediscdb_contribute: "off" | "ask" | "auto";

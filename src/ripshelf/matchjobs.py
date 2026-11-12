@@ -20,8 +20,9 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from . import library
+from . import library, providers
 from .db import now
+from .identify import barcode
 from .identify.scoring import title_similarity
 from .identify.tmdb import TmdbError
 from .makemkv import selection
@@ -36,7 +37,6 @@ from .models import (
     TitleMatch,
     TitleRole,
 )
-from .providers import release_info
 from .providers.tvmaze import TvmazeError
 from .scanner import match as matcher
 from .tv import split as tvsplit
@@ -243,8 +243,9 @@ class MatchMixin:
     # --- identifying the disc from its box ------------------------------------------------
 
     async def scan_hints(self, job: JobRecord) -> ScanHints:
-        """What the box says the disc is: the title and year read off it, and the product
-        its barcode names (UPCitemdb, looked up once and kept)."""
+        """What the box says the disc is: the title and year read off it, and what its
+        barcode names (identify.barcode: TheDiscDB, UPCitemdb, a paid service, the web;
+        kept once every source has answered)."""
         listing = self._listing_for(job)
         hints = ScanHints()
         if not listing:
@@ -255,28 +256,36 @@ class MatchMixin:
             hints.evidence.append(f"The cover scan reads “{d.title}”" + (f" ({d.year})" if d.year else ""))
         hints.year = d.year
         if d.barcode and job.listing:
-            if job.listing.upc_title is None:
-                job.listing.upc_title = await self._upc_title(d.barcode)
-                self._save(job)
-            if job.listing.upc_title:
-                name = product_name(job.listing.upc_title)
+            sl = job.listing
+            if sl.upc_title is None or (sl.upc_code or (d.barcode if sl.upc_title else None)) != d.barcode:
+                await self._name_barcode(job, d.barcode)
+            if sl.upc_title:
+                name = sl.upc_title if sl.upc_source in barcode.CLEAN_SOURCES else product_name(sl.upc_title)
                 if name and all(title_similarity(name, n) < 0.9 for n in hints.names):
                     hints.names.append(name)
-                    hints.evidence.append(f"The barcode on the box, {d.barcode}, is “{job.listing.upc_title}”")
+                    by = barcode.SOURCE_NAMES.get(sl.upc_source or "upcitemdb", "UPCitemdb")
+                    hints.evidence.append(f"The barcode on the box, {d.barcode}, is “{sl.upc_title}” ({by})")
         return hints
 
-    async def _upc_title(self, upc: str) -> str:
-        """The product's title for a barcode, or "" when nothing is known (so it isn't
-        asked again: UPCitemdb's free lookups are limited)."""
-        products = release_info.Products()
-        try:
-            found = await products.lookup(upc)
-        except release_info.ReleaseLookupError as e:
-            log.info("no product for barcode %s: %s", upc, e)
-            return ""
-        finally:
-            await products.aclose()
-        return found[0].title if found else ""
+    async def _name_barcode(self, job: JobRecord, code: str) -> None:
+        """Ask what the barcode is, and keep the answer on the job unless a source failed
+        (then it is asked again next time)."""
+        sl = job.listing
+        thediscdb = any("thediscdb" in providers.enabled(self.s, k) for k in ("movie", "tv"))
+        answer = await barcode.name(self.s, code, job.disc.kind.value if job.disc.kind else None,
+                                    thediscdb=thediscdb)
+        if answer.found:
+            sl.upc_title, sl.upc_code, sl.upc_source = answer.found.title, code, answer.found.source
+            self._event(job, "info", f"The barcode {code} is “{answer.found.title}” "
+                                     f"({barcode.SOURCE_NAMES[answer.found.source]})")
+        elif answer.final:
+            sl.upc_title, sl.upc_code, sl.upc_source = "", code, None
+            self._event(job, "info", f"No barcode lookup knows {code}")
+        else:
+            sl.upc_title = sl.upc_code = sl.upc_source = None
+            self._event(job, "info", f"The barcode {code} wasn't found, and will be looked up again "
+                                     f"next time ({'; '.join(answer.failed)})")
+        self._save(job)
 
     def identify_from_scan(self, job_id: int) -> None:
         """Identify again when the box's reading may help: the job waits for review with

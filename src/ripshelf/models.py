@@ -635,8 +635,12 @@ class ScanListing(BaseModel):
     found: Listing | None = Field(None, description="what reading found, replaced by each reading")
     edited: Listing | None = Field(None, description="the user's listing, kept until they drop it")
     edited_from: datetime | None = Field(None, description="the reading the edits started from")
-    upc_title: str | None = Field(None, description="the product UPCitemdb names for the box's barcode (\"\" when "
-                                                    "none; looked up once)")
+    upc_title: str | None = Field(None, description="what the box's barcode names (\"\" when no source knows it; "
+                                                    "None until every source has answered)")
+    upc_code: str | None = Field(None, description="the barcode upc_title is for (it is looked up again when the "
+                                                   "box's barcode changes)")
+    upc_source: str | None = Field(None, description="where upc_title came from: thediscdb, upcitemdb, "
+                                                     "barcodelookup, eansearch or web")
     identified_from: str | None = Field(None, description="what the box said when the disc was last identified "
                                                           "again from it")
 

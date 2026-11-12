@@ -129,6 +129,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_JELLYFIN_URL` / `JELLYFIN_API_KEY` | none | Jellyfin refresh. The library settings are as for Emby, with `JELLYFIN_` in place of `EMBY_` |
 | `RIPSHELF_PLEX_URL` / `PLEX_TOKEN` | none | Plex refresh, with the same library settings (`PLEX_MOVIES_LIBRARY` and so on). Plex scans the folder each new file is in. With no library picked, it scans every library |
 | `RIPSHELF_CATALOGUE_SEARCH` / `SEARXNG_URL` | off / none | looks catalogue-number labels up on the web ([catalogue.md](catalogue.md)) |
+| `RIPSHELF_BARCODE_SERVICE` / `BARCODE_SERVICE_KEY` | `off` / none | a paid lookup for cover barcodes TheDiscDB and UPCitemdb don't know: `barcodelookup` or `eansearch`, and its key ([cover-scans.md](cover-scans.md#the-box-helps-identify-the-disc)) |
 | `RIPSHELF_WORKER_TOKEN`, `CONTROLLER_URL`, `CONTROLLER_CA_FILE`, `WORKER_ID`, `WORKER_NAME`, `WORKER_SHARED_SCRATCH` | see [above](#settings-that-arent-on-the-settings-page) | remote workers ([workers.md](workers.md)) |
 | `RIPSHELF_UHD_MODELS` | the Pioneer BDR-S11JX | the `VENDOR MODEL` of each LibreDrive drive. Each machine reads its own: set it on a worker for that worker's drives |
 

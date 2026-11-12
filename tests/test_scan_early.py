@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from ripshelf import jobs as jobs_module
 from ripshelf import pendingscans
 from ripshelf.dev.fake import FakeDrives
+from ripshelf.identify import barcode
 from ripshelf.main import create_app
 from ripshelf.matchjobs import product_name
 from ripshelf.models import Candidate, JobState, Listing, ListingDetails, ScanListing
@@ -89,10 +90,10 @@ async def test_the_box_names_the_film(harness, settings, monkeypatch):
         job.listing = reading("The Brass Heron", 2024, "5012345678900")
         job = put(h, job)
 
-        async def upc(code):
-            return "The Brass Heron [Blu-ray] (2024)"
+        async def name(s, code, kind=None, **kw):
+            return barcode.Answer(barcode.Found("The Brass Heron [Blu-ray] (2024)", "upcitemdb"), [])
 
-        monkeypatch.setattr(h.m, "_upc_title", upc)
+        monkeypatch.setattr(barcode, "name", name)
         await h.m._identify(job.id)
         assert asked["queries"][0] == "The Brass Heron" and asked["year"] == 2024
         best = h.db.get_job(job.id).candidates[0]

@@ -106,6 +106,19 @@
 	<TestButton check="catalogue" values={form.body} label="Test (looks up EO51710)" />
 </section>
 
+<section class="card stack" aria-labelledby="barcodes">
+	<h2 id="barcodes">Barcodes on covers</h2>
+	<p class="small muted">
+		A barcode read off a cover scan is asked of TheDiscDB (when it's ticked above) and UPCitemdb, which are free,
+		then of the paid service below, then of SearXNG when catalogue lookup is on. The name found is searched for like
+		the title on the box, and the runtime still has to fit.
+	</p>
+	<Field {form} name="barcode_service" />
+	{#if f.barcode_service !== 'off'}
+		<Field {form} name="barcode_service_key" />
+	{/if}
+</section>
+
 <section class="card stack" aria-labelledby="label-ai">
 	<h2 id="label-ai">Cryptic labels</h2>
 	<Field {form} name="label_ai">
