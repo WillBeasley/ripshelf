@@ -243,6 +243,16 @@ class Settings(BaseSettings):
     catalogue_search: Annotated[Literal["off", "searxng"], UI(
         "identify", "Look catalogue numbers up with", "For DVDs labelled with the publisher's number.",
         choices=(("off", "Off"), ("searxng", "SearXNG (self-hosted)")))] = "off"
+    # Barcodes on cover scans are asked of TheDiscDB and UPCitemdb (free), then of this
+    # paid service if one is chosen and its key set, then of SearXNG (catalogue_search).
+    barcode_service: Annotated[Literal["off", "barcodelookup", "eansearch"], UI(
+        "identify", "Paid barcode lookup", "Asked when TheDiscDB and UPCitemdb don't know a cover's barcode.",
+        choices=(("off", "None"), ("barcodelookup", "Barcode Lookup (barcodelookup.com)"),
+                 ("eansearch", "EAN-Search (ean-search.org)")),
+        keywords="upc ean barcode cover")] = "off"
+    barcode_service_key: Annotated[SecretStr | None, UI(
+        "identify", "Barcode lookup API key", "The key or token for the paid barcode lookup.",
+        keywords="upc ean barcode")] = None
     # A language model reading cryptic labels ("BTTF2"): off, only from the button in
     # Review, or also on its own when nothing the label's own reading finds fits. It
     # runs on the vision model's connection, with label_ai_model if set.

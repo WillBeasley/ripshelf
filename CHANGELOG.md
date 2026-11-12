@@ -24,6 +24,7 @@ This will be 0.7.0. Release candidates: [0.7.0-rc1](https://github.com/WillBeasl
 - The UI has unit tests (Vitest) and browser tests (Playwright) against simulated drives and a pretend TMDB, run in CI ([#34](https://github.com/WillBeasley/ripshelf/pull/34)).
 - The daily backup keeps `settings.json` and the MakeMKV data (`makemkv/`, `makemkv-files/`) too, as `ripshelf-<date>-files.tar.gz` beside the database copy ([settings.md](docs/settings.md#daily-backups)).
 - Dependabot proposes updates to the UI's packages, the CI actions and the Dockerfile's base images each week, and the base images are pinned by digest. A weekly workflow checks the Python locks for known vulnerabilities.
+- The barcode on a cover scan is looked up on TheDiscDB, then UPCitemdb, then a paid barcode service if you set one up (Barcode Lookup or EAN-Search, Settings → Identify → Barcodes on covers), then your SearXNG. A lookup that failed is tried again next time instead of being kept as "not found", and a changed barcode is looked up again.
 
 ### Changed
 

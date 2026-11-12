@@ -139,7 +139,13 @@ If Ollama already runs elsewhere (another compose stack, another machine), use i
 
 What a scan reads is used to identify the disc as well as to list what's on it:
 - **Film title:** the title read off the box (usually from the spine) is searched for first, ahead of the disc's label, and the year printed on it counts.
-- **Barcode:** looked up once with UPCitemdb (about 100 free lookups a day), and the product's name is searched for too.
+- **Barcode:** asked of these in turn until one names it, and that name is searched for too:
+  1. [TheDiscDB](https://thediscdb.com), whose search knows each release's UPC, when TheDiscDB is ticked in Settings → Identify. Its name is the film's or show's own.
+  2. [UPCitemdb](https://www.upcitemdb.com) (free, about 100 lookups a day). Good on US UPCs, thin on UK and European EANs.
+  3. A paid service, if one is chosen with its key in Settings → Identify → Barcodes on covers: [Barcode Lookup](https://www.barcodelookup.com/api) or [EAN-Search](https://www.ean-search.org/ean-database-api.html).
+  4. Your SearXNG, when catalogue lookup uses it: shop pages that print the barcode, and the title at least two of them agree on.
+
+  The answer is kept with the job and the barcode, so each barcode is asked once. If a source failed (offline, rate limited, the day's lookups used up) and nothing was found, it is asked again the next time the disc is identified. Only the barcode leaves ripshelf.
 - **Evidence:** a candidate found this way says so ("From the cover scan: the cover scan reads “…”").
 - **TV:** a disc whose label says nothing searches for the show the spine names.
 - **TV episodes:** when a TV disc waits for review, the shows it could be (the candidates, the box's title and the barcode's product) are checked against the episode names the box lists. A show that has at least three in five of them is proposed instead, at the season most of them are in. Names match past a prefix the box or the show puts on every one ("Pat's Special Delivery: …", "Postman Pat and …") and a leading "A" or "The".
