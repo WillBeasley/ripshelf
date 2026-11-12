@@ -6,6 +6,11 @@ small, so blocking is negligible at this scale. The daily backup opens its own.
 
 The schema's version is SQLite's user_version. A database older than SCHEMA_VERSION
 is copied aside, then brought up to date by MIGRATIONS, one step at a time.
+
+A job is read, changed and saved by several tasks at once (the pipeline holds its copy
+across a scan or a rip while the user adds scans, picks episodes or says what the disc
+is). So a save writes only what its copy changed since it was read, on top of the job as
+stored now (``merge``): a save from an old copy can't undo what another task saved meanwhile.
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, PrivateAttr, ValidationError
 
 from .library import replace
 from .models import (
@@ -159,9 +164,28 @@ def now() -> datetime:
     return datetime.now(UTC)
 
 
-# The fields the box's scans own: the pipeline doesn't change them, and must not undo them
-# when it saves a copy of the job it read before a scan arrived.
-SCAN_FIELDS = ("scans", "scanner", "listing", "scan_match", "scans_rev")
+_GONE = object()
+
+
+def merge(base: dict, mine: dict, stored: dict) -> dict:
+    """``stored`` with the changes from ``base`` to ``mine`` put on top (a three-way merge).
+
+    Objects are merged key by key, to any depth, so two tasks that each changed another part
+    of a job both keep their change. A list, or any other value, is taken whole: where both
+    changed the same one, ``mine`` (the later save) wins.
+    """
+    out = dict(stored)
+    for k in base.keys() | mine.keys():
+        b, m = base.get(k, _GONE), mine.get(k, _GONE)
+        if m == b:
+            continue  # not changed here, so whatever is stored stands
+        if m is _GONE:
+            out.pop(k, None)
+        elif isinstance(m, dict) and isinstance(b, dict) and isinstance(stored.get(k), dict):
+            out[k] = merge(b, m, stored[k])
+        else:
+            out[k] = m
+    return out
 
 
 class JobRecord(Job):
@@ -177,8 +201,8 @@ class JobRecord(Job):
     notified: list[str] = []
     disc_index: int | None = None  # MakeMKV's number for the drive ("backup" takes disc:N only)
     filed_extras: dict[int, str] = {}  # a film's extras copied to the library: title -> file
-    # Bumped by every save of SCAN_FIELDS, so a save from a copy read before them can't undo them.
-    scans_rev: int = 0
+    # The job as it was read or last saved (JSON), which a save compares this copy with.
+    _base: dict | None = PrivateAttr(default=None)
 
     def art_url(self) -> tuple[str | None, bool]:
         """(poster URL, proposed?) for the disc, from the confirmed identity first, then the best guess."""
@@ -280,7 +304,10 @@ class Database:
             return None
 
     def _job(self, row) -> JobRecord | None:
-        return self._load(JobRecord, "jobs", row["id"], row["data"]) if row else None
+        job = self._load(JobRecord, "jobs", row["id"], row["data"]) if row else None
+        if job:
+            job._base = job.model_dump(mode="json")  # what save_job compares this copy with
+        return job
 
     # --- jobs ---------------------------------------------------------------
 
@@ -297,10 +324,23 @@ class Database:
         return job
 
     def save_job(self, job: JobRecord) -> None:
+        """Save what this copy changed since it was read (or last saved), keeping what other
+        copies saved meanwhile. The copy is brought up to date with the result."""
         job.updated_at = now()
+        mine = job.model_dump(mode="json")
+        row = self.conn.execute("SELECT data FROM jobs WHERE id=?", (job.id,)).fetchone()
+        stored = json.loads(row["data"]) if row else {}
+        if job._base is not None and stored and stored != job._base:
+            merged = merge(job._base, mine, stored)
+            if merged != mine:
+                fresh = JobRecord.model_validate(merged)
+                for name in JobRecord.model_fields:
+                    job.__dict__[name] = fresh.__dict__[name]
+                mine = job.model_dump(mode="json")
+        job._base = mine
         self.conn.execute(
             "UPDATE jobs SET state=?, updated_at=?, data=? WHERE id=?",
-            (job.state, job.updated_at.isoformat(), job.model_dump_json(), job.id),
+            (job.state, job.updated_at.isoformat(), json.dumps(mine), job.id),
         )
 
     def get_job(self, job_id: int) -> JobRecord | None:

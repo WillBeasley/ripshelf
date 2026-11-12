@@ -34,7 +34,7 @@ from . import __version__, art, discfs, integrations, library, providers, snapsh
 from .bus import EventBus
 from .config import EULA_PENDING, Settings
 from .contributejobs import ContributeMixin
-from .db import SCAN_FIELDS, Database, JobRecord, now
+from .db import Database, JobRecord, now
 from .hw.drives import DiscIdentity, DriveHw
 from .identify import ai_label, catalogue, scoring
 from .identify.label import clean_bdmt_title, name_differs_from_label, parse_label
@@ -168,8 +168,6 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         self._locks: dict[int, asyncio.Lock] = {}
         self._poller: asyncio.Task | None = None
         self._last_progress: dict[int, float] = {}
-        # Presets set (or cleared to None) by hand. They win over a job copy saved meanwhile.
-        self._presets: dict[int, Preset | None] = {}
         self.makemkv_version: str | None = None
         self.java_missing = False  # a scan said MakeMKV has no Java runtime
         self.open_gate = runner.OpenGate()
@@ -520,25 +518,13 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         self._save(fresh)
 
     def _save(self, job: JobRecord) -> None:
-        cur = self.db.get_job(job.id)
-        if cur and cur.scans_rev > job.scans_rev:
-            # Read before a scan arrived (the pipeline holds its copy across a scan or a rip):
-            # keep the scans as they are now.
-            for f in SCAN_FIELDS:
-                setattr(job, f, getattr(cur, f))
-        if job.id in self._presets:
-            job.preset = self._presets[job.id]
+        # Only what this copy changed is written (db.save_job), so a copy the pipeline has held
+        # across a scan or a rip doesn't undo the scans, the preset or anything else saved meanwhile.
         self.db.save_job(job)
         self.bus.publish(JobUpdated(job=job.public()))
         d = self.drives.get(job.drive_id)
         if d and d.job_id == job.id:
             self.publish_drive(d)
-
-    def _save_scans(self, job: JobRecord) -> None:
-        """Save a change to the scans' fields (SCAN_FIELDS), made on a copy just read."""
-        cur = self.db.get_job(job.id)
-        job.scans_rev = max(job.scans_rev, cur.scans_rev if cur else 0) + 1
-        self._save(job)
 
     def _set_state(self, job: JobRecord, state: JobState, message: str | None = None) -> None:
         if state == job.state:
@@ -977,7 +963,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         """Identify from what the user said before the scan finished (False to identify as usual)."""
         job = self.db.get_job(job_id)
         p = job.preset
-        self._presets[job.id] = job.preset = None
+        job.preset = None
         if p.media == MediaKind.tv:
             if job.mode == "backup":
                 self._event(job, "warning", f"You said this is {p.show.name}, but a full disc backup has no "
@@ -1008,7 +994,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 return await self.tv_propose(job_id, preset.show.key, preset.season, preset.disc_number,
                                              preset.start_episode, False)
             raise ValueError("the scan has finished, so identify the disc in Review")
-        self._presets[job_id] = job.preset = preset
+        job.preset = preset
         if preset:
             self._event(job, "info", f"You said this disc is {preset_label(preset)}: used once the scan is done")
         else:

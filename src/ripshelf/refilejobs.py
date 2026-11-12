@@ -263,7 +263,7 @@ class RefileMixin:
         for sc in job.scans:
             if sc.library_path:
                 sc.library_path = new(sc.library_path)
-        self._save_scans(job)
+        self._save(job)
         job = self.db.get_job(job_id)
         try:
             await asyncio.to_thread(self._rewrite_disc_record, job, new)

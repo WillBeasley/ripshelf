@@ -153,7 +153,7 @@ class VisionMixin:
         sc = next((x for x in job.scans if x.id == scan_id), None) if job else None
         if sc:
             sc.vision, sc.vision_message = state, message
-            self._save_scans(job)
+            self._save(job)
 
     async def _vision_job(self, job_id: int) -> None:
         try:
