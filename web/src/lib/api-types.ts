@@ -103,6 +103,7 @@ export interface Api {
   JobStep?: JobStep;
   JobUpdated?: JobUpdated;
   JobsDeleted?: JobsDeleted;
+  LabelReading?: LabelReading;
   Listing?: Listing;
   ListingDetails?: ListingDetails;
   ListingItem?: ListingItem;
@@ -265,6 +266,10 @@ export interface Show {
    */
   providers: string[];
   excluded: boolean;
+  /**
+   * found by searching for the AI model's reading of the label; never auto-confirms
+   */
+  from_ai: boolean;
   score: number;
   evidence: Evidence[];
 }
@@ -324,6 +329,10 @@ export interface Candidate {
    * a making-of, short or other extra; never auto-confirms
    */
   excluded: boolean;
+  /**
+   * only the AI model's reading of the label supports it; never auto-confirms
+   */
+  from_ai: boolean;
   score: number;
   evidence: Evidence[];
 }
@@ -1885,6 +1894,25 @@ export interface JobsDeleted {
   ids: number[];
 }
 /**
+ * What the AI model made of a cryptic disc label, from the button in Review.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "LabelReading".
+ */
+export interface LabelReading {
+  /**
+   * full titles the label may stand for, most likely first
+   */
+  titles: string[];
+  kind: ("movie" | "tv") | null;
+  model: string;
+  seconds: number;
+  /**
+   * a film disc's candidates, ranked again with these titles
+   */
+  candidates: Candidate[];
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "ListingView".
  */
@@ -2114,6 +2142,7 @@ export interface ProviderInfo {
         | "scanner"
         | "ocr"
         | "vision"
+        | "label_ai"
       )
     | null;
 }
@@ -2489,7 +2518,8 @@ export interface SettingsTestRequest {
     | "paths"
     | "scanner"
     | "ocr"
-    | "vision";
+    | "vision"
+    | "label_ai";
   values: SettingsUpdate;
 }
 /**
@@ -2517,6 +2547,8 @@ export interface SettingsUpdate {
   verify_order?: boolean | null;
   searxng_url?: string | null;
   catalogue_search?: ("off" | "searxng") | null;
+  label_ai?: ("off" | "manual" | "auto") | null;
+  label_ai_model?: string | null;
   thediscdb_contribute?: ("off" | "ask" | "auto") | null;
   thediscdb_contribute_url?: string | null;
   thediscdb_api_key?: string | null;
@@ -2646,6 +2678,8 @@ export interface SettingsUpdate1 {
   verify_order?: boolean | null;
   searxng_url?: string | null;
   catalogue_search?: ("off" | "searxng") | null;
+  label_ai?: ("off" | "manual" | "auto") | null;
+  label_ai_model?: string | null;
   thediscdb_contribute?: ("off" | "ask" | "auto") | null;
   thediscdb_contribute_url?: string | null;
   thediscdb_api_key?: string | null;
@@ -2791,6 +2825,8 @@ export interface SettingsView {
   verify_order: boolean;
   searxng_url: string | null;
   catalogue_search: "off" | "searxng";
+  label_ai: "off" | "manual" | "auto";
+  label_ai_model: string | null;
   thediscdb_contribute: "off" | "ask" | "auto";
   thediscdb_contribute_url: string;
   thediscdb_api_key_set: boolean;
@@ -3037,6 +3073,10 @@ export interface Status {
    * a SearXNG address is set, so Review can search the web
    */
   web_search: boolean;
+  /**
+   * an AI model can read labels, so Review shows its button
+   */
+  label_ai: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

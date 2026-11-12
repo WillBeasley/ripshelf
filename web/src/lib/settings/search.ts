@@ -21,7 +21,8 @@ export const SHOWN_WITH: Record<string, string> = {
 	vision_provider: 'vision_mode',
 	vision_url: 'vision_mode',
 	vision_model: 'vision_mode',
-	vision_api_key: 'vision_mode'
+	vision_api_key: 'vision_mode',
+	label_ai_model: 'label_ai'
 };
 
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');

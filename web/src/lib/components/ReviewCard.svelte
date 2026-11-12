@@ -6,6 +6,7 @@
 	import { live } from '../live.svelte';
 	import { openJob } from '../nav';
 	import Evidence from './Evidence.svelte';
+	import LabelReader from './LabelReader.svelte';
 	import CoverScans from './CoverScans.svelte';
 	import Poster from './Poster.svelte';
 	import RefileBanner from './RefileBanner.svelte';
@@ -122,6 +123,7 @@
 				? 'The searches only found extras (making-ofs, shorts). Search by title, or pick one below.'
 				: 'No candidates. Search by title, search the web for the label, or eject the disc to look at it.'}
 		</p>
+		<LabelReader {job} onUse={useName} />
 		<WebSearch {job} onUse={useName} />
 	{/if}
 
@@ -168,6 +170,7 @@
 	{#if act.error}<p class="small error-text">{act.error}</p>{/if}
 
 	{#if best && !searching}
+		<LabelReader {job} onUse={useName} />
 		<details>
 			<summary class="small">Search the web</summary>
 			<div class="web"><WebSearch {job} onUse={useName} /></div>

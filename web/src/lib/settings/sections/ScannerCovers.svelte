@@ -45,7 +45,10 @@
 			What only the model reads is marked on the scan, so you can check it.
 		{/snippet}
 	</Field>
-	{#if f.vision_mode !== 'off'}
+	{#if f.vision_mode !== 'off' || f.label_ai !== 'off'}
+		{#if f.vision_mode === 'off'}
+			<p class="small muted">The connection is also used to read cryptic labels (Settings → Identify).</p>
+		{/if}
 		<Field {form} name="vision_provider">
 			{#if !local}
 				<p class="small warn-note" role="note">
