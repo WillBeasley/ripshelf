@@ -20,6 +20,7 @@
 		{ href: '/review', label: 'Review', icon: '?' },
 		{ href: '/finished', label: 'Finished', icon: '✓' },
 		{ href: '/collections', label: 'Shows', icon: '▦' },
+		{ href: '/covers', label: 'Covers', icon: '▤' },
 		{ href: '/settings', label: 'Settings', icon: '⚙' }
 	];
 	// A fresh install starts at the setup page (once, because its links to Settings must work).
@@ -170,7 +171,7 @@
 		right: 0;
 		z-index: 10;
 		display: grid;
-		grid-template-columns: repeat(5, 1fr);
+		grid-template-columns: repeat(6, 1fr);
 		background: var(--surface);
 		border-top: 1px solid var(--border);
 		padding-bottom: env(safe-area-inset-bottom);

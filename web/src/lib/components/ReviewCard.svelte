@@ -8,6 +8,7 @@
 	import Evidence from './Evidence.svelte';
 	import LabelReader from './LabelReader.svelte';
 	import CoverScans from './CoverScans.svelte';
+	import ShelfSuggest from './ShelfSuggest.svelte';
 	import Poster from './Poster.svelte';
 	import RefileBanner from './RefileBanner.svelte';
 	import ScoreMeter from './ScoreMeter.svelte';
@@ -201,6 +202,7 @@
 	{/if}
 
 	<Snapshots {job} open={!best} />
+	<ShelfSuggest {job} />
 	<CoverScans {job} />
 </article>
 

@@ -123,6 +123,18 @@ def test_blank_sides():
     assert stack.is_blank(Image.new("RGB", (400, 300), (10, 10, 10)))  # all one colour
     assert not stack.is_blank(img(inside()))
     assert not stack.is_blank(img(outside()))
+    # A short chapter list in small print, on a big scan, is printed.
+    sparse = Image.new("RGB", (1638, 900), (250, 250, 250))
+    d = ImageDraw.Draw(sparse)
+    for k in range(6):
+        d.text((80, 80 + k * 50), f"Chapter {k + 1}", fill=(20, 20, 20))
+    assert not stack.is_blank(sparse)
+    # So is white print on black, and paper's grain isn't print.
+    dark = Image.new("RGB", (800, 400), (12, 12, 12))
+    ImageDraw.Draw(dark).text((40, 40), "Scene selection\n1. The Lighthouse\n2. The Storm", fill=(240, 240, 240))
+    assert not stack.is_blank(dark)
+    grain = Image.effect_noise((800, 400), 8).point(lambda v: 200 + v // 8).convert("RGB")
+    assert stack.is_blank(grain)
 
 
 def test_the_outside_is_the_side_with_the_barcode_or_spine():

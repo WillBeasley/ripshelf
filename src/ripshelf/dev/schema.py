@@ -24,7 +24,7 @@ def api_models() -> list[type[BaseModel]]:
 # In request bodies, fields with defaults may be left out. Every other model is a
 # response, where the server always sends every field.
 REQUESTS = {"SettingsUpdate", "ConfirmRequest", "SearchRequest", "NewRemoteWorkerRequest", "ScanUpdate",
-            "ScannerScanRequest"}
+            "ScannerScanRequest", "ShelfScanRequest"}
 
 
 def _tidy(node):

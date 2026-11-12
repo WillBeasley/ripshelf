@@ -201,11 +201,10 @@ class ShelfMixin:
             note = "The second side scanned looked like the outside, so the sides were swapped"
         async with self._shelf_lock:
             idx = self._shelf_index()
-            for c in idx.covers:
-                for name, s in made.items():
-                    other = getattr(c, name)
-                    if other and other.sha256 == s.sha256:
-                        return None, f"the same {name} is on the shelf already"
+            # The same outside is the same sheet; an inside alone may be a plain one many
+            # sheets share.
+            if any(c.outside and c.outside.sha256 == made["outside"].sha256 for c in idx.covers):
+                return None, "the same sheet is on the shelf already"
             if len(idx.covers) >= MAX_COVERS:
                 return None, f"the shelf is full ({MAX_COVERS} covers); use or delete some first"
             cover = ShelfCover(id=uuid.uuid4().hex[:12], created_at=now(), source=source, note=note, **made)
@@ -785,7 +784,7 @@ class ShelfMixin:
 def _mismatch(st: ShelfStack) -> str:
     a, b = len(st.first), len(st.second)
     return (f"The first pass has {a} page{'s' if a != 1 else ''} and the second {b}, so they don't pair up. "
-            "Leave out the extra pages (a sheet fed twice, or two fed together), or scan the second pass again")
+            "Leave out the extra pages (a sheet fed twice, or two fed together), or scan the second pass again.")
 
 
 def _format(found: Listing, texts: list[ScanText]) -> DiscKind | None:

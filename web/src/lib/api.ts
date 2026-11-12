@@ -36,6 +36,12 @@ import type {
 	ScannerScanRequest,
 	ScanSplit,
 	ScanUpdate,
+	ShelfCover,
+	ShelfScanRequest,
+	ShelfStack,
+	ShelfSuggestion,
+	ShelfUploadResult,
+	ShelfView,
 	RemoteWorkers,
 	ServerLibrary,
 	SettingField,
@@ -156,6 +162,36 @@ export const api = {
 	deletePendingScan: (driveId: string, scan: string) =>
 		call<void>('DELETE', `/drives/${encodeURIComponent(driveId)}/pending-scans/${scan}`),
 	pendingScanUrl: (scan: string, thumb = false) => `/api/pending-scans/${scan}${thumb ? '?thumb=true' : ''}`,
+	// The covers shelf: case sheets scanned ahead of their discs.
+	shelf: (q = '') => call<ShelfView>('GET', `/covers${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`),
+	shelfUpload: (files: File[], insides: File[], bothSides: boolean, layout: 'alternate' | 'passes', reverseInsides = true) => {
+		const form = new FormData();
+		for (const f of files) form.append('files', f);
+		for (const f of insides) form.append('insides', f);
+		form.append('both_sides', String(bothSides));
+		form.append('layout', layout);
+		form.append('reverse_insides', String(reverseInsides));
+		return call<ShelfUploadResult>('POST', '/covers/upload', form);
+	},
+	shelfScan: (body: ShelfScanRequest) => call<ShelfStack>('POST', '/covers/scanner', body),
+	shelfScanSecond: () => call<ShelfStack>('POST', '/covers/scanner/second-pass'),
+	shelfCancelStack: () => call<void>('DELETE', '/covers/stack'),
+	shelfPairStack: () => call<ShelfUploadResult>('POST', '/covers/stack/pair'),
+	shelfDropPage: (page: string) => call<ShelfStack>('DELETE', `/covers/stack/pages/${page}`),
+	shelfPageUrl: (page: string) => `/api/covers/stack/pages/${page}?thumb=true`,
+	shelfSideUrl: (c: ShelfCover, side: 'outside' | 'inside', large = false) => {
+		const s = c[side];
+		return `/api/covers/${c.id}/${side}?${large ? 'large' : 'thumb'}=true&v=${s?.sha256.slice(0, 8)}-${s?.rotate}`;
+	},
+	shelfSwap: (id: string) => call<ShelfCover>('POST', `/covers/${id}/swap`),
+	shelfReadAgain: (id: string) => call<ShelfCover>('POST', `/covers/${id}/read`),
+	shelfVision: (id: string) => call<ShelfCover>('POST', `/covers/${id}/vision`),
+	shelfDelete: (id: string) => call<void>('DELETE', `/covers/${id}`),
+	shelfUseInJob: (id: string, job: number) => call<Job>('POST', `/covers/${id}/use/job/${job}`),
+	shelfForDrive: (id: string, drive: string) =>
+		call<PendingScans>('POST', `/covers/${id}/use/drive/${encodeURIComponent(drive)}`),
+	shelfSuggestions: (job: number, all = false) =>
+		call<ShelfSuggestion[]>('GET', `/jobs/${job}/shelf-suggestions${all ? '?all=true' : ''}`),
 	scanMatch: (id: number) => call<ScanMatch | null>('GET', `/jobs/${id}/scan-match`),
 	ripExtras: (id: number) => call<Job>('POST', `/jobs/${id}/extras/rip`),
 	useScan: (id: number) => call<Job>('POST', `/jobs/${id}/scan-match/use`),

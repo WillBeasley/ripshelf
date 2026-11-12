@@ -9,6 +9,7 @@
 	import { page } from '$app/state';
 	import ContributionPanel from './ContributionPanel.svelte';
 	import CoverScans from './CoverScans.svelte';
+	import ShelfSuggest from './ShelfSuggest.svelte';
 	import Progress from './Progress.svelte';
 	import Snapshots from './Snapshots.svelte';
 	import SplitTimeline from './SplitTimeline.svelte';
@@ -180,6 +181,7 @@
 			</div>
 		{/if}
 
+		<ShelfSuggest {job} />
 		<div bind:this={scansEl}><CoverScans {job} open={showScans} /></div>
 
 		<section>
