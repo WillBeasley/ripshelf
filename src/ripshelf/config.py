@@ -223,6 +223,18 @@ class Settings(BaseSettings):
     catalogue_search: Annotated[Literal["off", "searxng"], UI(
         "identify", "Look catalogue numbers up with", "For DVDs labelled with the publisher's number.",
         choices=(("off", "Off"), ("searxng", "SearXNG (self-hosted)")))] = "off"
+    # A language model reading cryptic labels ("BTTF2"): off, only from the button in
+    # Review, or also on its own when nothing the label's own reading finds fits. It
+    # runs on the vision model's connection, with label_ai_model if set.
+    label_ai: Annotated[Literal["off", "manual", "auto"], UI(
+        "identify", "Read cryptic labels with an AI model",
+        "BTTF2 is Back to the Future Part II. Only the label and running times are sent.",
+        choices=(("off", "Never"), ("manual", "Only when I press the button in Review"),
+                 ("auto", "When nothing found fits the disc, and with the button")),
+        keywords="ai llm ollama claude decode abbreviation")] = "off"
+    label_ai_model: Annotated[str | None, Field(max_length=200), UI(
+        "identify", "Model for labels", "Blank uses the vision model. Any chat model will do.",
+        placeholder="the vision model", keywords="ai llm ollama")] = None
     # Sending confirmed discs back to TheDiscDB. Off, a button per job ("ask"), or on
     # its own once the user confirms the identity ("auto"). The key is sent only if set.
     thediscdb_contribute: Annotated[Literal["off", "ask", "auto"], UI(

@@ -4,6 +4,7 @@
 Every picture "reads" as the pretend scanner's Moonlit Orchard sheet: its three extras,
 and the details a vision model reads off the box that Tesseract can't (the region in the
 globe, the PAL logo), plus one line the box doesn't have, as models sometimes invent.
+A request without a picture asks what a disc label stands for, and gets ``label``.
 """
 
 from __future__ import annotations
@@ -40,6 +41,14 @@ class FakeVision:
     status: int = 200  # answer with this instead, to test failures
     raw: str | None = None  # answer with this text instead of the reading
     requests: list[dict] = field(default_factory=list)
+    # The reading of every disc label (BTTF2 is the Settings test's label).
+    label: dict = field(default_factory=lambda: {"titles": ["Back to the Future Part II", "Moonlit Orchard"],
+                                                 "kind": "movie"})
+
+    def _answer(self, picture: bool) -> str:
+        if self.raw is not None:
+            return self.raw
+        return json.dumps(self.reading if picture else self.label)
 
     def router(self) -> APIRouter:
         r = APIRouter()
@@ -53,7 +62,9 @@ class FakeVision:
             if self.status != 200:
                 return Response(json.dumps({"error": {"message": "pretend failure"}}), self.status,
                                 media_type="application/json")
-            text = self.raw if self.raw is not None else json.dumps(self.reading)
+            content = body["messages"][0]["content"]
+            text = self._answer(isinstance(content, list) and any(c.get("type") == "image_url"
+                                                                          for c in content))
             return {"id": "chatcmpl-fake", "object": "chat.completion", "model": body.get("model"),
                     "choices": [{"index": 0, "finish_reason": "stop",
                                  "message": {"role": "assistant", "content": text}}],
@@ -70,7 +81,7 @@ class FakeVision:
                     self.status, "api_error")
                 return Response(json.dumps({"type": "error", "error": {"type": kind, "message": "pretend failure"}}),
                                 self.status, media_type="application/json")
-            text = self.raw if self.raw is not None else json.dumps(self.reading)
+            text = self._answer(any(c.get("type") == "image" for c in body["messages"][0]["content"]))
             return {"id": "msg_fake", "type": "message", "role": "assistant", "model": body.get("model"),
                     "content": [{"type": "text", "text": text}], "stop_reason": "end_turn",
                     "stop_sequence": None, "usage": {"input_tokens": 1900, "output_tokens": 300}}

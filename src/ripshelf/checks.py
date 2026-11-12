@@ -15,10 +15,11 @@ import httpx
 
 from . import integrations
 from .config import EULA_PENDING, Settings
+from .identify import ai_label
 from .identify import catalogue as catalogue_lookup
 from .identify.tmdb import API as TMDB_API
 from .makemkv import runner
-from .models import MediaServer, SettingsTestResult, SettingsUpdate
+from .models import DiscFacts, DiscKind, MediaServer, SettingsTestResult, SettingsUpdate
 from .providers.omdb import Omdb, OmdbError
 from .providers.thediscdb import DiscDbError, TheDiscDb
 from .providers.tvmaze import Tvmaze, TvmazeError
@@ -304,6 +305,32 @@ async def vision_model(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
     return SettingsTestResult(ok=ok, message=message, details=details)
 
 
+async def label_ai(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
+    """Ask the label model what a well-known cryptic label stands for."""
+    kind = v.vision_provider or s.vision_provider
+    url = _value(s, v, "vision_url")
+    model = _value(s, v, "label_ai_model") or _value(s, v, "vision_model")
+    if kind != "anthropic" and not url:
+        return _fail("No address for the AI model (Settings → Scanner and covers)")
+    if not model:
+        return _fail("No model name")
+    provider = Provider(kind=kind, url=url if kind != "anthropic" else None, model=model,
+                        key=_value(s, v, "vision_api_key"))
+    if kind == "anthropic" and not provider.key:
+        return _fail("No Anthropic API key")
+    facts = DiscFacts(label="BTTF2", main_duration_s=108 * 60, kind=DiscKind.dvd)
+    try:
+        reading = await ai_label.read(provider, facts, None, [108 * 60], tv=False)
+    except ai_label.LabelError as e:
+        return _fail(str(e)[:1].upper() + str(e)[1:])
+    details = [f"Took {reading.seconds:.0f} s", "Read BTTF2 as " + (" / ".join(reading.titles) or "nothing")]
+    if provider.cloud:
+        details.append("Labels and running times are sent to this service, outside your network")
+    ok = any("back to the future" in t.lower() for t in reading.titles)
+    return SettingsTestResult(ok=ok, message=f"{model} read the test label" if ok else
+                              f"{model} answered, but didn't read BTTF2 as Back to the Future", details=details)
+
+
 def _escl_base(url: str) -> str:
     try:
         return base_url(url)
@@ -327,6 +354,7 @@ CHECKS = {
     "scanner": scanner,
     "ocr": ocr,
     "vision": vision_model,
+    "label_ai": label_ai,
 }
 
 # The secrets each check uses. A box left empty means "the saved one", so a pass
@@ -341,6 +369,7 @@ CHECK_SECRETS = {
     "plex": ("plex_token",),
     "pushover": ("pushover_user_key", "pushover_app_token"),
     "vision": ("vision_api_key",),
+    "label_ai": ("vision_api_key",),
 }
 
 

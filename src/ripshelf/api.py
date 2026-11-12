@@ -54,6 +54,7 @@ from .models import (
     Job,
     JobDetail,
     JobState,
+    LabelReading,
     Listing,
     ListingView,
     LogPage,
@@ -294,6 +295,19 @@ async def search(job_id: int, body: SearchRequest, request: Request):
         raise HTTPException(404)
     try:
         return await m.search(job_id, body.query, body.year)
+    except ValueError as e:
+        raise bad_request(e) from None
+
+
+@api.post("/jobs/{job_id}/read-label", response_model=LabelReading)
+async def read_label(job_id: int, request: Request):
+    """Ask the AI model what a cryptic label stands for. A film disc's candidates are
+    searched for and ranked again; for a TV disc, search shows with the titles."""
+    m = manager(request)
+    if not m.db.get_job(job_id):
+        raise HTTPException(404)
+    try:
+        return await m.read_label(job_id)
     except ValueError as e:
         raise bad_request(e) from None
 
