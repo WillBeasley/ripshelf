@@ -1732,8 +1732,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         if job.state == JobState.failed:
             job.state = JobState.review  # rip is done; only the identity is open
         self._save(job)
-        d = self.drives[job.drive_id]
-        self._spawn(d, self._identify_then_rip(job_id), job_id)
+        self._spawn(self.drives.get(job.drive_id), self._identify_then_rip(job_id), job_id)
         return job
 
     async def _identify_then_rip(self, job_id: int) -> None:
@@ -1770,7 +1769,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             raise ValueError("only failed jobs can be retried")
         if job.refile:
             return await self._refile_retry(job)
-        d = self.drives[job.drive_id]
+        # The drive (or its worker) may be gone: only a rip needs it.
+        d = self.drives.get(job.drive_id)
         job.problem = None
         ripped = job.rip.files.values() if job.rip.all_titles else ([job.rip.file] if job.rip.file else [])
         if job.rip.state == RipState.done and ripped and all(Path(f).exists() for f in ripped):
@@ -1783,6 +1783,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 self._set_state(job, JobState.identifying, "Retrying identification")
                 self._spawn(d, self._identify(job_id), job_id)
             return job
+        if d is None:
+            raise ValueError("this job's drive is no longer connected, so it can't be ripped again")
         if self._busy_other(d, job_id):
             raise ValueError("the drive is busy with another job")
         self._check_enabled(d)

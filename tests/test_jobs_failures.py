@@ -235,6 +235,62 @@ async def test_interrupted_finalise_can_be_retried(settings, harness):
         assert Path(done.destination).read_bytes() == b"x" * 1000
 
 
+async def test_retry_without_its_drive(settings, harness):
+    """The drive (or the worker it was on) has gone, but a retry that doesn't need the disc
+    still goes through, and one that does says why it can't."""
+    from ripshelf.db import Database
+
+    rip = settings.scratch_dir / "job-1" / "t.mkv"
+    rip.parent.mkdir(parents=True)
+    rip.write_bytes(b"x" * 1000)
+    db = Database(settings.db_path)
+    copy = db.create_job("gone-drive", "/dev/fake-gone")
+    copy.state = JobState.finalising
+    copy.rip.state, copy.rip.file = RipState.done, str(rip)
+    copy.identity = MANUAL
+    db.save_job(copy)
+    unripped = db.create_job("gone-drive", "/dev/fake-gone")
+    unripped.state, unripped.rip.state = JobState.ripping, RipState.running
+    db.save_job(unripped)
+    db.close()
+    async with harness() as h:
+        assert "gone-drive" not in h.m.drives
+        assert h.job(copy.id).state == JobState.failed
+        await h.m.retry(copy.id)
+        await until(lambda: h.job(copy.id).state == JobState.done)
+        assert Path(h.job(copy.id).destination).read_bytes() == b"x" * 1000
+        with pytest.raises(ValueError, match="drive"):
+            await h.m.retry(unripped.id)
+        assert h.job(unripped.id).state == JobState.failed
+
+
+async def test_identify_again_without_its_drive(settings, harness):
+    """Identifying again, or marking the disc as TV, works off the rip already made."""
+    from ripshelf.db import Database
+    from ripshelf.models import MediaKind
+
+    rip = settings.scratch_dir / "job-1" / "t.mkv"
+    rip.parent.mkdir(parents=True)
+    rip.write_bytes(b"x" * 1000)
+    db = Database(settings.db_path)
+    job = db.create_job("gone-drive", "/dev/fake-gone")
+    job.state = JobState.review
+    job.rip.state, job.rip.file = RipState.done, str(rip)
+    job.identity = MANUAL
+    db.save_job(job)
+    db.close()
+    async with harness() as h:
+        await h.m.identify_again(job.id)
+        await until(lambda: not h.m._driveless_tasks)
+        after = h.job(job.id)
+        assert after.state == JobState.review and after.problem is None
+        await h.m.set_media(job.id, MediaKind.tv)
+        await until(lambda: not h.m._driveless_tasks)
+        after = h.job(job.id)
+        assert after.media == MediaKind.tv and after.rip.state == RipState.done
+        assert after.state == JobState.review
+
+
 # --- user actions in the wrong state -----------------------------------------------
 
 
