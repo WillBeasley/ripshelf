@@ -25,7 +25,7 @@ from . import (
     transcode,
 )
 from .bus import next_item
-from .config import EDITABLE, FOLDERS, REQUIRED_FOLDERS, SECRETS, Settings
+from .config import EDITABLE, FOLDERS, REQUIRED_FOLDERS, SECRETS, VISION_MODELS, Settings
 from .identify import catalogue
 from .makemkv import files as mkfiles
 from .makemkv import runner
@@ -851,7 +851,7 @@ def settings_view(s: Settings) -> SettingsView:
         custom_disc_backups_dir=str(s.disc_backups_dir or ""),
         makemkv_drive_data={d: runner.has_private_data(m_dir, d) for d in drive_ids},
         makemkv_drive_dumps={d: runner.has_dump(m_dir, d) for d in drive_ids},
-        backups_dir=str(s.backups),
+        backups_dir=str(s.backups), vision_models=VISION_MODELS,
     )
 
 

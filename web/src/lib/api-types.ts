@@ -2823,6 +2823,12 @@ export interface SettingsView {
    * where the database backups go
    */
   backups_dir: string;
+  /**
+   * vision provider -> the model it uses when none is set
+   */
+  vision_models: {
+    [k: string]: string;
+  };
   setup_complete: boolean;
   metadata_providers: {
     [k: string]: ProviderSlot[];
@@ -2874,7 +2880,7 @@ export interface SettingsView {
   vision_mode: "off" | "struggles" | "every" | "manual";
   vision_provider: "local" | "openai" | "anthropic";
   vision_url: string | null;
-  vision_model: string;
+  vision_model: string | null;
   vision_api_key_set: boolean;
   scans_to_library: boolean;
   tv_rip_extras: boolean;
@@ -2972,6 +2978,12 @@ export interface SettingsViewBase {
    * where the database backups go
    */
   backups_dir: string;
+  /**
+   * vision provider -> the model it uses when none is set
+   */
+  vision_models: {
+    [k: string]: string;
+  };
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

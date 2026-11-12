@@ -56,6 +56,20 @@ FOLDERS = ("library_dir", "movies_dir", "tv_dir", "disc_backups_dir", "scratch_d
 REQUIRED_FOLDERS = {"library_dir", "scratch_dir"}
 
 # The sections of the Settings screen, in order (web/src/lib/settings/sections.ts has their names).
+# The model each vision provider uses when none is set. A hosted OpenAI-compatible
+# service has none: its model names are its own.
+VISION_MODELS = {"local": "qwen3-vl:4b-instruct", "anthropic": "claude-opus-5-5"}
+
+
+def vision_model_for(provider: str, model: str | None) -> str | None:
+    """The model to ask: the one set, or the provider's default. Another provider's
+    default is never kept (an Ollama model name left when switching to Anthropic)."""
+    model = (model or "").strip()
+    if not model or (model in VISION_MODELS.values() and model != VISION_MODELS.get(provider)):
+        return VISION_MODELS.get(provider)
+    return model
+
+
 SECTIONS = ("identify", "drives", "scanner", "library", "media-servers", "transcoding", "notifications",
             "workers", "system")
 
@@ -330,7 +344,8 @@ class Settings(BaseSettings):
     # A vision model reading the scans beside Tesseract: never, only scans Tesseract
     # struggled with, every scan, or only when asked. "local" is an OpenAI-compatible
     # server on the LAN (Ollama), "openai" a hosted OpenAI-compatible service, and
-    # "anthropic" Anthropic's API (no address needed).
+    # "anthropic" Anthropic's API (no address needed). A model left blank is the
+    # provider's default (VISION_MODELS).
     vision_mode: Annotated[Literal["off", "struggles", "every", "manual"], UI(
         "scanner", "Read scans with a vision model",
         choices=(("off", "Never"), ("struggles", "Only when Tesseract struggles (recommended)"),
@@ -343,8 +358,8 @@ class Settings(BaseSettings):
         keywords="ollama openai anthropic claude")] = "local"
     vision_url: Annotated[str | None, Field(max_length=300), UI(
         "scanner", "Vision model address", placeholder="http://ollama:11434")] = None
-    vision_model: Annotated[str, Field(max_length=200), UI(
-        "scanner", "Vision model", placeholder="qwen3-vl:4b-instruct")] = "qwen3-vl:4b-instruct"
+    vision_model: Annotated[str | None, Field(max_length=200), UI(
+        "scanner", "Vision model", "Blank uses the default for where it runs.")] = None
     vision_api_key: Annotated[SecretStr | None, UI("scanner", "Vision model API key")] = None
     # Copy a job's scans into the film's or show's folder, in scans/.
     scans_to_library: Annotated[bool, UI(
@@ -494,6 +509,11 @@ class Settings(BaseSettings):
 
     def rip_mode_for(self, drive_id: str) -> str:
         return self.drive_modes.get(drive_id, self.rip_mode)
+
+    @property
+    def vision_model_name(self) -> str | None:
+        """The vision model to ask: the one set, or the provider's default."""
+        return vision_model_for(self.vision_provider, self.vision_model)
 
     def transcode_source(self, kind: str | None) -> dict[str, bool]:
         """Whether rips from this kind of disc are transcoded, and cropped. A disc
