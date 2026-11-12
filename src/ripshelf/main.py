@@ -89,6 +89,12 @@ def create_app(settings: Settings | None = None, backend=None) -> FastAPI:
         from .dev.fake_vision import FakeVision
 
         app.include_router(FakeVision(delay_s=float(os.environ.get("RIPSHELF_FAKE_VISION_SECONDS", "4"))).router())
+        if os.environ.get("RIPSHELF_FAKE_TMDB") == "1":
+            from .dev.fake_tmdb import FakeTmdb
+            from .identify import tmdb
+
+            app.include_router(FakeTmdb().router(), prefix="/fake-tmdb/3")
+            tmdb.API = f"http://127.0.0.1:{s.port}/fake-tmdb/3"
     mount_ui(app, s.static_dir or default_static_dir())
     return app
 
