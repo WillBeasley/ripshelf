@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Settings → System: this UI's address, database backups, and about ripshelf.
+	// Settings → System: this UI's address, daily backups, and about ripshelf.
 	import Field from '../Field.svelte';
 	import About from './About.svelte';
 	import type { SettingsForm } from '../form.svelte.ts';

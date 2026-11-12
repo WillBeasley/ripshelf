@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
+import tarfile
 import time
 from collections import namedtuple
 from contextlib import closing
+from unittest.mock import patch
 
+from ripshelf import backups
 from ripshelf import jobs as jobsmod
 from ripshelf.db import Database
 from ripshelf.models import JobState, RipProgress, RipState
@@ -83,6 +87,37 @@ async def test_backups_off_and_due(harness, settings):
         old = time.time() - jobsmod.BACKUP_INTERVAL_S - 10
         os.utime(p, (old, old))
         assert h.m._backup_due()
+
+
+async def test_backup_keeps_settings_and_makemkv_files(harness, settings):
+    settings.backup_keep = 2
+    home = settings.makemkv_dir / "fake-ihas122" / ".MakeMKV"
+    home.mkdir(parents=True)
+    (home / "_private_data.tar").write_bytes(b"libredrive")
+    (home / "_private_data.tar.tmp").write_bytes(b"half written")
+    settings.makemkv_files_dir.mkdir(parents=True)
+    (settings.makemkv_files_dir / "dump_moonlit.tgz").write_bytes(b"dump")
+    async with harness() as h:
+        settings.save_overrides({"backup_keep": 2})
+        folder = settings.backups
+        path = h.m.backup_now()
+        files = folder / backups.files_name(path.stem.removeprefix("ripshelf-"))
+        with tarfile.open(files) as tar:
+            names = set(tar.getnames())
+            assert json.load(tar.extractfile("settings.json"))["backup_keep"] == 2
+        assert {"settings.json", "makemkv/fake-ihas122/.MakeMKV/_private_data.tar",
+                "makemkv-files/dump_moonlit.tgz"} <= names
+        assert not any(n.endswith(".tmp") for n in names)
+        if os.name != "nt":
+            assert files.stat().st_mode & 0o077 == 0, "it holds the secrets"
+        # Pruned with the database copies, and a failure doesn't lose the database copy.
+        for d in ("2026-01-01", "2026-01-02", "2026-01-03"):
+            (folder / backups.files_name(d)).write_bytes(b"old")
+        with patch.object(backups, "write_files", side_effect=OSError("file changed as we read it")):
+            assert h.m.backup_now() == path
+        kept = sorted(p.name for p in folder.glob(backups.FILES_GLOB))
+        assert kept == [backups.files_name("2026-01-03"), files.name]
+        assert not list(folder.glob("*.tmp"))
 
 
 def test_db_backup_replaces_atomically(tmp_path):
