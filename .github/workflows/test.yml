@@ -126,3 +126,24 @@ jobs:
           cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=ci-linux-amd64,mode=max' || '' }}
       - name: Start it
         run: scripts/smoke-image.sh localhost/ripshelf:ci
+
+  windows:
+    # The Windows-only code (Job Objects, drive letters, volume details) against the real
+    # kernel32, and the start-up and process tests, which also pretend to be Windows. Not
+    # the whole suite: most of it runs fake rips through POSIX tools and file modes, and
+    # takes over half an hour on Windows. The runner has no optical drive.
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+      - name: Python
+        run: |
+          pip install -q -r requirements-dev.lock
+          pip install -q --no-deps -e .
+      - name: Tests
+        run: pytest -q tests/test_proc.py tests/test_windows_drives.py tests/test_main.py
