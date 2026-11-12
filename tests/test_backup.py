@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from ripshelf import library
+from ripshelf import library, proc
 from ripshelf.config import Settings
 from ripshelf.makemkv.parse import ProgressTracker, parse_info
 from ripshelf.models import Candidate, JobState
 
-from .conftest import posix_only, until
+from .conftest import fake_program, until
 from .test_pipeline import run_manager
 
 UHD = "/dev/fake-sr2"
@@ -80,19 +80,16 @@ async def test_per_drive_mode_overrides_the_default(settings: Settings):
         db.close()
 
 
-@posix_only
 async def test_backup_without_done_message_fails(settings: Settings, tmp_path: Path):
     """makemkvcon exiting 0 without "Backup done." (or with hash check failures) is a failed rip."""
-    script = tmp_path / "mkv.sh"
-    script.write_text(f"""#!/bin/sh
-case " $* " in
-  *" backup "*) for a; do out=$a; done; mkdir -p "$out/BDMV"
-     echo 'MSG:5080,0,1,"Backup done but 2 files failed hash check.","x","2"'; exit 0;;
-  *) exec {settings.makemkvcon} "$@";;
-esac
-""")
-    script.chmod(0o755)
-    settings.makemkvcon = str(script)
+    settings.makemkvcon = fake_program(tmp_path / "mkv", f"""
+        import subprocess, sys
+        from pathlib import Path
+        if "backup" not in sys.argv:
+            sys.exit(subprocess.run([*{proc.split_command(settings.makemkvcon)!r}, *sys.argv[1:]]).returncode)
+        (Path(sys.argv[-1]) / "BDMV").mkdir(parents=True, exist_ok=True)
+        print('MSG:5080,0,1,"Backup done but 2 files failed hash check.","x","2"')
+    """)
     settings.rip_mode = "backup"
     m, db, _ = await run_manager(settings, {UHD})
     try:

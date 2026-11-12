@@ -39,7 +39,7 @@ from ripshelf.providers.tvmaze import API as MAZE
 from ripshelf.providers.tvmaze import Tvmaze, TvmazeError
 from ripshelf.tv import tmdb_tv
 
-from .conftest import posix_only
+from .conftest import fake_program
 from .test_tv_sources import HBK, Tv, season1
 from .tvfix import load, mock_show
 
@@ -212,13 +212,18 @@ def test_7zip_listing():
     assert discfs.parse_listing("Path = /dev/sr0\nSize = 1\n") == []
 
 
-@posix_only
 async def test_structure_read_lists_sizes(tmp_path):
-    script = tmp_path / "7z"
-    script.write_text("#!/bin/sh\nif [ \"$1\" = l ]; then printf -- '----------\\nPath = BDMV/STREAM/00001.m2ts\\n"
-                      "Size = 5\\n\\n'; else mkdir -p \"${4#-o}/BDMV\"; echo x > \"${4#-o}/BDMV/index.bdmv\"; fi\n")
-    script.chmod(0o755)
-    files = await discfs.extract_structure(str(script), "/dev/null", tmp_path / "out")
+    script = fake_program(tmp_path / "7z", """
+        import sys
+        from pathlib import Path
+        if sys.argv[1] == "l":
+            print("----------\\nPath = BDMV/STREAM/00001.m2ts\\nSize = 5\\n")
+        else:
+            out = Path(next(a[2:] for a in sys.argv if a.startswith("-o"))) / "BDMV"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "index.bdmv").write_text("x")
+    """)
+    files = await discfs.extract_structure(script, "/dev/null", tmp_path / "out")
     assert files == ["BDMV/index.bdmv"]
     assert discfs.read_sizes(tmp_path / "out") == [("BDMV/STREAM/00001.m2ts", 5)]
     assert await discfs.list_sizes(str(tmp_path / "missing"), "/dev/null") == []
