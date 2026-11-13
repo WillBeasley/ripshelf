@@ -3,7 +3,8 @@ scan, turning them, cutting a whole sheet into its covers, and thumbnails.
 
 The original file is never changed. A scan's trim and turn are kept as numbers and
 applied to the copies made from it (the thumbnail and the covers), in this order: the
-camera's own orientation (EXIF), the trim, then the turn.
+camera's own orientation (EXIF), the straightening (a shelf cover's), the trim, the
+turn, then the mirroring (a shelf cover's).
 """
 
 from __future__ import annotations
@@ -135,11 +136,13 @@ def _out(fills: list[float], core: int) -> int:
     return edge
 
 
-def crop_from_shown(box: list[float], width: int, height: int, rotate: int) -> list[int]:
-    """A crop drawn on the whole scan as shown (turned clockwise by ``rotate``), as
-    fractions [left, top, right, bottom], in the original's pixels (``width`` by
-    ``height``, before the turn)."""
+def crop_from_shown(box: list[float], width: int, height: int, rotate: int, flip: bool = False) -> list[int]:
+    """A crop drawn on the whole scan as shown (turned clockwise by ``rotate``, then
+    mirrored left to right with ``flip``), as fractions [left, top, right, bottom], in
+    the original's pixels (``width`` by ``height``, before the turn)."""
     left, top, right, bottom = box
+    if flip:
+        left, right = 1 - right, 1 - left
     left, top, right, bottom = {
         0: (left, top, right, bottom),
         90: (top, 1 - right, bottom, 1 - left),
@@ -149,14 +152,22 @@ def crop_from_shown(box: list[float], width: int, height: int, rotate: int) -> l
     return [round(left * width), round(top * height), round(right * width), round(bottom * height)]
 
 
-def render(data: bytes, crop: list[int] | None, rotate: int) -> Image.Image:
+def render(data: bytes, crop: list[int] | None, rotate: int, flip: bool = False,
+           straighten: float = 0) -> Image.Image:
+    """The picture as used: straightened by ``straighten`` degrees clockwise (within its
+    own frame, the corners it turns out of filled white), trimmed to ``crop``, turned
+    clockwise by ``rotate`` and mirrored left to right with ``flip``."""
     img = open_image(data)
+    if straighten:
+        img = img.convert("RGB").rotate(-straighten, Image.Resampling.BICUBIC, fillcolor=(255, 255, 255))
     if crop:
         left, top, right, bottom = crop
         if 0 <= left < right <= img.width and 0 <= top < bottom <= img.height:
             img = img.crop((left, top, right, bottom))
     if rotate:
         img = img.rotate(-rotate, expand=True)  # PIL turns anticlockwise
+    if flip:
+        img = ImageOps.mirror(img)
     return img.convert("RGB")
 
 

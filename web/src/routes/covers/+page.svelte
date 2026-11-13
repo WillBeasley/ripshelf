@@ -8,6 +8,7 @@
 	import { when } from '#lib/format.ts';
 	import { coverFacts, coverTitle, READ_STATE, VISION_STATE } from '#lib/shelf.ts';
 	import ShelfStack from '#lib/components/ShelfStack.svelte';
+	import ShelfEdit from '#lib/components/ShelfEdit.svelte';
 
 	const act = new Action();
 	let view = $state<ShelfView | null>(null);
@@ -25,6 +26,7 @@
 	let openId = $state<string | null>(null);
 	const open = $derived(view?.covers.find((c) => c.id === openId) ?? null);
 	let side = $state<'outside' | 'inside'>('outside');
+	let editing = $state(false);
 	let drive = $state('');
 
 	async function load() {
@@ -83,6 +85,7 @@
 	function show(c: ShelfCover) {
 		openId = c.id;
 		side = c.outside ? 'outside' : 'inside';
+		editing = false;
 		drive = live.drives[0]?.id ?? '';
 		dialog?.showModal();
 	}
@@ -171,7 +174,7 @@
 	</ul>
 </div>
 
-<dialog bind:this={dialog} onclose={() => (openId = null)}>
+<dialog bind:this={dialog} onclose={() => ((openId = null), (editing = false))}>
 	{#if open}
 		<div class="stack big">
 			<div class="spread">
@@ -183,11 +186,15 @@
 			</div>
 			{#if open.outside && open.inside}
 				<div class="row" role="tablist">
-					<button class:primary={side === 'outside'} role="tab" aria-selected={side === 'outside'} onclick={() => (side = 'outside')}>Outside</button>
-					<button class:primary={side === 'inside'} role="tab" aria-selected={side === 'inside'} onclick={() => (side = 'inside')}>Inside</button>
+					<button class:primary={side === 'outside'} role="tab" aria-selected={side === 'outside'} onclick={() => ((side = 'outside'), (editing = false))}>Outside</button>
+					<button class:primary={side === 'inside'} role="tab" aria-selected={side === 'inside'} onclick={() => ((side = 'inside'), (editing = false))}>Inside</button>
 				</div>
 			{/if}
-			{#if open[side]}
+			{#if open[side] && editing}
+				{#key `${open.id}-${side}`}
+					<ShelfEdit cover={open} {side} {act} onchange={load} onclose={() => (editing = false)} />
+				{/key}
+			{:else if open[side]}
 				<img src={api.shelfSideUrl(open, side, true)} alt={side === 'outside' ? 'The outside of the sheet' : 'The inside of the sheet'} />
 			{/if}
 			<div class="small muted">
@@ -198,7 +205,11 @@
 			</div>
 			{#if open.note}<p class="small muted">{open.note}</p>{/if}
 			<div class="row">
-				<button disabled={act.busy || !open.inside} onclick={() => doThen(() => api.shelfSwap(open!.id))}
+				{#if !editing && open[side]}
+					<button disabled={act.busy} onclick={() => (editing = true)}
+						title="Crop, turn, flip or straighten this side (the original is kept)">Edit…</button>
+				{/if}
+				<button disabled={act.busy || editing || !open.inside} onclick={() => doThen(() => api.shelfSwap(open!.id))}
 					title="The outside and the inside were taken the wrong way round">Swap sides</button>
 				<button disabled={act.busy} onclick={() => doThen(() => api.shelfReadAgain(open!.id))}>Read again</button>
 				{#if scanner?.vision}

@@ -26,6 +26,7 @@ This will be 0.7.0. Release candidates: [0.7.0-rc1](https://github.com/WillBeasl
 - Dependabot proposes updates to the UI's packages, the CI actions and the Dockerfile's base images each week, and the base images are pinned by digest. A weekly workflow checks the Python locks for known vulnerabilities.
 - The barcode on a cover scan is looked up on TheDiscDB, then UPCitemdb, then a paid barcode service if you set one up (Barcode Lookup or EAN-Search, Settings → Identify → Barcodes on covers), then your SearXNG. A lookup that failed is tried again next time instead of being kept as "not found", and a changed barcode is looked up again.
 - A covers shelf: scan a stack of case sheets ahead of their discs (both sides at once, or in two passes turning the stack over), or upload pictures and PDFs. Each sheet is read, blank sides are left out, and when its disc goes in the job offers it to use as its scans ([cover-scans.md](docs/cover-scans.md#the-covers-shelf)). PDFs are read with pypdfium2, a new Python dependency.
+- Edit a cover on the shelf by hand: turn it, flip it, straighten a sheet laid askew and crop it. The original scan is kept, so **As it came** undoes it all, and the cover is read again as it then shows ([cover-scans.md](docs/cover-scans.md#editing-a-cover)).
 
 ### Changed
 

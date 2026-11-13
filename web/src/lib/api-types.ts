@@ -160,6 +160,7 @@ export interface Api {
   ShelfReading?: ShelfReading;
   ShelfScanRequest?: ShelfScanRequest;
   ShelfSide?: ShelfSide;
+  ShelfSideUpdate?: ShelfSideUpdate;
   ShelfStack?: ShelfStack;
   ShelfSuggestion?: ShelfSuggestion;
   ShelfUploadResult?: ShelfUploadResult;
@@ -3121,9 +3122,21 @@ export interface ShelfSide {
    */
   rotate: 0 | 90 | 180 | 270;
   /**
-   * the sheet within the scan, [left, top, right, bottom] in the original's pixels, when trimmed
+   * the sheet within the scan, [left, top, right, bottom] in the original's pixels (once straightened), when trimmed
    */
   crop: number[] | null;
+  /**
+   * mirrored left to right, after the turn
+   */
+  flip: boolean;
+  /**
+   * degrees turned clockwise before the trim, to level a sheet laid askew (on the original, so a flipped side shows it the other way)
+   */
+  straighten: number;
+  /**
+   * edited by hand: its crop and turn are kept as they are
+   */
+  by_hand: boolean;
   /**
    * where the spine is, for the outside
    */
@@ -3178,6 +3191,32 @@ export interface ShelfScanRequest {
    * the Settings default if left out
    */
   dpi?: number | null;
+}
+/**
+ * A shelf cover's side edited by hand. The original is kept, so any of it can be
+ * undone (``reset``).
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfSideUpdate".
+ */
+export interface ShelfSideUpdate {
+  rotate?: (0 | 90 | 180 | 270) | null;
+  /**
+   * mirror it left to right
+   */
+  flip?: boolean | null;
+  /**
+   * degrees clockwise, as shown, to level a sheet laid askew
+   */
+  straighten?: number | null;
+  /**
+   * [left, top, right, bottom] as fractions of the whole side as shown (straightened, turned and flipped, not trimmed)
+   */
+  crop?: [number, number, number, number] | null;
+  /**
+   * back to the side as it came: trimmed automatically, not turned, flipped or straightened (the rest of the request applies after)
+   */
+  reset?: boolean;
 }
 /**
  * A stack of sheets on its way to the shelf: being scanned, or held between two
