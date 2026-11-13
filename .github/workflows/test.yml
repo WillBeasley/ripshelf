@@ -63,7 +63,14 @@ jobs:
         # mostly wait on fake rips, so three per core keeps the runner busy.
         run: |
           chown -R tester .
-          runuser -u tester -- pytest -q -n 12 --dist worksteal
+          runuser -u tester -- env COVERAGE_FILE=.coverage.linux pytest -q -n 12 --dist worksteal --cov=ripshelf --cov-report=
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-linux
+          path: .coverage.linux
+          include-hidden-files: true
+          retention-days: 14
 
   ui:
     # The UI's unit tests (Vitest), then its browser tests (Playwright) against the backend
@@ -136,7 +143,7 @@ jobs:
     # and ffmpeg, which the episode splitting and its tests need. Tests of Linux-only code
     # (sysfs, SG_IO, signals, process groups, file modes) skip. There's no optical drive.
     runs-on: windows-2025
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -162,4 +169,40 @@ jobs:
       - name: MKVToolNix, Tesseract and ffmpeg
         run: choco install mkvtoolnix tesseract ffmpeg -y --no-progress
       - name: Tests
-        run: pytest -q -n 4 --dist worksteal -rs
+        env:
+          COVERAGE_FILE: .coverage.windows
+        run: pytest -q -n 4 --dist worksteal -rs --cov=ripshelf --cov-report=
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-windows
+          path: .coverage.windows
+          include-hidden-files: true
+          retention-days: 14
+
+  coverage:
+    # Linux and Windows coverage together, on the run's summary page: each platform's total,
+    # the files Windows covers much less of, and the combined report (HTML as an artifact).
+    needs: [test, windows]
+    if: always() && !cancelled()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+      - name: Report
+        run: |
+          pip install -q coverage==7.17.0
+          python scripts/coverage-summary.py .coverage.linux .coverage.windows >> "$GITHUB_STEP_SUMMARY"
+          python -m coverage html -d coverage-html
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage-html
+          path: coverage-html/
+          retention-days: 14

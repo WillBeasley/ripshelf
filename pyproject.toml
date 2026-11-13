@@ -54,6 +54,13 @@ ignore = ["E501", "B008"]
 branch = true
 source = ["ripshelf"]
 omit = ["src/ripshelf/dev/*"]
+# CI combines the Linux and Windows runs (scripts/coverage-summary.py), so the files are
+# named relative to the checkout, and both platforms' names map to src/ripshelf.
+relative_files = true
+
+[tool.coverage.paths]
+source = ["src/ripshelf/", "src\\ripshelf\\", "*/src/ripshelf/", "*\\src\\ripshelf\\",
+          "*/site-packages/ripshelf/", "*\\site-packages\\ripshelf\\"]
 
 [tool.coverage.report]
 show_missing = true
