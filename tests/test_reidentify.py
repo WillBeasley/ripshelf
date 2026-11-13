@@ -103,6 +103,28 @@ async def test_a_film_moves_to_the_right_title(harness, settings):
         assert "Re-identified: Moonlit Orchard (2004) → Captain Comet (2011)" in msgs
 
 
+async def test_what_isnt_the_jobs_stays_and_the_user_is_told(harness, settings, monkeypatch):
+    from .test_contribute import contribute_state
+
+    def no_record(*a):
+        raise PermissionError(13, "Permission denied")
+
+    async with harness() as h:
+        job, old, _ = filed_film(h, settings)
+        (old / "my notes.txt").write_text("mine")  # the user's own file in the film's folder
+        job.contribution = contribute_state("sent")
+        h.db.save_job(job)
+        await h.m.reidentify(job.id)
+        monkeypatch.setattr(h.m, "_rewrite_disc_record", no_record)
+        await h.m.confirm(job.id, RIGHT)
+        job = await done(h, job.id)
+        msgs = [e.message for e in h.db.events(job.id)]
+    assert job.state == JobState.done and (old / "my notes.txt").read_text() == "mine"
+    assert f"{old} still has 1 file that isn't this job's, so it stays" in msgs
+    assert "TheDiscDB was sent this disc as Moonlit Orchard (2004), so correct it there" in msgs
+    assert "Could not update the .disc record: [Errno 13] Permission denied" in msgs
+
+
 async def test_a_film_already_in_the_library_is_never_overwritten(harness, settings):
     async with harness() as h:
         job, old, dest = filed_film(h, settings)
