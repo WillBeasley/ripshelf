@@ -15,9 +15,28 @@
 		['two_pass', 'Two passes (turn the stack over)', 'For a feeder without duplex: one side, then the other.'],
 		['one_side', 'One side only', 'Each sheet makes a cover with just its outside.']
 	];
-	let mode = $state<Mode>('duplex');
+	// The last choice is remembered in this browser (two passes, say, for a scanner whose
+	// duplex doesn't work although it says it has one).
+	const KEY = 'ripshelf.shelf-mode';
+	function remembered(): Mode {
+		try {
+			const m = localStorage.getItem(KEY);
+			if (m && MODES.some(([k]) => k === m)) return m as Mode;
+		} catch {
+			/* no storage here */
+		}
+		return 'duplex';
+	}
+	let mode = $state<Mode>(remembered());
 	$effect(() => {
 		if (scanner?.ok && !scanner.duplex && mode === 'duplex') mode = 'two_pass';
+	});
+	$effect(() => {
+		try {
+			localStorage.setItem(KEY, mode);
+		} catch {
+			/* no storage here */
+		}
 	});
 
 	const scanning = $derived(stack?.state === 'scanning');
