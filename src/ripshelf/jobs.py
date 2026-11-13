@@ -1727,7 +1727,14 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                       if isinstance(t, dict) and t.get("file")]
             paths += [p for p in meta.rglob("*") if p.is_file()] if meta.is_dir() else []
         elif job.media == MediaKind.movie and job.mode != "backup" and job.destination:
-            paths += [Path(job.destination), *(Path(p) for p in job.filed_extras.values())]
+            film = Path(job.destination)
+            paths += [film, *(Path(p) for p in job.filed_extras.values())]
+            # Its .disc record too, unless another version of the film (kept both) stays beside it.
+            folder = film.parent
+            others = [p for p in folder.rglob("*") if p.is_file() and ".disc" not in p.relative_to(folder).parts
+                      and p not in paths] if folder.is_dir() else []
+            if not others:
+                paths += [p for p in (folder / ".disc").rglob("*") if p.is_file()]
         roots = [self.s.tv.resolve(), self.s.movies.resolve()]
         done: list[str] = []
         for p in paths:
