@@ -83,6 +83,48 @@ async def test_a_films_extras_are_filed_by_name(harness, settings, tmp_path):
         assert len(list(folder.rglob("*.mkv"))) == 2 + 1
 
 
+async def test_an_extra_that_cant_be_copied_is_a_warning(harness, settings, tmp_path, monkeypatch):
+    real = library.copy_verified
+
+    def copy(src, dest, *a, **kw):
+        if "Teaser" in dest.name:
+            raise OSError(28, "No space left on device")
+        return real(src, dest, *a, **kw)
+
+    monkeypatch.setattr(library, "copy_verified", copy)
+    async with harness() as h:
+        job, folder = film_with_extras(h, settings, tmp_path)
+        await h.m.file_film_extras(job, folder)
+        assert sorted(h.db.get_job(job.id).filed_extras) == [4], "the others are still filed"
+        assert any(e.message.startswith("Could not copy title 1 to") and "No space left" in e.message
+                   for e in h.db.events(job.id))
+
+
+async def test_ripping_the_extras_refuses_what_it_cant_do(harness, settings, tmp_path):
+    async with harness() as h:
+        with pytest.raises(KeyError):
+            await h.m.rip_film_extras(999)
+        job, _ = film_with_extras(h, settings, tmp_path)
+        job = h.db.get_job(job.id)
+        job.rip.files = {0: job.rip.files[0]}  # the extras not ripped yet
+        h.db.save_job(job)
+        settings.film_unnamed_extras = "extras"  # so every title is an extra to rip
+        with pytest.raises(ValueError, match="while the disc is still in its drive"):
+            await h.m.rip_film_extras(job.id)  # its drive isn't here
+        settings.film_unnamed_extras = "skip"
+        with pytest.raises(ValueError, match="no extras to rip"):
+            await h.m.rip_film_extras(job.id)
+
+
+async def test_the_cover_scan_only_sets_a_tv_discs_episodes(harness, settings, tmp_path):
+    async with harness() as h:
+        with pytest.raises(KeyError):
+            await h.m.use_scan(999)
+        job, _ = film_with_extras(h, settings, tmp_path)
+        with pytest.raises(ValueError, match="only a TV disc waiting for review"):
+            await h.m.use_scan(job.id)
+
+
 async def test_unnamed_film_extras_when_asked(harness, settings, tmp_path):
     settings.film_unnamed_extras = "extras"
     async with harness() as h:
