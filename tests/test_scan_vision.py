@@ -484,3 +484,19 @@ async def test_the_label_reader_uses_the_default_model_too(harness, settings):
 async def test_the_test_button_keeps_an_address_as_typed():
     ok, message_, _ = await vision.check(scripted("local", lambda hx: hx.Response(401)))
     assert not ok and message_ == "http://x.test/v1 refused the key (HTTP 401)"
+
+
+@pytest.mark.parametrize(("raw", "fmt"), [
+    ("Dolby TrueHD 7.1", "Dolby TrueHD"), ("dts-hd ma", "DTS-HD MA"), ("AC-3", "Dolby Digital"),
+    ("DD", "Dolby Digital"), ("ac3 stereo", "Dolby Digital"), ("Vorbis", None), ("", None), (None, None),
+])
+def test_audio_formats_as_the_box_prints_them(raw, fmt):
+    assert vision._format(raw) == fmt
+
+
+@pytest.mark.parametrize(("raw", "channels"), [
+    ("5.1 surround", "5.1"), ("Mono", "mono"), ("1.0", "mono"), ("1", "mono"), ("Stereo", "2.0"), ("2", "2.0"),
+    ("surround", None), ("", None), (None, None),
+])
+def test_audio_channels_as_the_box_prints_them(raw, channels):
+    assert vision._channels(raw) == channels
