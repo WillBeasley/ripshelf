@@ -23,6 +23,9 @@ async def test_delete_finished_job_keeps_library_and_disc_cache(harness, setting
         job = await h.wait_job(lambda j: j.state == JobState.review)
         await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
         done = await h.wait_job(lambda j: j.state == JobState.done)
+        # Done comes before its task has finished filing (stats, scans), and until then
+        # the job can't be deleted.
+        await until(lambda: not h.m._bg.get(done.id), what="the job's task to end")
         work = h.m.work_dir(done)
         assert work.exists()
         seen = []

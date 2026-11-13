@@ -23,9 +23,9 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import sys
-import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -118,14 +118,18 @@ def check_library(library: Path, what: str = "library folder") -> None:
 def writable(folder: Path) -> bool:
     """Whether files can be made in ``folder``. On Windows ``os.access`` only reads the
     read-only attribute, not the folder's permissions (or a share's), so a file is made
-    and removed there instead."""
+    there instead, and deleted as it's closed. Not with tempfile: on Windows it takes a
+    refused file in a folder ``os.access`` calls writable for a name clash, and tries
+    10,000 names."""
     if sys.platform != "win32":
         return os.access(folder, os.W_OK | os.X_OK)
+    probe = folder / f".ripshelf-check-{os.getpid()}-{secrets.token_hex(4)}"
     try:
-        with tempfile.TemporaryFile(dir=folder, prefix=".ripshelf-check-"):
-            return True
+        fd = os.open(probe, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_TEMPORARY)
     except OSError:
         return False
+    os.close(fd)
+    return True
 
 
 # A copy needs the files' size plus this much, for the filesystem's own overhead and the
