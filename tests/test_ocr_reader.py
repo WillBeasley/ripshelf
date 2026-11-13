@@ -243,6 +243,70 @@ async def test_a_doubtful_orientation_is_not_trusted():
     assert out.turned == 90
 
 
+class UprightReader(LookingReader):
+    """Reads confident text only when the picture's black bar is along its top."""
+
+    def __init__(self, turn=0, conf=0.0):
+        super().__init__(turn, conf)
+        self.sizes: list[tuple[int, int]] = []
+
+    async def read(self, img, psm=3):
+        self.sizes.append(img.size)
+        upright = dark(img, (0.2, 0, 0.8, 0.1))
+        return [ocr.Line([ocr.Word("Lighthouse" if upright else "ǝsnoɥ", 95 if upright else 30, (5, 5, 90, 20))])]
+
+
+def wrap(w: int, h: int, bar: str) -> Image.Image:
+    """A made-up outer sheet with a black bar along one side (where its text is upright)."""
+    img = Image.new("RGB", (w, h), "white")
+    box = {"top": (0.3 * w, 0, 0.7 * w, 0.05 * h), "bottom": (0.3 * w, 0.95 * h, 0.7 * w, h),
+           "left": (0, 0.3 * h, 0.05 * w, 0.7 * h), "right": (0.95 * w, 0.3 * h, w, 0.7 * h)}[bar]
+    ImageDraw.Draw(img).rectangle(box, fill="black")
+    return img
+
+
+@pytest.mark.parametrize(("bar", "osd", "turned"), [
+    ("left", (0, 0.0), 90),  # lying on its side, and the orientation check can't tell
+    ("right", (0, 0.0), 270),
+    ("left", (180, 9.0), 90),  # sure, but upright would stand it up tall: never
+    ("right", (270, 9.0), 270),  # sure, and lying flat: taken
+    ("left", (0, 9.0), 90),  # sure it's upright, but that's tall: never
+], ids=["side-unsure-cw", "side-unsure-ccw", "side-upside-down-osd", "side-sure", "side-osd-upright"])
+async def test_a_whole_sheet_on_its_side_is_only_ever_turned_flat(bar, osd, turned):
+    out = await ocr.read_picture(UprightReader(*osd), wrap(1500, 2700, bar), "outside_full", barcodes=False)
+    assert out.turned == turned
+
+
+@pytest.mark.parametrize(("bar", "osd", "turned"), [
+    ("top", (0, 0.0), 0),
+    ("bottom", (0, 0.0), 180),  # upside down: the text reads only turned over
+    ("top", (90, 9.0), 0),  # sure it's on its side, but that would stand it up tall
+    ("bottom", (270, 9.0), 180),
+    ("top", (180, 9.0), 180),  # sure and flat: taken
+], ids=["flat", "upside-down", "osd-says-side", "osd-says-side-upside-down", "osd-sure-flat"])
+async def test_a_whole_sheet_lying_flat_stays_flat(bar, osd, turned):
+    out = await ocr.read_picture(UprightReader(*osd), wrap(2700, 1500, bar), "outside_full", barcodes=False)
+    assert out.turned == turned
+
+
+async def test_a_front_alone_is_turned_as_the_orientation_check_says():
+    """A DVD's front on its own (taller than wide, no spine) isn't a whole sheet."""
+    front = Image.new("RGB", (1300, 1840), "white")
+    assert not ocr.is_wrap(front)
+    out = await ocr.read_picture(UprightReader(), front, "outside_full", barcodes=False)
+    assert out.turned == 0
+    out = await ocr.read_picture(UprightReader(90, 9.0), front, "outside_full", barcodes=False)
+    assert out.turned == 90, "turned on its side as sure, though that leaves it wider"
+
+
+def test_a_squarish_sheet_is_whole_when_its_spine_shows():
+    img = Image.new("RGB", (1840, 2730), "white")  # a DVD sheet on its side, about 1.48 long
+    assert not ocr.is_wrap(img)
+    ImageDraw.Draw(img).rectangle((0, 1300, 1840, 1302), fill="black")  # the spine's two folds
+    ImageDraw.Draw(img).rectangle((0, 1430, 1840, 1432), fill="black")
+    assert ocr.is_wrap(img)
+
+
 # --- barcodes -------------------------------------------------------------------------
 
 def test_no_zbar_means_no_barcodes(monkeypatch):

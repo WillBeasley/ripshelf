@@ -48,7 +48,7 @@ Reading takes a few seconds a picture, one job at a time.
 [Tesseract](https://github.com/tesseract-ocr/tesseract) reads the text, and [zbar](https://github.com/mchehab/zbar) the barcode. For each picture:
 
 1. **Size.** It is scaled to about 300 dpi.
-2. **Orientation.** It is turned the right way up if it was scanned on its side. The scan's thumbnail turns with it.
+2. **Orientation.** It is turned the right way up if it was scanned on its side. The scan's thumbnail turns with it. A whole outer sheet (much wider than tall, or with a spine down it) is only ever turned to lie flat, never stood on its end; a front or back on its own is turned whichever way its text runs.
 3. **Parts.** A whole outer sheet is read as its back, spine and front, cut where the spine is. **Cut into front and back covers…** moves the cut.
 4. **Two readings.** Each part is read as it is (best for flatbed scans) and with local contrast (best for phone photos, with glare and coloured stripes behind the text). The fuller reading of each line is kept.
 
