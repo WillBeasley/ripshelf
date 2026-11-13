@@ -62,7 +62,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_HOME` | the source checkout | the folder unset folders and `ripshelf.env` go next to, outside a container |
 | `RIPSHELF_ENV_FILE` | `<data>/ripshelf.env` in a container, `ripshelf.env` in the ripshelf folder otherwise | the env file to read |
 | `RIPSHELF_HOST` / `PORT` | `0.0.0.0` / 8380 | the address and port the web UI listens on. `0.0.0.0` is every network the machine is on. The Windows batch file sets `127.0.0.1`, so only that PC can open the UI ([windows.md](windows.md)) |
-| `RIPSHELF_ALLOWED_HOSTS` | none | more names the UI is opened by, comma separated (`.example.com` for every name under it, `*` for any). IP addresses, `localhost`, names with no dots, names under `.local`, `.lan`, `.home`, `.home.arpa` and `.internal`, and the public URL's name work without it ([troubleshooting.md](troubleshooting.md#ripshelf-isnt-served-at)) |
+| `RIPSHELF_ALLOWED_HOSTS` | none | more names the UI is opened by, comma separated (`.example.com` for every name under it, `*` for any). IP addresses, `localhost`, names with no dots, names under `.local`, `.lan`, `.home`, `.home.arpa`, `.internal`, `.localhost` and `.localdomain`, and the public URL's name work without it ([troubleshooting.md](troubleshooting.md#ripshelf-isnt-served-at-)) |
 | `RIPSHELF_BACKUP_DIR` | `/backups` | where [daily backups](#daily-backups) go. How many are kept is set in Settings |
 | `RIPSHELF_MAKEMKVCON`, `FFMPEG`, `FFPROBE`, `SEVENZIP`, `BLKID`, `MKVMERGE` | the program name, found on the PATH | the programs ripshelf runs |
 | `RIPSHELF_ACCEPT_MAKEMKV_EULA` | `no` | set `yes` once you have read and accepted MakeMKV's licence. Only needed where MakeMKV came with ripshelf (the image), and on every container that runs MakeMKV. Until it is set, MakeMKV isn't run and discs wait |
@@ -120,7 +120,7 @@ In a container `ripshelf.env` lives in `/data`. Outside a container it's in the 
 | `RIPSHELF_TV_RIP_EXTRAS` | on | TV titles that look like extras start as Extra in review. Off, they start as Skip |
 | `RIPSHELF_TV_UNMATCHED` | `extras` | where a TV disc's extras go when the cover scan doesn't name them: `extras` (the show's extras folder), `specials` (Season 00, numbered after the specials already there) or `skip` (not copied to the library, and named extras aren't either). "TV extras go" in Settings → Library and filing |
 | `RIPSHELF_BACKUP_KEEP` | 7 | [daily backups](#daily-backups) kept, 0 turns them off (Settings → System) |
-| `RIPSHELF_PUBLIC_URL` | none | this UI's address, used in notification links |
+| `RIPSHELF_PUBLIC_URL` | none | this UI's address, used in notification links. Its name is also one the UI may be opened by and changes may come from, as through a reverse proxy ([installation.md](installation.md#behind-a-reverse-proxy)) |
 | `RIPSHELF_PUSHOVER_USER_KEY` / `PUSHOVER_APP_TOKEN` / `PUSHOVER_DEVICE` | none | notifications (Pushover only) |
 | `RIPSHELF_NOTIFY_EVENTS` | `{"disc": null, "review": 1, "exists": 1, "ripped": 0, "transcoded": null, "copied": null, "done": 0, "failed": 1, "setup": 0}` | which events notify, with their Pushover priority (-2 to 1). `null` is off, and an event left out gets its default ([how-it-works.md](how-it-works.md#notifications)) |
 | `RIPSHELF_NOTIFY_BATCH_S` | 120 | further notifications of one kind within this many seconds come as one summary. 0 sends every one |

@@ -156,9 +156,9 @@ Settings → Transcoding lists the GPUs and the ffmpeg hardware encoders that wo
 
 ## "ripshelf isn't served at ..."
 
-ripshelf only answers to the names a LAN uses: IP addresses, `localhost`, names with no dots (`hestia`), and names under `.local`, `.lan`, `.home`, `.home.arpa` and `.internal`. That stops a web page on a name someone points at your server's address (DNS rebinding) from using it. If you open the UI by another name, such as through a reverse proxy or a `ts.net` Tailscale name, set that address as this UI's address in Settings → System (open it by IP to get there), or add the name to `RIPSHELF_ALLOWED_HOSTS`, for example `RIPSHELF_ALLOWED_HOSTS=rip.example.com` or `.example.com` for every name under it. Remote workers aren't affected.
+ripshelf only answers to the names a LAN uses: IP addresses, `localhost`, names with no dots (`hestia`), and names under `.local`, `.lan`, `.home`, `.home.arpa`, `.internal`, `.localhost` and `.localdomain`. That stops a web page on a name someone points at your server's address (DNS rebinding) from using it. If you open the UI by another name, such as through a reverse proxy or a `ts.net` Tailscale name, set that address as this UI's address in Settings → System (open it by IP to get there), or add the name to `RIPSHELF_ALLOWED_HOSTS`, for example `RIPSHELF_ALLOWED_HOSTS=rip.example.com` or `.example.com` for every name under it. Remote workers aren't affected. For a reverse proxy, see [behind a reverse proxy](installation.md#behind-a-reverse-proxy).
 
-"Refused a change sent from another web page" means a page that wasn't the ripshelf UI tried to eject, cancel or change something, through your browser. If it was the UI itself behind a reverse proxy that changes the `Host` header, set the public address in Settings → System.
+"Refused a change sent from another web page" means a page that wasn't the ripshelf UI tried to eject, cancel or change something, through your browser. If it was the UI itself behind a reverse proxy that changes the `Host` header, set the public address in Settings → System ([behind a reverse proxy](installation.md#behind-a-reverse-proxy)).
 
 ## Still stuck?
 
