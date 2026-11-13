@@ -21,8 +21,9 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from .config import ANTHROPIC_VISION_MODELS
 from .db import now
-from .models import CoverScan, Listing, ScanText, sentence
+from .models import CoverScan, Listing, ScanText, VisionModels, sentence
 from .scanner import images, vision
 from .scanner import listing as parse
 
@@ -83,6 +84,24 @@ class VisionMixin:
         if self.s.vision_mode == "off":
             return None
         return self._model_provider(self.s.vision_model_name)
+
+    async def vision_models(self) -> VisionModels:
+        """The models to pick from for one reading: Anthropic's current ones, or what
+        the server lists (with a note why not, when it can't be asked)."""
+        s = self.s
+        out = VisionModels(provider=s.vision_provider, current=s.vision_model_name)
+        if s.vision_provider == "anthropic":
+            out.models = list(ANTHROPIC_VISION_MODELS)
+        elif not (provider := self._model_provider(s.vision_model_name or "?")):
+            out.message = "No address is set for the vision model"
+        else:
+            try:
+                out.models = await vision.list_models(provider)
+            except vision.VisionError as e:
+                out.message = sentence(str(e))
+        if out.current and out.current not in out.models:
+            out.models.insert(0, out.current)
+        return out
 
     def label_provider(self) -> vision.Provider | None:
         """The model that reads cryptic labels: the vision model's connection, with the

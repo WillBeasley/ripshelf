@@ -24,6 +24,7 @@ used or deleted. A two-pass stack's first pass waits in ``covers/stack`` for the
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import logging
 import re
@@ -105,7 +106,7 @@ class ShelfMixin:
         self._shelf_lock = asyncio.Lock()
         self._shelf_task: asyncio.Task | None = None  # reading the covers
         self._shelf_again = False
-        self._shelf_vision_asked: set[str] = set()
+        self._shelf_vision_asked: dict[str, str | None] = {}  # cover -> the model asked for, if not Settings'
         self._shelf_edited: set[str] = set()  # read again after an edit: not by the vision model
         self._stack_task: asyncio.Task | None = None  # scanning a stack
 
@@ -691,13 +692,13 @@ class ShelfMixin:
             return
         self._shelf_task = asyncio.create_task(self._read_shelf_loop())
 
-    async def ask_shelf_vision(self, cover_id: str) -> ShelfCover:
+    async def ask_shelf_vision(self, cover_id: str, model: str | None = None) -> ShelfCover:
         """Read the cover with the vision model now (its button), whatever Settings say
-        about when it runs."""
+        about when it runs; with ``model``, that model this once (Settings unchanged)."""
         self.shelf_cover(cover_id)
         if not self.vision_provider():
             raise ValueError("set up a vision model in Settings → Scanner and covers first")
-        self._shelf_vision_asked.add(cover_id)
+        self._shelf_vision_asked[cover_id] = (model or "").strip() or None
         c = await self._update_cover(cover_id, lambda c: setattr(c.reading, "vision_state", "queued"))
         self.read_shelf()
         return c
@@ -726,7 +727,7 @@ class ShelfMixin:
         is kept), and what its barcode names. False when reading can't go on (no
         Tesseract)."""
         asked = cover_id in self._shelf_vision_asked
-        self._shelf_vision_asked.discard(cover_id)
+        model = self._shelf_vision_asked.pop(cover_id, None)
         edited = cover_id in self._shelf_edited
         self._shelf_edited.discard(cover_id)
         c = next((c for c in self._shelf_index().covers if c.id == cover_id), None)
@@ -745,6 +746,8 @@ class ShelfMixin:
                 return True
         found = parse.build(texts)
         provider = self.vision_provider()
+        if provider and model:
+            provider = dataclasses.replace(provider, model=model)
         wanted = asked or not edited and (self.s.vision_mode == "every" or (
             self.s.vision_mode == "struggles" and not (found.details.title and found.details.year)))
         used, vision_state, vision_message = False, None, None

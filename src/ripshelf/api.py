@@ -97,6 +97,7 @@ from .models import (
     ShelfSuggestion,
     ShelfUploadResult,
     ShelfView,
+    ShelfVisionRequest,
     Show,
     Snapshots,
     Status,
@@ -105,6 +106,7 @@ from .models import (
     TvMatchTextRequest,
     TvProposeRequest,
     TvSplitRequest,
+    VisionModels,
     WebResult,
     WebSearchRequest,
     sentence,
@@ -835,10 +837,18 @@ async def shelf_read(cover_id: str, request: Request):
 
 
 @api.post("/covers/{cover_id}/vision", status_code=202, response_model=ShelfCover)
-async def shelf_vision(cover_id: str, request: Request):
+async def shelf_vision(cover_id: str, request: Request, body: ShelfVisionRequest | None = None):
     """Read the cover with the vision model now, in the background, taking turns with
-    other readings (the cover's ``reading.vision_state`` says how it goes)."""
-    return await _contribution_call(lambda: manager(request).ask_shelf_vision(cover_id))
+    other readings (the cover's ``reading.vision_state`` says how it goes). ``model``
+    asks another model on the same connection, this once; Settings aren't changed."""
+    model = body.model if body else None
+    return await _contribution_call(lambda: manager(request).ask_shelf_vision(cover_id, model))
+
+
+@api.get("/vision/models", response_model=VisionModels)
+async def vision_models(request: Request):
+    """The models the vision model's connection offers, to pick one for a reading."""
+    return await manager(request).vision_models()
 
 
 @api.delete("/covers/{cover_id}", status_code=204)

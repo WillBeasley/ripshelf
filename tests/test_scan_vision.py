@@ -500,3 +500,94 @@ def test_audio_formats_as_the_box_prints_them(raw, fmt):
 ])
 def test_audio_channels_as_the_box_prints_them(raw, channels):
     assert vision._channels(raw) == channels
+
+
+# --- picking a model -----------------------------------------------------------------------------
+
+
+def models_server(routes: dict[str, tuple[int, object]], seen: list[str] | None = None) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if seen is not None:
+            seen.append(request.url.path)
+        status, body = routes.get(request.url.path, (404, {}))
+        return httpx.Response(status, json=body)
+    return httpx.MockTransport(handler)
+
+
+async def test_the_models_a_server_lists():
+    seen: list[str] = []
+    p = vision.Provider(kind="openai", url="http://v.test/v1", model="m", key="k",
+                        transport=models_server({"/v1/models": (200, {"data": [{"id": "b"}, {"id": "a"}]})}, seen))
+    assert await vision.list_models(p) == ["a", "b"]
+    assert seen == ["/v1/models"], "the /v1 isn't doubled"
+    ollama = models_server({"/api/tags": (200, {"models": [{"name": "qwen3-vl:4b-instruct"}]})})
+    p = vision.Provider(kind="local", url="http://ollama.test", model="m", transport=ollama)
+    assert await vision.list_models(p) == ["qwen3-vl:4b-instruct"], "Ollama's own list when there's no /v1/models"
+    p = vision.Provider(kind="local", url="http://ollama.test", model="m", transport=models_server({}))
+    with pytest.raises(vision.VisionError, match="didn't list its models"):
+        await vision.list_models(p)
+
+
+async def test_models_to_pick_from(harness, settings):
+    settings.vision_mode, settings.vision_provider = "manual", "anthropic"
+    async with harness() as h:
+        got = await h.m.vision_models()
+        assert got.current == "claude-opus-5-5" and got.models[0].startswith("claude-haiku") and not got.message
+        settings.vision_provider, settings.vision_url, settings.vision_model = "local", "http://ollama.test", "mine:7b"
+        h.m.vision_transport = models_server({"/api/tags": (200, {"models": [{"name": "qwen3-vl:4b-instruct"}]})})
+        got = await h.m.vision_models()
+        assert got.models == ["mine:7b", "qwen3-vl:4b-instruct"], "the model set comes first, even unlisted"
+        h.m.vision_transport = models_server({})
+        got = await h.m.vision_models()
+        assert got.models == ["mine:7b"] and "didn't list" in got.message
+        settings.vision_url = None
+        assert (await h.m.vision_models()).message == "No address is set for the vision model"
+
+
+def asked_models(monkeypatch) -> list[str]:
+    """The models covers on the shelf are read by (a pretend reading each)."""
+    from ripshelf import shelf as shelf_mod
+    from ripshelf.models import Listing
+
+    asked: list[str] = []
+
+    async def read_listing(provider, img):
+        asked.append(provider.model)
+        return Listing(), 1.0
+    monkeypatch.setattr(shelf_mod.vision, "read_listing", read_listing)
+    return asked
+
+
+async def test_a_cover_read_by_another_model_once(harness, settings, monkeypatch):
+    from .test_shelf import outside
+
+    asked = asked_models(monkeypatch)
+    settings.vision_mode, settings.vision_provider, settings.vision_url, settings.vision_model = (
+        "manual", "local", "http://v.test", "everyday")
+    async with harness() as h:
+        h.m.text_reader = FakeReader(["x"])
+        c = (await h.m.add_shelf_upload([outside()], [], both_sides=False)).covers[0]
+        await until(lambda: h.m.shelf_cover(c.id).reading.state == "done", 10, "reading")
+        for model in ("trial-model", None):
+            await h.m.ask_shelf_vision(c.id, model)
+            await until(lambda n=len(asked): len(asked) == n + 1
+                        and h.m.shelf_cover(c.id).reading.vision_state == "done", 10, "vision")
+        assert asked == ["trial-model", "everyday"], "the other model this once; Settings' after"
+        assert settings.vision_model == "everyday"
+
+
+def test_the_api_takes_a_model_for_one_reading(settings, monkeypatch):
+    from .test_shelf import outside
+
+    asked_models(monkeypatch)
+    settings.vision_mode, settings.vision_provider = "manual", "anthropic"
+    with TestClient(create_app(settings, FakeDrives())) as client:
+        r = client.post("/api/covers/upload", data={"both_sides": "false"},
+                        files=[("files", ("a.png", outside(), "image/png"))])
+        cid = r.json()["covers"][0]["id"]
+        m = client.app.state.manager
+        assert client.post(f"/api/covers/{cid}/vision", json={"model": "claude-haiku-5-5"}).status_code == 202
+        assert client.post(f"/api/covers/{cid}/vision", json={"model": "x" * 201}).status_code == 422
+        assert client.post(f"/api/covers/{cid}/vision").status_code == 202
+        assert client.get("/api/vision/models").json()["provider"] == "anthropic"
+        assert m.s.vision_model is None
