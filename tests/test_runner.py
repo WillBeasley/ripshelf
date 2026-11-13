@@ -13,7 +13,7 @@ import pytest
 
 from ripshelf.makemkv import runner
 
-from .conftest import posix_only, private
+from .conftest import private
 
 
 def script(tmp_path: Path, body: str) -> str:
@@ -198,11 +198,11 @@ async def test_task_cancellation_kills_makemkv(tmp_path):
     assert not alive(pids[0])
 
 
-@posix_only
 async def test_killed_mid_run_reports_returncode(tmp_path):
-    cmd = script(tmp_path, "import os, signal\nprint('PRGV:0,1,2', flush=True)\nos.kill(os.getpid(), signal.SIGKILL)")
+    # Signal 9 is SIGKILL on POSIX; on Windows os.kill ends the process with 9 as its exit code.
+    cmd = script(tmp_path, "import os\nprint('PRGV:0,1,2', flush=True)\nos.kill(os.getpid(), 9)")
     res = await runner.MakeMKV(cmd).run([], tmp_path, tmp_path / "log")
-    assert res.returncode == -9 and not res.cancelled
+    assert res.returncode == (9 if sys.platform == "win32" else -9) and not res.cancelled
 
 
 async def test_missing_binary(tmp_path):
