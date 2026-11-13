@@ -21,7 +21,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import shutil
 import time
 from collections import deque
@@ -301,7 +300,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         d = self.s.backup_dir
         if not d.is_dir():
             return f"Backup folder {d} does not exist. Mount it (see the README) or set RIPSHELF_BACKUP_DIR"
-        if not os.access(d, os.W_OK | os.X_OK):
+        if not library.writable(d):
             return f"Backup folder {d} is not writable"
         return None
 

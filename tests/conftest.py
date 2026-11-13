@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
+import subprocess
 import sys
 import textwrap
 from pathlib import Path
@@ -56,9 +58,28 @@ def read_picture(path):
         return im.copy()
 
 
-# Read-only folders. Windows has no mode bits for that, and root ignores them.
-needs_unix_permissions = pytest.mark.skipif(
-    sys.platform == "win32" or os.geteuid() == 0, reason="needs POSIX permissions as a normal user")
+# Root ignores file modes, so a read-only folder can be written to.
+needs_permissions = pytest.mark.skipif(sys.platform != "win32" and os.geteuid() == 0,
+                                       reason="running as root, so permissions are not enforced")
+
+
+@contextlib.contextmanager
+def read_only(folder: Path):
+    """``folder`` made so that nothing can be written in it: by its mode on POSIX, and on
+    Windows (which has no mode bits for it) by denying everyone writes in its ACL."""
+    if sys.platform == "win32":
+        subprocess.run(["icacls", str(folder), "/deny", "*S-1-1-0:(W)"], check=True, capture_output=True)
+        try:
+            yield
+        finally:
+            subprocess.run(["icacls", str(folder), "/remove:d", "*S-1-1-0"], check=True, capture_output=True)
+        return
+    mode = folder.stat().st_mode
+    folder.chmod(0o555)
+    try:
+        yield
+    finally:
+        folder.chmod(mode)
 
 
 def pytest_collection_modifyitems(items):

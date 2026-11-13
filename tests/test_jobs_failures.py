@@ -12,7 +12,7 @@ from ripshelf.db import JobRecord, now
 from ripshelf.makemkv import runner
 from ripshelf.models import TRANSITIONS, Candidate, JobState, Problem, RipState
 
-from .conftest import needs_unix_permissions, until
+from .conftest import needs_permissions, read_only, until
 
 PM = "/dev/fake-sr1"  # Moonlit Orchard DVD
 HANG = "/dev/fake-sr3"  # scan never finishes
@@ -360,16 +360,13 @@ async def test_library_missing(harness, settings):
         assert not settings.library_dir.exists(), "the library root is never created"
 
 
-@needs_unix_permissions
+@needs_permissions
 async def test_library_read_only(harness, settings):
-    settings.library_dir.chmod(0o555)
-    try:
+    with read_only(settings.library_dir):
         async with harness(PM) as h:
             job = await confirm_and_wait(h)
             assert job.problem.code == "library_missing"
             assert "not writable" in job.problem.message
-    finally:
-        settings.library_dir.chmod(0o755)
 
 
 async def test_copy_failure_leaves_no_partial(harness, settings, monkeypatch):

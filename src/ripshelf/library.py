@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -110,8 +111,21 @@ def check_library(library: Path, what: str = "library folder") -> None:
     silently replaced by a folder on the local disk."""
     if not library.is_dir():
         raise LibraryError(f"{what} {library} does not exist (is the share mounted?)")
-    if not os.access(library, os.W_OK | os.X_OK):
+    if not writable(library):
         raise LibraryError(f"{what} {library} is not writable")
+
+
+def writable(folder: Path) -> bool:
+    """Whether files can be made in ``folder``. On Windows ``os.access`` only reads the
+    read-only attribute, not the folder's permissions (or a share's), so a file is made
+    and removed there instead."""
+    if sys.platform != "win32":
+        return os.access(folder, os.W_OK | os.X_OK)
+    try:
+        with tempfile.TemporaryFile(dir=folder, prefix=".ripshelf-check-"):
+            return True
+    except OSError:
+        return False
 
 
 # A copy needs the files' size plus this much, for the filesystem's own overhead and the
