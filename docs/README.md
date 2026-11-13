@@ -39,4 +39,4 @@ Start with [Installation](installation.md).
 | [Building the image](building.md) | building from source, another MakeMKV release, another architecture |
 | [CI on GitHub](ci-github.md) | tests and amd64 + arm64 images on GHCR |
 | [Contributing](../CONTRIBUTING.md) | running from source, simulated drives, tests |
-| [Changelog](../CHANGELOG.md) | what changed in each release, and what to do when upgrading |
+| [Releases](https://github.com/WillBeasley/ripshelf/releases) | what changed in each release, and what to do when upgrading |
