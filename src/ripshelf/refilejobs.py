@@ -286,8 +286,9 @@ class RefileMixin:
             root = self._root_of(folder)
             left = await asyncio.to_thread(library.prune_folder, folder, root) if root else []
             if left and folder == old_home != new_home:
-                self._event(job, "warning", f"{folder} still has {len(left)} file{'s' if len(left) != 1 else ''} "
-                                            "that aren't this job's, so it stays")
+                many = len(left) != 1
+                self._event(job, "warning", f"{folder} still has {len(left)} file{'s' if many else ''} "
+                                            f"that {'aren' if many else 'isn'}'t this job's, so it stays")
         n = sum(1 for mv in r.moves if not Path(mv.dst).name.startswith("."))
         self._event(job, "finalise", f"Moved {n} file{'s' if n != 1 else ''} from {r.destination} to "
                                      f"{job.destination}")
