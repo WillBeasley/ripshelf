@@ -9,7 +9,10 @@ PNG on stdin and reading its TSV (each word with its box and confidence).
 1. **Size.** The picture is scaled to about 300 dpi for the text's sake: scanners at
    600 dpi make text too big for Tesseract, and phone photos too small.
 2. **Orientation.** Tesseract's orientation check finds a picture lying on its side
-   (a whole sheet scanned to fit the glass) or upside down.
+   (a whole sheet scanned to fit the glass) or upside down. A whole outer sheet (back,
+   spine and front) is always wider than tall, so it is only ever turned to lie flat:
+   of the two ways that do, the orientation check picks when it's sure, and otherwise
+   the way more confident text is read.
 3. **Parts.** A whole outer sheet is read as its back, spine and front, so the
    columns don't run into each other. The spine's text runs along it, so it is read
    turned both ways, and once as it is for the catalogue number printed across it.
@@ -42,6 +45,8 @@ TARGET_LONG_PX = 3400  # a DVD sheet (273 mm) at about 300 dpi
 MIN_LONG_PX = 1800  # smaller pictures (photos of a corner) are scaled up
 OSD_PX = 2000
 OSD_MIN_CONFIDENCE = 1.5
+WRAP_RATIO = 1.6  # a picture this much longer than wide is a whole sheet, not a cover alone (a DVD's
+# front is about 1.41, a Blu-ray's 1.11); a squarer one is a sheet only when its spine shows
 TIMEOUT_S = 180
 WORD_MIN_CONF = 45  # words below this at the ends of a line are dropped as noise
 LINE_MIN_CONF = 40
@@ -281,6 +286,8 @@ async def read_picture(reader: Tesseract, img: Image.Image, kind: str, split: Sc
     small.thumbnail((OSD_PX, OSD_PX))
     turn, conf = await reader.orientation(small)
     out = Reading()
+    if kind == "outside_full" and await asyncio.to_thread(is_wrap, small):
+        turn, conf = await _wrap_turn(reader, small, turn, conf)
     if turn and conf >= OSD_MIN_CONFIDENCE:
         out.turned = turn
         img = img.rotate(-turn, expand=True)
@@ -317,6 +324,33 @@ async def read_picture(reader: Tesseract, img: Image.Image, kind: str, split: Sc
     if barcodes:
         out.barcodes = await asyncio.to_thread(decode_barcodes, page)
     return out
+
+
+def is_wrap(img: Image.Image) -> bool:
+    """Whether a picture is a whole outer sheet (back, spine and front), lying either
+    way: far longer than wide, or a little longer with a spine down it once flat. A
+    front or back alone isn't."""
+    w, h = img.size
+    long, short = max(w, h), max(1, min(w, h))
+    if long / short >= WRAP_RATIO:
+        return True
+    flat = img if w >= h else img.rotate(90, expand=True)
+    return images.find_spine(flat) is not None
+
+
+async def _wrap_turn(reader, small: Image.Image, turn: int, conf: float) -> tuple[int, float]:
+    """The turn for a whole outer sheet: one of the two that leave it wider than tall.
+    The orientation check's, when it is one of them and sure; otherwise the one read
+    with more confident text (a tie keeps it as it is, or turns it clockwise)."""
+    ways = (0, 180) if small.width >= small.height else (90, 270)
+    if turn in ways and conf >= OSD_MIN_CONFIDENCE:
+        return turn, conf
+    scores = []
+    for way in ways:
+        lines = await reader.read(small.rotate(-way, expand=True).convert("L"), 3)
+        scores.append(score(lines))
+    best = ways[1] if scores[1] > scores[0] else ways[0]
+    return best, OSD_MIN_CONFIDENCE if best else 0.0
 
 
 def quality(line: TextLine) -> float:
