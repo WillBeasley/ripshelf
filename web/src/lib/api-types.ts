@@ -157,6 +157,8 @@ export interface Api {
   SetupProblem?: SetupProblem;
   SetupTools?: SetupTools;
   ShelfCover?: ShelfCover;
+  ShelfDeleteRequest?: ShelfDeleteRequest;
+  ShelfDeleted?: ShelfDeleted;
   ShelfReading?: ShelfReading;
   ShelfScanRequest?: ShelfScanRequest;
   ShelfSide?: ShelfSide;
@@ -165,6 +167,7 @@ export interface Api {
   ShelfSuggestion?: ShelfSuggestion;
   ShelfUploadResult?: ShelfUploadResult;
   ShelfView?: ShelfView;
+  ShelfVisionRequest?: ShelfVisionRequest;
   Show?: Show;
   Snapshots?: Snapshots;
   StackPage?: StackPage;
@@ -189,6 +192,7 @@ export interface Api {
   TvPlan?: TvPlan;
   TvProposeRequest?: TvProposeRequest;
   TvSplitRequest?: TvSplitRequest;
+  VisionModels?: VisionModels;
   WebResult?: WebResult;
   WebSearchRequest?: WebSearchRequest;
 }
@@ -3183,6 +3187,30 @@ export interface ShelfReading {
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfDeleteRequest".
+ */
+export interface ShelfDeleteRequest {
+  /**
+   * the covers to delete
+   *
+   * @minItems 1
+   * @maxItems 500
+   */
+  ids: [string, ...string[]];
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfDeleted".
+ */
+export interface ShelfDeleted {
+  deleted: string[];
+  /**
+   * covers that weren't on the shelf (gone already)
+   */
+  missing: string[];
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "ShelfScanRequest".
  */
 export interface ShelfScanRequest {
@@ -3309,6 +3337,16 @@ export interface ShelfView {
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfVisionRequest".
+ */
+export interface ShelfVisionRequest {
+  /**
+   * the model to ask this once, on the vision model's connection; Settings' if left out
+   */
+  model: string | null;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "Snapshots".
  */
 export interface Snapshots {
@@ -3432,6 +3470,24 @@ export interface TvSplitRequest {
    * which long title (else the first)
    */
   title_index: number | null;
+}
+/**
+ * The models the vision model's connection offers, to pick one for a reading.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "VisionModels".
+ */
+export interface VisionModels {
+  provider: "local" | "openai" | "anthropic";
+  /**
+   * the model Settings ask
+   */
+  current: string | null;
+  models: string[];
+  /**
+   * why the list is short or empty (it couldn't be fetched)
+   */
+  message: string | null;
 }
 /**
  * One page from a web search (SearXNG), for identifying a disc by hand.

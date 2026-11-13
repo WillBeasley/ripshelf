@@ -275,17 +275,21 @@ Untick it for one cover a page.
 
 Each cover is read in the background as it arrives, one at a time and taking turns with the jobs' readings: Tesseract and zbar on both sides, the vision model when Settings → Scanner and covers say (**For every scan**, or **When Tesseract struggles**, which here means the title and year weren't both read), and the barcode lookups (as in [The box helps identify the disc](#the-box-helps-identify-the-disc)). A cover shows its title and year, its barcode and what the barcode names, and DVD, Blu-ray or 4K when the cover says. The search box searches all of these.
 
-Open a cover to see each side large, and to **Read again**, **Read with the vision model** (now, whatever the setting says, in the same one-at-a-time queue), **Swap sides** or **Delete** it.
+Open a cover to see each side large, and to **Read again**, **Read with the vision model** (now, whatever the setting says, in the same one-at-a-time queue), **Swap sides** or **Delete** it. **⟲**, **180°** and **⟳** under the picture turn the side shown, saved straight away.
+
+The list beside **Read with the vision model** picks the model to read it with, this once, without changing Settings: Anthropic's Haiku, Sonnet and Opus, or the models your server lists (Ollama's, say). **Another…** takes any model name, for when the list couldn't be fetched. To compare models on a cover, read it with one, note what it found, then read it with the next.
+
+**Deleting several.** Press and hold a cover (or Ctrl-click it, or Cmd-click on a Mac) to start picking. Tap or click more to pick them or leave them out, Shift-click to pick everything between, or **Select all**. **Delete selected** deletes them all, after asking; **Cancel** (or Esc) stops picking.
 
 ### Editing a cover
 
 **Edit…** on an open cover edits the side shown, when the scanner or a phone got it wrong:
 
-- **⟲** and **⟳** turn it a quarter, and **Flip ↔** and **Flip ↕** mirror it (a sheet scanned through the case's sleeve from behind, or a photo from a front camera). These are saved straight away.
+- **⟲** and **⟳** turn it a quarter, and **Flip ↔** and **Flip ↕** mirror it (a sheet scanned through the case's sleeve from behind, or a photo from a front camera).
 - **Straighten** levels a sheet laid askew, up to 15° either way. The picture turns within its own frame, so its corners turn out of it (shown white): crop them off.
 - **Crop** with the box over the picture: drag its edges or corners, or use the **Left**, **Right**, **Top** and **Bottom** sliders.
 
-**Save** keeps the crop and the straightening. The original file is never changed: the edits are kept beside it, so **As it came** undoes them all, back to the trim ripshelf found. Once a side is edited, the cover is read again as it now shows (Tesseract, zbar and the barcode lookups). The vision model isn't asked again: its last reading of the cover is kept, and **Read with the vision model** reads the edited cover when you want it to. The reading no longer turns it the way its text runs, so it stays as you set it.
+**Save** keeps it all; **Cancel** (or closing the cover) keeps none of it. The original file is never changed: the edits are kept beside it, so **As it came** undoes them all, back to the trim ripshelf found. Once a side is edited, the cover is read again as it now shows (Tesseract, zbar and the barcode lookups). The vision model isn't asked again: its last reading of the cover is kept, and **Read with the vision model** reads the edited cover when you want it to. The reading no longer turns it the way its text runs, so it stays as you set it.
 
 When an edited cover is used on a job or for a drive's next disc, the edited sides go as you see them (a JPEG of each), and the sides you didn't edit go as they were scanned.
 
@@ -387,8 +391,10 @@ TV/Pippa & Goose (2013)/scans/PIPPA_&_GOOSE_KITE_TRAM - front.jpg
 | `PATCH /api/covers/{cover}/{side}` | edit a side by hand: `rotate`, `flip`, `straighten` (degrees clockwise, as shown), `crop` (fractions of the whole side as shown), or `{"reset": true}` to undo it all. `GET` it with `?whole=true` for the turned, flipped picture to crop on |
 | `POST /api/covers/{cover}/swap` | swap the outside and the inside |
 | `POST /api/covers/{cover}/read` | read it again |
-| `POST /api/covers/{cover}/vision` | read it with the vision model now (its `reading.vision_state` says how it goes) |
+| `POST /api/covers/{cover}/vision` | read it with the vision model now (its `reading.vision_state` says how it goes); `{"model": "..."}` asks another model on the same connection, this once |
+| `GET /api/vision/models` | the models to pick from for that: `provider`, `current` (Settings'), `models`, and a `message` when the server couldn't list them |
 | `DELETE /api/covers/{cover}` | delete it |
+| `POST /api/covers/delete` | delete several: `{"ids": [...]}`; says which were `deleted` and which were `missing` |
 | `POST /api/covers/{cover}/use/job/{id}` | make it the job's scans, and take it off the shelf |
 | `POST /api/covers/{cover}/use/drive/{drive}` | keep it for the drive's next disc instead |
 | `GET /api/jobs/{id}/shelf-suggestions` | covers that look like the job's disc, with a score and why (`?all=true` for every cover, scored) |
