@@ -51,6 +51,8 @@ LINE_FLUSH_S = 0.5
 UPLOAD_CHUNK = 4 * 1024 * 1024
 RETRY_S = 2.0
 REFUSED_RETRY_S = 300.0
+UNREACHABLE_RETRY_S = 5.0  # the controller not answering at all (down, or not started yet)
+RESTART_RETRY_S = 1.0  # the controller restarted, and forgot this worker
 LEFTOVER_PREFIX = "remote-run-"
 
 
@@ -118,10 +120,10 @@ class Agent:
             except ControllerGone as e:
                 log.warning("%s (it restarted?), registering again", e)
                 self.abandon_all("the controller restarted")
-                await asyncio.sleep(1)
+                await asyncio.sleep(RESTART_RETRY_S)
             except httpx.HTTPError as e:
                 log.warning("controller unreachable (%s); retrying", type(e).__name__)
-                await asyncio.sleep(5)
+                await asyncio.sleep(UNREACHABLE_RETRY_S)
 
     async def _connected(self) -> None:
         """Heartbeats and commands until one of them gives up (ControllerGone, TokenRefused)."""
