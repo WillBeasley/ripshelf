@@ -141,6 +141,70 @@ async def test_anthropic_failures(status, error):
         await vision.read_listing(anthropic_provider(app), img())
 
 
+def scripted(kind: str, reply) -> vision.Provider:
+    """A provider whose server answers every request with ``reply`` (or raises it). The
+    Anthropic SDK has its own copy of httpx (httpx2), so its server is made with that."""
+    hx = httpx2 if kind == "anthropic" else httpx
+
+    def handler(request):
+        got = reply(hx)
+        if isinstance(got, Exception):
+            raise got
+        return got
+
+    url = None if kind == "anthropic" else "http://x.test"
+    return vision.Provider(kind=kind, url=url, model="m", key="k", transport=hx.MockTransport(handler))
+
+
+def chat(content, finish="stop"):
+    return lambda hx: hx.Response(200, json={"choices": [{"finish_reason": finish, "message": {"content": content}}]})
+
+
+@pytest.mark.parametrize(("reply", "error"), [
+    (lambda hx: hx.ReadTimeout("slow"), "no answer within"),
+    (lambda hx: hx.ConnectError("refused"), r"couldn't reach http://x.test/v1 \(ConnectError\)"),
+    (lambda hx: hx.Response(200, json={"id": "x"}), "isn't a chat completion"),
+    (lambda hx: hx.Response(200, text="<html>"), "isn't a chat completion"),
+    (chat("[1, 2]"), "isn't a JSON object"),
+])
+async def test_an_openai_compatible_server_going_wrong(reply, error):
+    with pytest.raises(vision.VisionError, match=error):
+        await vision.read_listing(scripted("local", reply), img())
+
+
+def message(stop: str, text: str = "{}"):
+    return lambda hx: hx.Response(200, json={
+        "id": "msg_1", "type": "message", "role": "assistant", "model": "m", "content": [{"type": "text", "text": text}],
+        "stop_reason": stop, "stop_sequence": None, "usage": {"input_tokens": 1, "output_tokens": 1}})
+
+
+def status(code: int):
+    # Not retried, so the test doesn't wait out the SDK's back-off.
+    return lambda hx: hx.Response(code, headers={"x-should-retry": "false"},
+                                  json={"type": "error", "error": {"type": "x", "message": "pretend failure"}})
+
+
+@pytest.mark.parametrize(("reply", "error"), [
+    (status(429), "rate limit was reached"),
+    (status(500), "Anthropic answered HTTP 500"),
+    (message("refusal"), "declined to answer"),
+    (message("max_tokens"), "ran out of room"),
+    (lambda hx: hx.ConnectError("refused"), "couldn't reach Anthropic"),
+])
+async def test_anthropic_going_wrong(reply, error):
+    with pytest.raises(vision.VisionError, match=error):
+        await vision.read_listing(scripted("anthropic", reply), img())
+
+
+async def test_a_provider_without_a_model_or_address():
+    with pytest.raises(vision.VisionError, match="no model is set"):
+        await vision.Provider(kind="local", url="http://x.test", model="").ask("hi")
+    with pytest.raises(vision.VisionError, match="no address is set"):
+        await vision.Provider(kind="local", url=None, model="m").ask("hi")
+    ok, message_, details = await vision.check(vision.Provider(kind="local", url=None, model="m"))
+    assert not ok and message_ == "No address is set" and details == []
+
+
 async def test_the_test_button():
     _, app = fake()
     ok, message, details = await vision.check(openai(app))
