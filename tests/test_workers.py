@@ -77,6 +77,17 @@ def wait_http(pred, timeout=60):
     raise AssertionError("timed out")
 
 
+def what_happened(url: str, ws: Settings) -> str:
+    """The jobs, their events and the worker's run logs, for a test that waited in vain."""
+    out = []
+    for j in api(url, "/api/jobs"):
+        out.append(f"job {j['id']}: {j['state']} rip={j['rip']}")
+        out += [f"  {e['kind']}: {e['message']}" for e in api(url, f"/api/jobs/{j['id']}")["events"]]
+    for log in sorted((Path(ws.data_dir) / "worker-logs").glob("*.log")):
+        out.append(f"--- {log.name}\n{log.read_text(errors='replace')[-3000:]}")
+    return "\n".join(out)
+
+
 async def test_remote_drive_rips_into_the_controller_library(controller, tmp_path, monkeypatch):
     url, app = controller
     monkeypatch.setenv("RIPSHELF_FAKE_RIP_SECONDS", "0.5")
@@ -128,8 +139,11 @@ async def test_shared_scratch_skips_the_upload(controller, tmp_path, monkeypatch
     agent = Agent(ws, FakeDrives(present={PM}))
     task = asyncio.create_task(agent.run_forever())
     try:
-        job = await asyncio.to_thread(wait_http, lambda: next(
-            (j for j in api(url, "/api/jobs") if j["rip"]["state"] == "done"), None))
+        try:
+            job = await asyncio.to_thread(wait_http, lambda: next(
+                (j for j in api(url, "/api/jobs") if j["rip"]["state"] == "done"), None))
+        except AssertionError:
+            raise AssertionError(f"timed out\n{what_happened(url, ws)}") from None
         assert job["rip"]["file"] and Path(job["rip"]["file"]).exists()
         assert uploads == []
         conf = (ws.makemkv_dir / "fake-ihas122" / ".MakeMKV" / "settings.conf").read_text()
