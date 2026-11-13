@@ -285,7 +285,7 @@ Open a cover to see each side large, and to **Read again**, **Read with the visi
 - **Straighten** levels a sheet laid askew, up to 15° either way. The picture turns within its own frame, so its corners turn out of it (shown white): crop them off.
 - **Crop** with the box over the picture: drag its edges or corners, or use the **Left**, **Right**, **Top** and **Bottom** sliders.
 
-**Save** keeps the crop and the straightening. The original file is never changed: the edits are kept beside it, so **As it came** undoes them all, back to the trim ripshelf found. Once a side is edited, the cover is read again as it now shows (Tesseract, zbar and the barcode lookups; the vision model only as Settings say, or with its button), and the reading no longer turns it the way its text runs, so it stays as you set it.
+**Save** keeps the crop and the straightening. The original file is never changed: the edits are kept beside it, so **As it came** undoes them all, back to the trim ripshelf found. Once a side is edited, the cover is read again as it now shows (Tesseract, zbar and the barcode lookups). The vision model isn't asked again: its last reading of the cover is kept, and **Read with the vision model** reads the edited cover when you want it to. The reading no longer turns it the way its text runs, so it stays as you set it.
 
 When an edited cover is used on a job or for a drive's next disc, the edited sides go as you see them (a JPEG of each), and the sides you didn't edit go as they were scanned.
 

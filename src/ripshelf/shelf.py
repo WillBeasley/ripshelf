@@ -5,7 +5,9 @@ A stack of sheets goes through the scanner's feeder (or is uploaded, pictures or
 and each sheet becomes a cover on the shelf: its outside (back, spine and front) and
 its inside (``scanner.stack`` pairs the pages, drops blank sides and tells the outside
 from the inside). Each cover is read in the background, one at a time, like a job's
-scans: Tesseract and zbar, the vision model as Settings say, and the barcode lookups.
+scans: Tesseract and zbar, the vision model as Settings say, and the barcode lookups. The
+vision model's reading is kept beside the cover, so a cover read again (after an edit
+by hand, say) keeps it; the model is asked again only by its button.
 
 When its disc comes, the cover is used for that job (its sides become the job's scans,
 read and filed like any other) or kept for a drive's next disc, and leaves the shelf.
@@ -13,7 +15,7 @@ A job in review is offered the covers that look like it (``suggestions``).
 
 A side can be cropped, turned, mirrored and straightened by hand. The original is kept
 and the edits are numbers beside it, so they can be undone; a side edited by hand goes
-to its job as the picture it shows.
+to its job as the picture it shows. An edit doesn't ask the vision model again.
 
 The shelf lives in ``<data>/covers``: an ``index.json`` and the pictures, kept until
 used or deleted. A two-pass stack's first pass waits in ``covers/stack`` for the second.
@@ -92,12 +94,19 @@ class _Texts(BaseModel):
     texts: list[ScanText]
 
 
+class _Vision(BaseModel):
+    sha256: str  # of the outside it read
+    listing: Listing
+    message: str
+
+
 class ShelfMixin:
     def _init_shelf(self) -> None:
         self._shelf_lock = asyncio.Lock()
         self._shelf_task: asyncio.Task | None = None  # reading the covers
         self._shelf_again = False
         self._shelf_vision_asked: set[str] = set()
+        self._shelf_edited: set[str] = set()  # read again after an edit: not by the vision model
         self._stack_task: asyncio.Task | None = None  # scanning a stack
 
     @property
@@ -334,6 +343,7 @@ class ShelfMixin:
             if s := getattr(c, name):
                 self._side_path(c.id, name, s).unlink(missing_ok=True)
         self._texts_path(c.id).unlink(missing_ok=True)
+        self._shelf_vision_path(c.id).unlink(missing_ok=True)
         self._forget_shelf_thumbs(c.id)
 
     async def swap_shelf_sides(self, cover_id: str) -> ShelfCover:
@@ -368,7 +378,8 @@ class ShelfMixin:
 
     async def edit_shelf_side(self, cover_id: str, side: ShelfSideName, body: ShelfSideUpdate) -> ShelfCover:
         """Crop, turn, mirror or straighten a side by hand (or put it back as it came),
-        and read the cover again. The original file isn't touched."""
+        and read the cover again, keeping the vision model's reading (it isn't asked
+        again). The original file isn't touched."""
         c = self.shelf_cover(cover_id)
         s: ShelfSide | None = getattr(c, side)
         found = self.shelf_file(cover_id, side)
@@ -404,6 +415,7 @@ class ShelfMixin:
         if not await self._update_cover(cover_id, change):
             raise KeyError(cover_id)
         self._forget_shelf_thumbs(cover_id)
+        self._shelf_edited.add(cover_id)
         self.read_shelf()
         return self.shelf_cover(cover_id)
 
@@ -654,6 +666,17 @@ class ShelfMixin:
         return "|".join(f"{n}:{s.sha256}:{s.crop}" + (f":{s.flip}:{s.straighten}" if s.flip or s.straighten else "")
                         for n in ("outside", "inside") if (s := getattr(c, n)))
 
+    def _shelf_vision_path(self, cover_id: str) -> Path:
+        return self._shelf_dir / f"{cover_id}.vision.json"
+
+    def _saved_vision(self, c: ShelfCover) -> _Vision | None:
+        """The vision model's last reading of the outside, if it's still the same outside."""
+        try:
+            saved = _Vision.model_validate_json(self._shelf_vision_path(c.id).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return saved if c.outside and saved.sha256 == c.outside.sha256 else None
+
     def _saved_texts(self, c: ShelfCover) -> list[ScanText] | None:
         try:
             saved = _Texts.model_validate_json(self._texts_path(c.id).read_text(encoding="utf-8"))
@@ -699,10 +722,13 @@ class ShelfMixin:
 
     async def _read_cover(self, cover_id: str) -> bool:
         """Read one cover: its text (unless read already), the vision model's reading
-        when Settings say or it was asked for, and what its barcode names. False when
-        reading can't go on (no Tesseract)."""
+        when it was asked for or Settings say (not after an edit by hand: the last one
+        is kept), and what its barcode names. False when reading can't go on (no
+        Tesseract)."""
         asked = cover_id in self._shelf_vision_asked
         self._shelf_vision_asked.discard(cover_id)
+        edited = cover_id in self._shelf_edited
+        self._shelf_edited.discard(cover_id)
         c = next((c for c in self._shelf_index().covers if c.id == cover_id), None)
         if not c:
             return True
@@ -719,15 +745,24 @@ class ShelfMixin:
                 return True
         found = parse.build(texts)
         provider = self.vision_provider()
-        wanted = asked or self.s.vision_mode == "every" or (
-            self.s.vision_mode == "struggles" and not (found.details.title and found.details.year))
+        wanted = asked or not edited and (self.s.vision_mode == "every" or (
+            self.s.vision_mode == "struggles" and not (found.details.title and found.details.year)))
         used, vision_state, vision_message = False, None, None
-        if provider and wanted and (c := self.shelf_cover(cover_id)).outside:
+        c = self.shelf_cover(cover_id)
+        if provider and wanted and c.outside:
             seen, vision_message = await self._shelf_vision(c, provider)
             vision_state = "done" if seen is not None else "failed"
             if seen is not None:
-                found = parse.merge(found, [(f"{cover_id}.outside", seen)], texts)
-                used = True
+                self._shelf_vision_path(cover_id).write_text(
+                    _Vision(sha256=c.outside.sha256, listing=seen, message=vision_message).model_dump_json(),
+                    encoding="utf-8")
+        elif saved := self._saved_vision(c):
+            seen, vision_state, vision_message = saved.listing, "done", saved.message
+        else:
+            seen = None
+        if seen is not None:
+            found = parse.merge(found, [(f"{cover_id}.outside", seen)], texts)
+            used = True
         d = found.details
         reading = ShelfReading(state="done", title=d.title, year=d.year, barcode=d.barcode,
                                catalogue_number=d.catalogue_number, read_at=now(), vision=used,
