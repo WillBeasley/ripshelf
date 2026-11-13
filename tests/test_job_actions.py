@@ -7,6 +7,8 @@ import pytest
 
 from ripshelf.models import Candidate, JobState, RipState
 
+from .conftest import until
+
 PM = "/dev/fake-sr1"
 ORCHARD = Candidate(source="manual", title="Moonlit Orchard", year=1998)
 
@@ -114,3 +116,42 @@ async def test_snapshots_and_logs_of_jobs_without_them(harness, settings):
         job = await h.wait_job(lambda j: j.state == JobState.review)
         assert "backed up whole" in (await h.m.snapshots(job.id)).note
         assert h.m.log_tail(job.id, "transcode-0") == []
+
+
+async def test_retry_scan_on_the_drive_card(harness):
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.state == JobState.review)
+        with pytest.raises(ValueError, match="the drive is busy"):
+            await h.m.rescan_drive("fake-ihas122")
+        await h.m.cancel(job.id)
+        await until(lambda: not h.m._busy(h.m.drives["fake-ihas122"]), what="the drive to be free")
+        again = await h.m.rescan_drive("fake-ihas122")  # the same disc, read as a new job
+        assert again.id != job.id
+        await h.wait_job(lambda j: j.id == again.id and j.state == JobState.review)
+
+
+async def test_retry_scan_of_a_failed_job_retries_it(harness, monkeypatch):
+    async with harness(PM) as h:
+        real = h.m._identify
+
+        async def boom(job_id, **kw):
+            raise RuntimeError("no")
+
+        monkeypatch.setattr(h.m, "_identify", boom)
+        failed = await h.wait_job(lambda j: j.state == JobState.failed)
+        monkeypatch.setattr(h.m, "_identify", real)
+        assert (await h.m.rescan_drive("fake-ihas122")).id == failed.id
+        await h.wait_job(lambda j: j.id == failed.id and j.state == JobState.review)
+
+
+async def test_thediscdb_being_down_is_a_warning_not_a_failure(harness, discdb, monkeypatch):
+    from ripshelf.providers import thediscdb
+
+
+    async def down(self, fps):
+        raise thediscdb.DiscDbError("HTTP 503")
+
+    monkeypatch.setattr(thediscdb.TheDiscDb, "lookup", down)
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.state == JobState.review)
+        assert any(e.message == "TheDiscDB: HTTP 503" for e in h.db.events(job.id))
