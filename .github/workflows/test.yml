@@ -130,8 +130,10 @@ jobs:
   windows:
     # The whole suite on Windows, so the Windows-only code (Job Objects, drive letters,
     # volume details) meets the real kernel32 and everything else meets Windows paths,
-    # file locks and encodings. Tests of Linux-only code (sysfs, SG_IO, signals, process
-    # groups, file modes) skip. The runner has no optical drive and no ffmpeg.
+    # file locks and encodings. MKVToolNix and Tesseract are installed where their Windows
+    # installers put them, which the app has to find for itself (they aren't on the PATH),
+    # and ffmpeg, which the episode splitting and its tests need. Tests of Linux-only code
+    # (sysfs, SG_IO, signals, process groups, file modes) skip. There's no optical drive.
     runs-on: windows-2025
     timeout-minutes: 20
     steps:
@@ -145,5 +147,7 @@ jobs:
         run: |
           pip install -q -r requirements-dev.lock
           pip install -q --no-deps -e .
+      - name: MKVToolNix, Tesseract and ffmpeg
+        run: choco install mkvtoolnix tesseract ffmpeg -y --no-progress
       - name: Tests
-        run: pytest -q -n 4 --dist worksteal
+        run: pytest -q -n 4 --dist worksteal -rs
