@@ -370,5 +370,5 @@ class RemoteBackend:
             await asyncio.wait_for(asyncio.shield(run.done), 180)
         except TimeoutError:
             return []
-        return sorted(str(p.relative_to(out_dir)) for p in out_dir.rglob("*")
+        return sorted(p.relative_to(out_dir).as_posix() for p in out_dir.rglob("*")
                       if p.is_file() and p.name != discfs.SIZES)

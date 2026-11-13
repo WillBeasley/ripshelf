@@ -16,7 +16,7 @@ from ripshelf import jobs as jobsmod
 from ripshelf.db import Database
 from ripshelf.models import JobState, RipProgress, RipState
 
-from .conftest import needs_unix_permissions, until
+from .conftest import needs_permissions, read_only, until
 
 PM = "/dev/fake-sr1"
 Usage = namedtuple("Usage", "total used free")
@@ -151,16 +151,13 @@ async def test_backup_dir_must_be_mounted(harness, settings, tmp_path):
         assert not (settings.data_dir / "backups").exists()
 
 
-@needs_unix_permissions
+@needs_permissions
 async def test_backup_dir_read_only(harness, settings, tmp_path):
     settings.backup_dir = tmp_path / "ro"
     settings.backup_dir.mkdir()
-    settings.backup_dir.chmod(0o555)
-    try:
+    with read_only(settings.backup_dir):
         async with harness() as h:
             assert "not writable" in h.m.backup_problem()
-    finally:
-        settings.backup_dir.chmod(0o755)
 
 
 def test_backup_count_and_order_check_are_settings(settings, monkeypatch):

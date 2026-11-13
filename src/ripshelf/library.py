@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import sys
 import time
@@ -110,8 +111,25 @@ def check_library(library: Path, what: str = "library folder") -> None:
     silently replaced by a folder on the local disk."""
     if not library.is_dir():
         raise LibraryError(f"{what} {library} does not exist (is the share mounted?)")
-    if not os.access(library, os.W_OK | os.X_OK):
+    if not writable(library):
         raise LibraryError(f"{what} {library} is not writable")
+
+
+def writable(folder: Path) -> bool:
+    """Whether files can be made in ``folder``. On Windows ``os.access`` only reads the
+    read-only attribute, not the folder's permissions (or a share's), so a file is made
+    there instead, and deleted as it's closed. Not with tempfile: on Windows it takes a
+    refused file in a folder ``os.access`` calls writable for a name clash, and tries
+    10,000 names."""
+    if sys.platform != "win32":
+        return os.access(folder, os.W_OK | os.X_OK)
+    probe = folder / f".ripshelf-check-{os.getpid()}-{secrets.token_hex(4)}"
+    try:
+        fd = os.open(probe, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_TEMPORARY)
+    except OSError:
+        return False
+    os.close(fd)
+    return True
 
 
 # A copy needs the files' size plus this much, for the filesystem's own overhead and the

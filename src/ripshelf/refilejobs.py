@@ -67,7 +67,7 @@ class RefileMixin:
             raise ValueError("no such job")
         if job.state in (JobState.transcoding, JobState.finalising):
             raise ValueError("the job is still transcoding or copying, so wait for it to finish")
-        if job.state != JobState.done or self._bg.get(job.id):
+        if job.state != JobState.done or self._bg_running(job.id):
             raise ValueError("only a finished job can be identified again")
         if not job.identity or not job.destination:
             raise ValueError("this job didn't put anything in the library")
@@ -286,8 +286,9 @@ class RefileMixin:
             root = self._root_of(folder)
             left = await asyncio.to_thread(library.prune_folder, folder, root) if root else []
             if left and folder == old_home != new_home:
-                self._event(job, "warning", f"{folder} still has {len(left)} file{'s' if len(left) != 1 else ''} "
-                                            "that aren't this job's, so it stays")
+                many = len(left) != 1
+                self._event(job, "warning", f"{folder} still has {len(left)} file{'s' if many else ''} "
+                                            f"that {'aren' if many else 'isn'}'t this job's, so it stays")
         n = sum(1 for mv in r.moves if not Path(mv.dst).name.startswith("."))
         self._event(job, "finalise", f"Moved {n} file{'s' if n != 1 else ''} from {r.destination} to "
                                      f"{job.destination}")
@@ -300,11 +301,13 @@ class RefileMixin:
         await self._refresh_servers(job, [job.destination, r.destination])
         job.refile = None
         job.problem = None
+        self._save(job)
+        await self.file_scans(job, filing=True)  # added while it was in review
+        job = self.db.get_job(job.id)
         self._set_state(job, JobState.done, f"Done: {filed_as(job)}")
         job.finished_at = r.finished_at or job.finished_at  # it finished when it was ripped
         self._save(job)
         self.db.record_stats(job)
-        await self.file_scans(self.db.get_job(job.id))  # added while it was in review
 
     def _rewrite_disc_record(self, job: JobRecord, new) -> None:
         """The .disc/disc.json beside the files says what the disc is, so it says the new title."""
@@ -320,7 +323,7 @@ class RefileMixin:
                     continue
                 p = Path(new(r.files[i]))
                 try:
-                    file = str(p.relative_to(folder))
+                    file = p.relative_to(folder).as_posix()  # as the first copy wrote it
                 except ValueError:
                     file = str(p)
                 copied[i] = {"file": file, "sha256": sums.get(i),
@@ -369,7 +372,7 @@ class RefileMixin:
         job = self.db.get_job(job_id)
         if job is None or not job.refile:
             raise ValueError("this job isn't being identified again")
-        if job.state not in (JobState.review, JobState.failed) or self._bg.get(job.id):
+        if job.state not in (JobState.review, JobState.failed) or self._bg_running(job.id):
             raise ValueError("the files are being moved, so wait for that to finish")
         r = job.refile
         back = [mv for mv in r.moves if mv.done]

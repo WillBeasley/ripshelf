@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw
 from ripshelf.models import JobState, ScanSplit
 from ripshelf.scanner import images
 
+from .conftest import read_picture
 from .test_contribute import heron_job, put
 
 
@@ -88,7 +89,7 @@ async def test_a_sheet_is_cut_at_its_spine_when_added(harness, settings):
         h.db.save_job(heron_job(job.id, scans=h.db.get_job(job.id).scans))
         view = h.m.contribution_view(job.id)
         assert view.contribution.covers == ["back", "front"]
-        back = Image.open(h.m.cover_file(job.id, "back"))
+        back = read_picture(h.m.cover_file(job.id, "back"))
         assert abs(back.width / (make_sheet().width * (0.47 - sc.split.spine / 2)) - 1) < 0.02
         # Moved by hand, the cut is the user's from then on.
         await h.m.scan_covers(job.id, sc.id, ScanSplit(position=0.48, spine=0.05, auto=True))

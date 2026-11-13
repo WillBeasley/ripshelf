@@ -156,8 +156,17 @@ export interface Api {
   SettingsViewBase?: SettingsViewBase;
   SetupProblem?: SetupProblem;
   SetupTools?: SetupTools;
+  ShelfCover?: ShelfCover;
+  ShelfReading?: ShelfReading;
+  ShelfScanRequest?: ShelfScanRequest;
+  ShelfSide?: ShelfSide;
+  ShelfStack?: ShelfStack;
+  ShelfSuggestion?: ShelfSuggestion;
+  ShelfUploadResult?: ShelfUploadResult;
+  ShelfView?: ShelfView;
   Show?: Show;
   Snapshots?: Snapshots;
+  StackPage?: StackPage;
   Status?: Status;
   StatusChanged?: StatusChanged;
   StorageFolder?: StorageFolder;
@@ -2399,6 +2408,10 @@ export interface ScannerInfo {
    */
   busy_job: number | null;
   /**
+   * the scanner is scanning a stack for the covers shelf
+   */
+  busy_shelf: boolean;
+  /**
    * the vision model set up to read scans (model at where), if any
    */
   vision: string | null;
@@ -3068,6 +3081,192 @@ export interface Tool1 {
    * where it is, if found
    */
   path: string | null;
+}
+/**
+ * A case's sheet on the shelf, waiting for its disc: its outside (back, spine and
+ * front) and inside, either of which may be missing.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfCover".
+ */
+export interface ShelfCover {
+  id: string;
+  created_at: string;
+  source: "scanner" | "upload" | "camera";
+  outside: ShelfSide | null;
+  inside: ShelfSide | null;
+  reading: ShelfReading;
+  /**
+   * how it was put together, such as a blank inside left out
+   */
+  note: string | null;
+}
+/**
+ * One side of a sheet on the shelf: the picture as it came, and how it's used.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfSide".
+ */
+export interface ShelfSide {
+  /**
+   * image/jpeg, image/png or image/webp
+   */
+  content_type: string;
+  width: number;
+  height: number;
+  sha256: string;
+  size_bytes: number;
+  /**
+   * turned clockwise by this much when shown or used
+   */
+  rotate: 0 | 90 | 180 | 270;
+  /**
+   * the sheet within the scan, [left, top, right, bottom] in the original's pixels, when trimmed
+   */
+  crop: number[] | null;
+  /**
+   * where the spine is, for the outside
+   */
+  split: ScanSplit | null;
+}
+/**
+ * What was read on a shelf cover.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfReading".
+ */
+export interface ShelfReading {
+  state: "waiting" | "reading" | "done" | "failed" | "unavailable";
+  message: string | null;
+  title: string | null;
+  year: number | null;
+  barcode: string | null;
+  /**
+   * what the barcode names, from the barcode lookups
+   */
+  barcode_name: string | null;
+  /**
+   * where barcode_name came from: thediscdb, upcitemdb, barcodelookup, eansearch or web
+   */
+  barcode_source: string | null;
+  /**
+   * DVD, Blu-ray or 4K, when the cover says
+   */
+  format: DiscKind | null;
+  catalogue_number: string | null;
+  read_at: string | null;
+  /**
+   * the vision model's reading is in it
+   */
+  vision: boolean;
+  /**
+   * reading it with the vision model
+   */
+  vision_state: ("queued" | "reading" | "done" | "failed") | null;
+  /**
+   * why the vision model's reading failed, or what it took
+   */
+  vision_message: string | null;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfScanRequest".
+ */
+export interface ShelfScanRequest {
+  mode?: "duplex" | "two_pass" | "one_side";
+  /**
+   * the Settings default if left out
+   */
+  dpi?: number | null;
+}
+/**
+ * A stack of sheets on its way to the shelf: being scanned, or held between two
+ * passes (or because the passes' pages don't pair up).
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfStack".
+ */
+export interface ShelfStack {
+  mode: "duplex" | "two_pass" | "one_side";
+  source: "scanner" | "upload" | "camera";
+  state: "scanning" | "flip" | "mismatch" | "failed";
+  pass_no: 1 | 2;
+  /**
+   * pages received in this pass so far
+   */
+  pages: number;
+  /**
+   * covers made from the stack so far
+   */
+  covers: number;
+  /**
+   * the first pass, held (two passes)
+   */
+  first: StackPage[];
+  /**
+   * the second pass, held, as it came out (reversed)
+   */
+  second: StackPage[];
+  started_at: string;
+  message: string | null;
+}
+/**
+ * A page of a stack held until its other side is scanned.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "StackPage".
+ */
+export interface StackPage {
+  id: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+  /**
+   * nothing printed on it, as far as can be seen
+   */
+  blank: boolean;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfSuggestion".
+ */
+export interface ShelfSuggestion {
+  cover: ShelfCover;
+  /**
+   * 0 to 1; 1 is the same barcode
+   */
+  score: number;
+  reason: string;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfUploadResult".
+ */
+export interface ShelfUploadResult {
+  covers: ShelfCover[];
+  /**
+   * the pages held, when two passes don't pair up
+   */
+  stack: ShelfStack | null;
+  /**
+   * pages skipped, and why
+   */
+  notes: string[];
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ShelfView".
+ */
+export interface ShelfView {
+  /**
+   * newest first
+   */
+  covers: ShelfCover[];
+  stack: ShelfStack | null;
+  /**
+   * the most covers the shelf keeps
+   */
+  limit: number;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

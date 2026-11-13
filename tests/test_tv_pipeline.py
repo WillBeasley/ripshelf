@@ -277,3 +277,64 @@ async def test_tv_rip_and_copy_notifications(harness, keyed, settings):
     assert copied["title"] == "Copied to library: Pippa & Goose"
     assert copied["message"] == f"10 titles to {settings.library_dir / 'TV' / 'Pippa & Goose (2013)'}"
     assert po.call_count == 2
+
+
+async def mapped_pippa(h):
+    job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done", timeout=60)
+    return await h.m.tv_match_text(job.id, CASE_ORDER)
+
+
+async def ended(h, job_id):
+    return await until(lambda: (j := h.job(job_id)).state in (JobState.done, JobState.failed) and j, 60,
+                       "the filing to end")
+
+
+async def test_a_tv_folder_that_isnt_there_fails_the_job(harness, keyed, settings):
+    settings.tv_dir = settings.library_dir / "not-mounted"
+    with respx.mock(assert_all_called=False) as router:
+        mock_show(router, "pippa-goose")
+        async with harness(SD) as h:
+            job = await mapped_pippa(h)
+            await h.m.tv_confirm(job.id, [])
+            failed = await ended(h, job.id)
+    assert failed.problem.code == "library_missing" and "TV folder" in failed.problem.message
+    assert not settings.tv_dir.exists()
+
+
+async def test_a_tv_copy_that_fails_takes_out_what_it_copied_and_retries(harness, keyed, settings, monkeypatch):
+    from ripshelf import library
+
+    real, calls = library.copy_verified, []
+
+    def flaky(src, dest, *a, **kw):
+        calls.append(dest)
+        if len(calls) == 3:
+            raise OSError(5, "Input/output error")
+        return real(src, dest, *a, **kw)
+
+    monkeypatch.setattr(library, "copy_verified", flaky)
+    with respx.mock(assert_all_called=False) as router:
+        mock_show(router, "pippa-goose")
+        async with harness(SD) as h:
+            job = await mapped_pippa(h)
+            await h.m.tv_confirm(job.id, [])
+            failed = await ended(h, job.id)
+            assert failed.problem.code == "copy_failed" and "Input/output error" in failed.problem.message
+            assert "retry" in failed.problem.actions
+            # The two copied before it came out again, so the retry finds nothing in its way.
+            assert not (settings.tv / "Pippa & Goose (2013)").exists()
+            await h.m.retry(job.id)
+            done = await until(lambda: (j := h.job(job.id)).state == JobState.done and j, 60, "filed")
+    files = sorted(p.name for p in (settings.tv / "Pippa & Goose (2013)" / "Season 03").iterdir())
+    assert len(files) == 10 and done.problem is None
+
+
+async def test_a_ripped_episode_gone_from_scratch_fails_the_job(harness, keyed, settings):
+    with respx.mock(assert_all_called=False) as router:
+        mock_show(router, "pippa-goose")
+        async with harness(SD) as h:
+            job = await mapped_pippa(h)
+            Path(h.job(job.id).rip.files[3]).unlink()
+            await h.m.tv_confirm(job.id, [])
+            failed = await ended(h, job.id)
+    assert failed.problem.code == "rip_incomplete" and "3" in failed.problem.message

@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
 
-from ripshelf import library
+from ripshelf import library, proc
 from ripshelf.config import Settings
 from ripshelf.makemkv.parse import ProgressTracker, parse_info
 from ripshelf.models import Candidate, JobState
 
-from .conftest import posix_only, until
+from .conftest import fake_program, until
 from .test_pipeline import run_manager
 
 UHD = "/dev/fake-sr2"
@@ -46,6 +47,87 @@ async def test_uhd_disc_is_backed_up_whole(settings: Settings):
         db.close()
 
 
+async def backup_to_review(settings: Settings):
+    settings.rip_mode = "backup"
+    m, db, backend = await run_manager(settings, {UHD})
+    job = await until(lambda: next(iter(db.list_jobs([JobState.review.value])), None))
+    return m, db, job
+
+
+HERON = Candidate(source="manual", title="The Brass Heron", year=2024)
+
+
+def ended(db, job_id):
+    return until(lambda: (j := db.get_job(job_id)) and j.state in (JobState.done, JobState.failed) and j)
+
+
+async def test_a_backup_already_in_the_library_is_not_overwritten_and_retry_files_it(settings: Settings):
+    dest = settings.library_dir / "Disc backups/The Brass Heron (2024) - 2160p"
+    (dest / "BDMV").mkdir(parents=True)
+    (dest / "BDMV/index.bdmv").write_bytes(b"theirs")
+    m, db, job = await backup_to_review(settings)
+    try:
+        await m.confirm(job.id, HERON)
+        failed = await ended(db, job.id)
+        assert failed.problem.code == "destination_exists" and "identify_again" in failed.problem.actions
+        assert (dest / "BDMV/index.bdmv").read_bytes() == b"theirs"
+        # Removed, then retried: the backup kept in scratch is filed, with nothing ripped again.
+        shutil.rmtree(dest)
+        await m.retry(job.id)
+        await until(lambda: db.get_job(job.id).state == JobState.done)
+        assert (dest / "BDMV/index.bdmv").read_bytes().startswith(b"INDX")
+    finally:
+        await m.stop()
+        db.close()
+
+
+async def test_a_backup_folder_that_isnt_there_fails_the_job(settings: Settings):
+    settings.disc_backups_dir = settings.library_dir / "not-mounted"
+    m, db, job = await backup_to_review(settings)
+    try:
+        await m.confirm(job.id, HERON)
+        failed = await ended(db, job.id)
+        assert failed.problem.code == "library_missing" and "does not exist" in failed.problem.message
+        assert not settings.disc_backups_dir.exists(), "an unmounted share isn't replaced by a folder"
+    finally:
+        await m.stop()
+        db.close()
+
+
+@pytest.mark.parametrize(("error", "code"), [(OSError(28, "No space left on device"), "copy_failed"),
+                                             (FileExistsError(17, "File exists"), "destination_exists")])
+async def test_a_backup_copy_that_fails_keeps_the_rip(settings: Settings, monkeypatch, error, code):
+    def fail(*a):
+        raise error
+
+    monkeypatch.setattr(library, "copy_tree_verified", fail)
+    m, db, job = await backup_to_review(settings)
+    try:
+        await m.confirm(job.id, HERON)
+        failed = await ended(db, job.id)
+        assert failed.problem.code == code and "retry" in failed.problem.actions
+        assert (Path(failed.rip.file) / "BDMV/index.bdmv").exists(), "the backup stays in scratch for a retry"
+    finally:
+        await m.stop()
+        db.close()
+
+
+async def test_a_disc_folder_that_cant_be_written_is_only_a_warning(settings: Settings, monkeypatch):
+    def fail(*a):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(library, "write_disc_folder", fail)
+    m, db, job = await backup_to_review(settings)
+    try:
+        await m.confirm(job.id, HERON)
+        done = await ended(db, job.id)
+        assert done.state == JobState.done
+        assert any("Could not write .disc folder" in e.message for e in db.events(job.id))
+    finally:
+        await m.stop()
+        db.close()
+
+
 async def test_dvd_is_ripped_as_titles_in_backup_mode(settings: Settings):
     settings.rip_mode = "backup"
     m, db, _ = await run_manager(settings, {"/dev/fake-sr1"})
@@ -55,7 +137,7 @@ async def test_dvd_is_ripped_as_titles_in_backup_mode(settings: Settings):
         assert any("Blu-ray and UHD discs only" in e.message for e in db.events(job.id))
         await m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
         done = await until(lambda: (j := db.get_job(job.id)) and j.state == JobState.done and j)
-        assert done.destination.endswith("Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv")
+        assert Path(done.destination).as_posix().endswith("Movies/Moonlit Orchard (1998)/Moonlit Orchard (1998).mkv")
     finally:
         await m.stop()
         db.close()
@@ -71,7 +153,7 @@ async def test_per_drive_mode_overrides_the_default(settings: Settings):
         assert job.mode == "backup"
         # Planned while ripping, then kept, as the backup folder, not an .mkv
         await m.confirm(job.id, Candidate(source="manual", title="The Brass Heron", year=2024))
-        assert db.get_job(job.id).destination.endswith("Disc backups/The Brass Heron (2024) - 2160p")
+        assert Path(db.get_job(job.id).destination).as_posix().endswith("Disc backups/The Brass Heron (2024) - 2160p")
         with pytest.raises(ValueError, match="no episodes"):
             await m.set_media(job.id, "tv")
         await until(lambda: db.get_job(job.id).state == JobState.done)
@@ -80,19 +162,16 @@ async def test_per_drive_mode_overrides_the_default(settings: Settings):
         db.close()
 
 
-@posix_only
 async def test_backup_without_done_message_fails(settings: Settings, tmp_path: Path):
     """makemkvcon exiting 0 without "Backup done." (or with hash check failures) is a failed rip."""
-    script = tmp_path / "mkv.sh"
-    script.write_text(f"""#!/bin/sh
-case " $* " in
-  *" backup "*) for a; do out=$a; done; mkdir -p "$out/BDMV"
-     echo 'MSG:5080,0,1,"Backup done but 2 files failed hash check.","x","2"'; exit 0;;
-  *) exec {settings.makemkvcon} "$@";;
-esac
-""")
-    script.chmod(0o755)
-    settings.makemkvcon = str(script)
+    settings.makemkvcon = fake_program(tmp_path / "mkv", f"""
+        import subprocess, sys
+        from pathlib import Path
+        if "backup" not in sys.argv:
+            sys.exit(subprocess.run([*{proc.split_command(settings.makemkvcon)!r}, *sys.argv[1:]]).returncode)
+        (Path(sys.argv[-1]) / "BDMV").mkdir(parents=True, exist_ok=True)
+        print('MSG:5080,0,1,"Backup done but 2 files failed hash check.","x","2"')
+    """)
     settings.rip_mode = "backup"
     m, db, _ = await run_manager(settings, {UHD})
     try:

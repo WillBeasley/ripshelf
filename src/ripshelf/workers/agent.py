@@ -51,6 +51,8 @@ LINE_FLUSH_S = 0.5
 UPLOAD_CHUNK = 4 * 1024 * 1024
 RETRY_S = 2.0
 REFUSED_RETRY_S = 300.0
+UNREACHABLE_RETRY_S = 5.0  # the controller not answering at all (down, or not started yet)
+RESTART_RETRY_S = 1.0  # the controller restarted, and forgot this worker
 LEFTOVER_PREFIX = "remote-run-"
 
 
@@ -118,10 +120,10 @@ class Agent:
             except ControllerGone as e:
                 log.warning("%s (it restarted?), registering again", e)
                 self.abandon_all("the controller restarted")
-                await asyncio.sleep(1)
+                await asyncio.sleep(RESTART_RETRY_S)
             except httpx.HTTPError as e:
                 log.warning("controller unreachable (%s); retrying", type(e).__name__)
-                await asyncio.sleep(5)
+                await asyncio.sleep(UNREACHABLE_RETRY_S)
 
     async def _connected(self) -> None:
         """Heartbeats and commands until one of them gives up (ControllerGone, TokenRefused)."""
@@ -406,7 +408,8 @@ class Agent:
                     args[-1] = str(local_out)
                 home = runner.prepare_home(self.s.makemkv_dir, hw.id, self.makemkv_key)
                 pending: list[str] = []
-                flush_task = asyncio.create_task(self._flush_lines(run_id, pending))
+                stop_flushing = asyncio.Event()
+                flush_task = asyncio.create_task(self._flush_lines(run_id, pending, stop_flushing))
                 # Start-ups are staggered only between this worker's own drives, because a worker that
                 # sees one drive has no other drive for MakeMKV to probe.
                 m = runner.MakeMKV(self.s.makemkvcon, self.gate if len(self.drives) > 1 else None,
@@ -416,9 +419,14 @@ class Agent:
                     res = await m.run(args, home, Path(self.s.data_dir) / "worker-logs" / f"run-{run_id}.log",
                                       on_line=pending.append, timeout=cmd.get("timeout"),
                                       idle_timeout=cmd.get("idle_timeout"), conf=cmd.get("conf"))
+                except asyncio.CancelledError:
+                    flush_task.cancel()
+                    raise
                 finally:
                     self.runs.pop(run_id, None)
-                    flush_task.cancel()
+                    # Stopped, not cancelled: a batch on its way would be lost, and with it
+                    # MakeMKV's last lines ("Copy complete"), which say the rip worked.
+                    stop_flushing.set()
                     with contextlib.suppress(asyncio.CancelledError, RunGone):
                         await flush_task
             await self._send_lines(run_id, pending)
@@ -437,10 +445,13 @@ class Agent:
             if local_out and not shared:
                 shutil.rmtree(local_out, ignore_errors=True)
 
-    async def _flush_lines(self, run_id: int, pending: list[str]) -> None:
-        while True:
-            await asyncio.sleep(LINE_FLUSH_S)
+    async def _flush_lines(self, run_id: int, pending: list[str], stop: asyncio.Event) -> None:
+        """Send the run's output every LINE_FLUSH_S, and once more when ``stop`` is set."""
+        while not stop.is_set():
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), LINE_FLUSH_S)
             await self._send_lines(run_id, pending)
+        await self._send_lines(run_id, pending)  # what came while the last batch was on its way
 
     async def _send_lines(self, run_id: int, pending: list[str]) -> None:
         if not pending:

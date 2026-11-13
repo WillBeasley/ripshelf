@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import httpx
 import pytest
 import respx
@@ -151,6 +153,92 @@ async def test_one_web_page_is_not_enough(s):
     searx("The Brass Heron [Blu-ray] | Shop")
     answer = await barcode.name(s, EAN, "bluray")
     assert answer.found is None and answer.final
+
+
+# --- when a source fails -----------------------------------------------------------------
+# A failed source is named in the answer (and the barcode asked again later); a source
+# that doesn't know the code just passes it on.
+
+SERVICES = {"thediscdb": (barcode.THEDISCDB_SEARCH, lambda code, c: barcode.from_thediscdb(code, c)),
+            "barcodelookup": (barcode.BARCODELOOKUP, lambda code, c: barcode.from_barcodelookup(code, "k", c)),
+            "eansearch": (barcode.EANSEARCH, lambda code, c: barcode.from_eansearch(code, "k", c))}
+
+
+@respx.mock
+@pytest.mark.parametrize("service", SERVICES)
+@pytest.mark.parametrize(("reply", "why"), [
+    (httpx.ConnectError("refused"), "could not reach it (ConnectError)"),
+    (httpx.Response(500), "HTTP 500"),
+    (httpx.Response(200, text="<html>busy</html>"), "a reply that isn't JSON"),
+])
+async def test_a_source_that_fails_says_why(service, reply, why):
+    url, ask = SERVICES[service]
+    respx.get(url).mock(side_effect=reply if isinstance(reply, Exception) else None,
+                        return_value=None if isinstance(reply, Exception) else reply)
+    async with httpx.AsyncClient() as c:
+        with pytest.raises(barcode.SourceFailed, match=f"^{re.escape(why)}$"):
+            await ask(EAN, c)
+
+
+@respx.mock
+@pytest.mark.parametrize(("status", "why"), [(401, "it refused the API key"), (403, "it refused the API key"),
+                                             (429, "the key's lookups are used up for now")])
+async def test_barcode_lookup_key_trouble(status, why):
+    respx.get(barcode.BARCODELOOKUP).mock(return_value=httpx.Response(status))
+    async with httpx.AsyncClient() as c:
+        with pytest.raises(barcode.SourceFailed, match=why):
+            await barcode.from_barcodelookup(EAN, "k", c)
+
+
+@respx.mock
+async def test_ean_search_used_up():
+    respx.get(barcode.EANSEARCH).mock(return_value=httpx.Response(429))
+    async with httpx.AsyncClient() as c:
+        with pytest.raises(barcode.SourceFailed, match="used up"):
+            await barcode.from_eansearch(EAN, "k", c)
+
+
+@respx.mock
+@pytest.mark.parametrize(("service", "reply"), [
+    ("thediscdb", httpx.Response(404)),
+    ("thediscdb", httpx.Response(400)),
+    ("thediscdb", httpx.Response(200, json={"not": "a list"})),
+    ("thediscdb", httpx.Response(200, json=["junk", {"title": "No codes"}, {"Title": "", "Identifiers": [EAN]}])),
+    ("barcodelookup", httpx.Response(404)),
+    ("barcodelookup", httpx.Response(200, json={"products": ["junk", {"title": "  "}]})),
+    ("eansearch", httpx.Response(200, json=["junk", {"name": ""}])),
+])
+async def test_a_source_that_doesnt_know_it(service, reply):
+    url, ask = SERVICES[service]
+    respx.get(url).mock(return_value=reply)
+    async with httpx.AsyncClient() as c:
+        assert await ask(EAN, c) is None
+
+
+@respx.mock
+async def test_capitalised_thediscdb_fields_and_the_other_names_are_read():
+    respx.get(barcode.THEDISCDB_SEARCH).mock(return_value=httpx.Response(200, json=[
+        {"Title": "The Brass Heron", "Identifiers": [EAN]}]))
+    respx.get(barcode.BARCODELOOKUP).mock(return_value=httpx.Response(200, json={"products": [
+        {"product_name": "Pippa & Goose Series 1"}]}))
+    respx.get(barcode.EANSEARCH).mock(return_value=httpx.Response(200, json={"name": "Seagull Manor"}))
+    async with httpx.AsyncClient() as c:
+        assert await barcode.from_thediscdb(EAN, c) == "The Brass Heron"
+        assert await barcode.from_barcodelookup(EAN, "k", c) == "Pippa & Goose Series 1"
+        assert await barcode.from_eansearch(EAN, "k", c) == "Seagull Manor"  # one object, not a list
+
+
+@respx.mock
+async def test_every_source_failing_is_not_final_and_names_them_all(s):
+    s.barcode_service, s.barcode_service_key = "barcodelookup", SecretStr("k")
+    s.catalogue_search, s.searxng_url = "searxng", SEARX
+    respx.get(barcode.THEDISCDB_SEARCH).mock(return_value=httpx.Response(502))
+    upcitemdb(status=429)
+    respx.get(barcode.BARCODELOOKUP).mock(return_value=httpx.Response(401))
+    respx.get(f"{SEARX}/search").mock(side_effect=httpx.ConnectError("refused"))
+    answer = await barcode.name(s, EAN, "bluray")
+    assert answer.found is None and not answer.final
+    assert [f.split(":")[0] for f in answer.failed] == ["TheDiscDB", "UPCitemdb", "Barcode Lookup", "a web search"]
 
 
 # --- on a job ---------------------------------------------------------------------------

@@ -422,3 +422,32 @@ async def test_tmdb_key_keeps_tmdb_shows(harness, settings):
             job = await h.wait_job(lambda j: j.state == JobState.review and j.tv and j.tv.show, timeout=60)
             assert job.tv.show.key == "tmdb:46866" and job.tv.show.source == "tmdb"
         assert not maze.called
+
+
+async def test_picking_a_show_that_cant_be_had(harness, keyless_tv):
+    with respx.mock(assert_all_called=False) as router:
+        mock_tvmaze(router)
+        router.get(f"{MAZE}/shows/404404").mock(return_value=httpx.Response(404))
+        async with harness(SD) as h:
+            job = await h.wait_job(lambda j: j.state == JobState.review, timeout=60)
+            with pytest.raises(ValueError, match="TVmaze has no such show"):
+                await h.m.tv_propose(job.id, "tvmaze:404404", season=3, disc_number=None, start_episode=None,
+                                     compilation=False)
+            with pytest.raises(ValueError, match="No TheTVDB API key set"):
+                await h.m.tv_propose(job.id, "tvdb:270001", season=3, disc_number=None, start_episode=None,
+                                     compilation=False)
+
+
+async def test_a_show_search_with_its_service_down(harness, keyless_tv, settings):
+    with respx.mock(assert_all_called=False) as router:
+        mock_tvmaze(router)
+        async with harness(SD) as h:
+            await h.wait_job(lambda j: j.state == JobState.review, timeout=60)
+            router.get(f"{MAZE}/search/shows").mock(return_value=httpx.Response(503))
+            # Said, not shown as "no shows found".
+            with pytest.raises(ValueError, match="^TVmaze returned HTTP 503$"):
+                await h.m.tv_search("Seagull Manor")
+            settings.metadata_providers = {"tv": [{"name": n, "enabled": n == "thediscdb"}
+                                                  for n in ("thediscdb", "tmdb", "tvdb", "tvmaze")]}
+            with pytest.raises(ValueError, match="No TV show search is on"):
+                await h.m.tv_search("Seagull Manor")

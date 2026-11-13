@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import sys
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -16,11 +14,14 @@ from pydantic import SecretStr
 from ripshelf.models import Episode, EpisodeRef, JobState, MediaKind, TitleInfo, TitleRole
 from ripshelf.tv import split
 
-from .conftest import until
+from .conftest import fake_program, until
 from .tvfix import mock_show
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 needs_ffmpeg = pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg and ffprobe")
+# Where the app would find it: on the PATH, or on Windows in MKVToolNix's folder.
+MKVMERGE = split.default_mkvmerge("mkvmerge")
+needs_mkvmerge = pytest.mark.skipif(not shutil.which(MKVMERGE), reason="needs mkvmerge (MKVToolNix)")
 
 
 def title(i: int, minutes: float, chapters: int = 0) -> TitleInfo:
@@ -153,7 +154,8 @@ def test_parts():
 
 def test_split_command():
     cmd = split.split_command("mkvmerge", Path("/s/t.mkv"), Path("/o"), [4, 2, 2])
-    assert cmd == ["mkvmerge", "--quiet", "-o", "/o/part.mkv", "--split", "chapters:3,5", "/s/t.mkv"]
+    assert cmd == ["mkvmerge", "--quiet", "-o", str(Path("/o/part.mkv")), "--split", "chapters:3,5",
+                   str(Path("/s/t.mkv"))]
 
 
 def test_mkvmerge_found_in_program_files_on_windows(tmp_path, monkeypatch):
@@ -223,25 +225,21 @@ def test_parse_chapters():
     assert split.parse_chapters(b"{}") == [] and split.parse_chapters(b"nope") is None
 
 
-def fake_mkvmerge(where: Path, exit_code: int = 0) -> str:
-    """A stand-in mkvmerge, copying its source once per part, as one executable path."""
+def fake_mkvmerge(where: Path, exit_code: int = 0, parts: int | None = None) -> str:
+    """A stand-in mkvmerge, copying its source once per part (or ``parts`` times), as one
+    executable path."""
     where.mkdir(parents=True, exist_ok=True)
-    script = where / "mkvmerge_stub.py"
-    script.write_text(textwrap.dedent(f"""\
+    return fake_program(where / "mkvmerge", f"""
         import shutil, sys
         from pathlib import Path
         a = sys.argv[1:]
         out, src = Path(a[a.index("-o") + 1]), a[-1]
-        n = len(a[a.index("--split") + 1].split(":", 1)[1].split(",")) + 1
+        n = {parts} or len(a[a.index("--split") + 1].split(":", 1)[1].split(",")) + 1
         for k in range(1, n + 1):
             shutil.copy(src, out.with_name(f"{{out.stem}}-{{k:03d}}.mkv"))
         print("Error: no space" if {exit_code} else "ok")
         sys.exit({exit_code})
-    """))
-    exe = where / "mkvmerge"
-    exe.write_text(f"#!/bin/sh\nexec {sys.executable} {script} \"$@\"\n")
-    exe.chmod(0o755)
-    return str(exe)
+    """)
 
 
 async def test_split_file(tmp_path):
@@ -256,8 +254,7 @@ async def test_split_file(tmp_path):
     with pytest.raises(split.SplitError, match="mkvmerge failed: Error: no space"):
         await split.split_file(fake_mkvmerge(tmp_path / "bad", exit_code=2), src, out, [2])
     # Fewer files than parts (here the stub only ever writes two).
-    short = fake_mkvmerge(tmp_path / "short")
-    Path(short).write_text(Path(short).read_text().replace('"$@"', '-o "$3" --split chapters:2 "$6"'))
+    short = fake_mkvmerge(tmp_path / "short", parts=2)
     with pytest.raises(split.SplitError, match="made 2 parts, not 3"):
         await split.split_file(short, src, out, [2, 4])
 
@@ -316,18 +313,18 @@ async def test_chapters_and_breaks_from_a_real_file(seagull_rip):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(shutil.which("mkvmerge") is None, reason="needs mkvmerge (MKVToolNix)")
+@needs_mkvmerge
 async def test_real_mkvmerge_splits_at_chapters(seagull_rip, tmp_path):
-    files = await split.split_file("mkvmerge", seagull_rip, tmp_path, [2, 4])
+    files = await split.split_file(MKVMERGE, seagull_rip, tmp_path, [2, 4])
     from ripshelf.tv import verify
     lengths = [round(await verify.duration("ffprobe", f)) for f in files]
     assert lengths == [1800, 1680, 1980]
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(shutil.which("mkvmerge") is None, reason="needs mkvmerge (MKVToolNix)")
+@needs_mkvmerge
 async def test_real_mkvmerge_splits_at_timestamps(chapterless_rip, tmp_path):
-    files = await split.split_file("mkvmerge", chapterless_rip, tmp_path, [1, 2], [1800.0, 3480.0])
+    files = await split.split_file(MKVMERGE, chapterless_rip, tmp_path, [1, 2], [1800.0, 3480.0])
     from ripshelf.tv import verify
     lengths = [round(await verify.duration("ffprobe", f)) for f in files]
     assert lengths == [1800, 1680, 1980]

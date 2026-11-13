@@ -151,8 +151,10 @@ def test_blank_text_is_unset_or_the_default(client, settings):
     assert settings.auto_eject is True
 
 
-def test_setting_fields_describe_every_editable_setting(client):
+def test_setting_fields_describe_every_editable_setting(client, monkeypatch):
+    from ripshelf import proc
     from ripshelf.config import EDITABLE, SECRETS
+    monkeypatch.setattr(proc, "WINDOWS", False)  # Windows leaves out the Linux-only ones
     fields = {f["name"]: f for f in client.get("/api/settings/fields").json()}
     assert set(fields) == EDITABLE
     assert {n for n, f in fields.items() if f["secret"]} == SECRETS and "tv_episode_order" not in fields

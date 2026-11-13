@@ -7,6 +7,7 @@
 	import { openJob } from '../nav';
 	import Evidence from './Evidence.svelte';
 	import CoverScans from './CoverScans.svelte';
+	import ShelfSuggest from './ShelfSuggest.svelte';
 	import EpisodePicker from './EpisodePicker.svelte';
 	import LabelReader from './LabelReader.svelte';
 	import Poster from './Poster.svelte';
@@ -499,6 +500,7 @@
 		{/if}
 	{/if}
 
+	<ShelfSuggest {job} />
 	<CoverScans {job} auto={false} />
 
 	<details class="tools">

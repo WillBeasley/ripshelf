@@ -27,7 +27,8 @@ from .conftest import until
 from .test_contribute import heron_job, put
 from .test_scans import picture, sheet
 
-TESSERACT = os.environ.get("RIPSHELF_TESSERACT", "tesseract")
+# Where the app would find it: on the PATH, or on Windows in the installer's folder.
+TESSERACT = os.environ.get("RIPSHELF_TESSERACT") or ocr.default_command("tesseract")
 needs_tesseract = pytest.mark.skipif(not (shutil.which(TESSERACT) or os.path.isfile(TESSERACT)),
                                      reason="Tesseract isn't installed")
 
@@ -459,3 +460,37 @@ def test_api_ocr_check(client):
     client.app.state.settings.tesseract = "no-such-tesseract"
     r = client.post("/api/settings/test", json={"check": "ocr", "values": {}}).json()
     assert not r["ok"] and "isn't installed" in r["message"]
+
+
+class BrokenReader(FakeReader):
+    async def read(self, img, psm=3):
+        raise RuntimeError("bad picture")
+
+
+async def test_a_reading_that_crashes_is_shown_failed_not_left_reading(harness, settings):
+    async with harness() as h:
+        h.m.text_reader = BrokenReader(ROWS)
+        job = put(h, heron_job())
+        await h.m.add_scan(job.id, picture(), "back", "upload")
+        j = await wait_listing(h, job.id, "failed")
+        assert j.listing.message == "Reading failed: bad picture" and j.listing.progress is None
+        # Fixed, and asked again: read as usual.
+        h.m.text_reader = FakeReader(ROWS)
+        h.m.read_scans(job.id, again=True)
+        await wait_listing(h, job.id)
+
+
+async def test_scans_added_while_reading_are_read_in_the_same_go(harness, settings):
+    class Slow(FakeReader):
+        async def read(self, img, psm=3):
+            await asyncio.sleep(0.05)
+            return await super().read(img, psm)
+
+    async with harness() as h:
+        h.m.text_reader = Slow(ROWS)
+        job = put(h, heron_job())
+        await h.m.add_scan(job.id, picture(), "back", "upload")
+        await h.m.add_scan(job.id, picture(colour=(9, 9, 9)), "insert", "upload")  # while the first is read
+        j = await wait_listing(h, job.id)
+        assert all(h.m.scan_text(job.id, sc.id) for sc in j.scans), "both read"
+        await h.m.cancel_reading()  # at shutdown: nothing left running

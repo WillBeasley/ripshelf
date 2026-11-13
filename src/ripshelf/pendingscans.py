@@ -143,7 +143,7 @@ class PendingMixin:
         self._drive_known(drive_id)
         client = self._escl()
         if self._scanner_busy():
-            raise ValueError("the scanner is busy; wait for it to finish")
+            raise ValueError(self._scanner_busy_message())
         source = body.source or self.s.scanner_source
         run = ScannerRun(state="scanning", kind=body.kind, source=source,
                          duplex=body.duplex and source == "feeder", started_at=now())

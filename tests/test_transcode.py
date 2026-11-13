@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -151,7 +152,8 @@ def test_vaapi_command_ten_bit_with_crop():
     assert "-qp 21" in s and cmd[-1] == "out.mkv"
 
 
-def test_qsv_command_opens_the_chosen_node():
+def test_qsv_command_opens_the_chosen_node(monkeypatch):
+    monkeypatch.setattr(transcode.procs, "WINDOWS", False)  # Windows has no render nodes
     v = transcode.parse_probe(probe_json(pix="yuv420p10le")).video
     s = " ".join(transcode.command("ffmpeg", Path("i"), Path("o"), v, None, "qsv", 22, "/dev/dri/renderD129"))
     assert "-init_hw_device vaapi=va:/dev/dri/renderD129 -init_hw_device qsv=qs@va -filter_hw_device qs" in s
@@ -257,47 +259,52 @@ async def test_pick_encoder(tmp_path):
         assert await transcode.pick_encoder("ffmpeg", settings()) == "vaapi"
 
 
-@posix_only
+def python(code: str) -> list[str]:
+    """A command that runs ``code``, standing in for ffmpeg."""
+    return [sys.executable, "-c", code]
+
+
 async def test_transcoder_failures(tmp_path):
     t = transcode.Transcoder()
     assert await t.run(["/nonexistent/ffmpeg"], 10, lambda *a: None, tmp_path / "l") is None
-    rc = await transcode.Transcoder().run(["sh", "-c", "echo boom >&2; exit 3"], 10, lambda *a: None,
-                                          tmp_path / "l2")
+    rc = await transcode.Transcoder().run(python("import sys; print('boom', file=sys.stderr); sys.exit(3)"), 10,
+                                          lambda *a: None, tmp_path / "l2")
     assert rc == 3 and "boom" in (tmp_path / "l2").read_text()
     assert "could not start ffmpeg" in (tmp_path / "l").read_text()
     assert await transcode.probe("/nonexistent/ffprobe", tmp_path / "x") is None
     t.kill()  # nothing running, so harmless
 
 
-@posix_only
+def printing(text: str) -> list[str]:
+    return python(f"import sys; sys.stdout.write({text!r})")
+
+
 async def test_transcoder_progress_parsing(tmp_path):
-    script = "printf 'fps=0.00\\nspeed=2.5x\\nout_time_us=5000000\\nout_time_us=-1\\nout_time_us=x\\nspeed=N/A\\n" \
-             "fps=59.5\\nout_time_us=20000000\\n'"
+    cmd = printing("fps=0.00\nspeed=2.5x\nout_time_us=5000000\nout_time_us=-1\nout_time_us=x\nspeed=N/A\n"
+                   "fps=59.5\nout_time_us=20000000\n")
     seen = []
-    await transcode.Transcoder().run(["sh", "-c", script], 10, lambda f, sp, fps: seen.append((f, sp, fps)), tmp_path / "l")
+    await transcode.Transcoder().run(cmd, 10, lambda f, sp, fps: seen.append((f, sp, fps)), tmp_path / "l")
     assert seen == [(0.5, 2.5, None), (0.5, 2.5, None), (1.0, 2.5, 59.5)], "never backwards"
-    log = (tmp_path / "l").read_text().splitlines()
-    assert log[0].startswith("$ sh -c")
+    log = (tmp_path / "l").read_text(encoding="utf-8").splitlines()
+    assert log[0].startswith(f"$ {sys.executable}") or log[0].startswith(f"$ '{sys.executable}'")
     assert [line.split("] ")[1] for line in log[1:]] == ["50% · 2.5×", "100% · 59.5 fps · 2.5×", "ffmpeg exited with code 0"]
 
 
-@posix_only
 async def test_transcoder_progress_ffmpeg7_end(tmp_path):
     # ffmpeg 7.1's last report gave a subtitle's end time (2 s of a 6 s clip), after 4.68 s.
-    script = "printf 'out_time_us=1160000\\nprogress=continue\\nout_time_us=4680000\\nprogress=continue\\n" \
-             "out_time_us=2006000\\nprogress=end\\n'"
+    cmd = printing("out_time_us=1160000\nprogress=continue\nout_time_us=4680000\nprogress=continue\n"
+                   "out_time_us=2006000\nprogress=end\n")
     seen = []
-    await transcode.Transcoder().run(["sh", "-c", script], 6, lambda f, sp, fps: seen.append(f), tmp_path / "l")
+    await transcode.Transcoder().run(cmd, 6, lambda f, sp, fps: seen.append(f), tmp_path / "l")
     assert seen == sorted(seen) and seen[-1] == 1.0
     assert "] finished" in (tmp_path / "l").read_text()
 
 
-@posix_only
 async def test_transcoder_cancel(tmp_path):
     import asyncio
 
     t = transcode.Transcoder()
-    task = asyncio.create_task(t.run(["sleep", "30"], 30, lambda *a: None, tmp_path / "l"))
+    task = asyncio.create_task(t.run(python("import time; time.sleep(30)"), 30, lambda *a: None, tmp_path / "l"))
     await asyncio.sleep(0.3)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -355,9 +362,10 @@ async def test_keep_original(harness, tc_settings):
 
 
 @needs_ffmpeg
-async def test_failed_transcode_keeps_the_rip(harness, tc_settings):
-    tc_settings.transcode_encoder = "vaapi"
-    tc_settings.vaapi_device = "/dev/nonexistent"
+async def test_failed_transcode_keeps_the_rip(harness, tc_settings, monkeypatch):
+    # An encoder no ffmpeg has, so it fails on every platform (Windows never uses VAAPI).
+    real = transcode.command
+    monkeypatch.setattr(transcode, "command", lambda *a: [*real(*a)[:-1], "-c:v:0", "hevc_nowhere", real(*a)[-1]])
     async with harness(PM) as h:
         job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done")
         await h.m.confirm(job.id, MANUAL)

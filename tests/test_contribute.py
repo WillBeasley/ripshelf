@@ -591,3 +591,100 @@ async def test_the_same_disc_in_again_gives_an_earlier_job_its_hash(harness, set
         h.m._share_hash(h.db.get_job(new.id))
         assert h.db.get_job(old.id).disc_ids["content_hash"] == HASH
         assert not h.db.get_job(other.id).disc_ids
+
+
+async def test_a_send_that_crashes_fails_the_contribution_not_the_job(harness, settings, monkeypatch):
+    settings.thediscdb_contribute = "ask"
+
+    async def boom(self, *a):
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(contribute.Contributor, "send", boom)
+    async with harness() as h:
+        job = put(h, named(heron_job()))
+        await h.m.contribute(job.id)
+        c = await wait_status(h, job.id, "sent", "failed")
+        assert c.status == "failed" and c.error == "internal error: RuntimeError"
+        assert h.db.get_job(job.id).state == "done"
+
+
+async def test_nothing_changes_while_it_is_being_sent(harness, settings, monkeypatch):
+    import asyncio
+
+    settings.thediscdb_contribute = "ask"
+    sending, release = asyncio.Event(), asyncio.Event()
+
+    async def slow(self, *a):
+        sending.set()
+        await release.wait()
+        return {"id": 1}
+
+    monkeypatch.setattr(contribute.Contributor, "send", slow)
+    async with harness() as h:
+        job = put(h, named(heron_job()))
+        await h.m.contribute(job.id)
+        await sending.wait()
+        for change in (h.m.contribution_extras(job.id, []), h.m.contribution_release(job.id, True),
+                       h.m.set_cover(job.id, "front", b"\xff\xd8\xff" + bytes(10))):
+            with pytest.raises(ValueError, match="being sent right now"):
+                await change
+        release.set()
+        assert (await wait_status(h, job.id, "sent", "failed")).status == "sent"
+
+
+async def test_a_change_after_sending_is_sent_again(harness, settings, monkeypatch):
+    settings.thediscdb_contribute = "ask"
+
+    async def ok(self, *a):
+        return {"id": 1}
+
+    monkeypatch.setattr(contribute.Contributor, "send", ok)
+    async with harness() as h:
+        job = put(h, named(heron_job()))
+        await h.m.contribute(job.id)
+        await wait_status(h, job.id, "sent")
+        assert (await h.m.contribution_extras(job.id, [])).contribution.status == "not_sent"
+        await h.m.contribute(job.id)
+        await wait_status(h, job.id, "sent")
+        assert (await h.m.contribution_release(job.id, True)).contribution.status == "not_sent"
+
+
+async def test_extras_that_dont_fit_the_disc_are_refused(harness, settings):
+    settings.thediscdb_contribute = "ask"
+    async with harness() as h:
+        job = put(h, heron_job())
+        main = job.main_title.index
+        other = next(t.index for t in job.titles if t.index != main)
+        for extras, why in [([ContributionExtra(title_index=999, name="x")], "has no title 999"),
+                            ([ContributionExtra(title_index=main, name="x")], "as the film or an episode"),
+                            ([ContributionExtra(title_index=other, name="a"),
+                              ContributionExtra(title_index=other, name="b")], "listed twice")]:
+            with pytest.raises(ValueError, match=why):
+                await h.m.contribution_extras(job.id, extras)
+        with pytest.raises(KeyError):
+            await h.m.contribution_extras(999, [])
+
+
+async def test_covers_too_big_or_not_pictures(harness, settings):
+    from ripshelf.providers import release_info
+
+    settings.thediscdb_contribute = "ask"
+    async with harness() as h:
+        job = put(h, heron_job())
+        with pytest.raises(ValueError, match="larger than 20 MB"):
+            await h.m.set_cover(job.id, "front", b"\xff\xd8\xff" + bytes(release_info.MAX_COVER_BYTES))
+        with pytest.raises(ValueError, match="JPEG, PNG or WebP"):
+            await h.m.set_cover(job.id, "front", b"GIF89a....")
+
+
+async def test_reading_the_disc_again(harness, settings, monkeypatch):
+    settings.thediscdb_contribute = "ask"
+    async with harness() as h:
+        with pytest.raises(KeyError):
+            await h.m.reread_disc(999)
+        known = put(h, heron_job())
+        with pytest.raises(ValueError, match="already known"):
+            await h.m.reread_disc(known.id)
+        job = put(h, heron_job(disc_ids={"disc_id": "AB" * 20}))
+        with pytest.raises(ValueError, match="put this disc back"):
+            await h.m.reread_disc(job.id)

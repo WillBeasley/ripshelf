@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
+import subprocess
 import sys
 import textwrap
 from pathlib import Path
@@ -21,14 +23,65 @@ FIXTURES = Path(__file__).parent / "fixtures"
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX only")
 
 
+def fake_program(path: Path, code: str) -> str:
+    """A stand-in for a program (7z, ffmpeg, tesseract, makemkvcon...) written in Python,
+    and the command that runs it. On POSIX that's the script at ``path``. Windows can't
+    run a script by its path, so there it's an .exe beside it, made the way pip makes a
+    console script: a launcher that runs this Python on the script, and ends it if killed."""
+    code = textwrap.dedent(code)
+    if sys.platform != "win32":
+        path.write_text(f"#!{sys.executable}\n{code}")
+        path.chmod(0o755)
+        return str(path)
+    from pip._vendor.distlib.scripts import ScriptMaker
+
+    src = path.with_name(f"{path.name}.src")
+    src.mkdir()
+    (src / path.name).write_text(f"#!python\n{code}")
+    maker = ScriptMaker(str(src), str(path.parent))
+    maker.executable = sys.executable
+    [exe] = maker.make(path.name)
+    return exe
+
+
 def private(path: Path) -> bool:
     """Readable by its owner only (Windows has no mode bits for that, so there it's always True)."""
     return sys.platform == "win32" or path.stat().st_mode & 0o777 == 0o600
 
 
-# Read-only folders. Windows has no mode bits for that, and root ignores them.
-needs_unix_permissions = pytest.mark.skipif(
-    sys.platform == "win32" or os.geteuid() == 0, reason="needs POSIX permissions as a normal user")
+def read_picture(path):
+    """The picture in a file, read whole so the file isn't left open (Windows can't delete
+    an open file, and the app replaces thumbnails and covers)."""
+    from PIL import Image
+
+    with Image.open(path) as im:
+        return im.copy()
+
+
+# Root ignores file modes, so a read-only folder can be written to.
+needs_permissions = pytest.mark.skipif(sys.platform != "win32" and os.geteuid() == 0,
+                                       reason="running as root, so permissions are not enforced")
+
+
+@contextlib.contextmanager
+def read_only(folder: Path):
+    """``folder`` made so that nothing can be written in it: by its mode on POSIX, and on
+    Windows (which has no mode bits for it) by denying everyone writes in its ACL."""
+    if sys.platform == "win32":
+        # Adding files and folders only: the generic W would deny SYNCHRONIZE too, which
+        # stops the folder being opened at all.
+        subprocess.run(["icacls", str(folder), "/deny", "*S-1-1-0:(WD,AD)"], check=True, capture_output=True)
+        try:
+            yield
+        finally:
+            subprocess.run(["icacls", str(folder), "/remove:d", "*S-1-1-0"], check=True, capture_output=True)
+        return
+    mode = folder.stat().st_mode
+    folder.chmod(0o555)
+    try:
+        yield
+    finally:
+        folder.chmod(mode)
 
 
 def pytest_collection_modifyitems(items):

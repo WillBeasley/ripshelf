@@ -105,6 +105,8 @@ WORKDIR /app
 COPY LICENSE THIRD-PARTY-NOTICES.md /usr/share/doc/ripshelf/
 # Exact versions with hashes from requirements.lock (scripts/lock-deps.sh), in a layer
 # of their own so a code change doesn't reinstall them.
+# pypdfium2 (about 9 MB, PDFium bundled) draws the pages of PDFs uploaded to the covers
+# shelf; it needs no Debian packages, unlike poppler-utils (about 10 MB with its libraries).
 ENV PIP_NO_CACHE_DIR=1 PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1
 COPY requirements.lock ./
 RUN pip install --require-hashes --no-deps -r requirements.lock

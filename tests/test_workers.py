@@ -77,6 +77,17 @@ def wait_http(pred, timeout=60):
     raise AssertionError("timed out")
 
 
+def what_happened(url: str, ws: Settings) -> str:
+    """The jobs, their events and the worker's run logs, for a test that waited in vain."""
+    out = []
+    for j in api(url, "/api/jobs"):
+        out.append(f"job {j['id']}: {j['state']} rip={j['rip']}")
+        out += [f"  {e['kind']}: {e['message']}" for e in api(url, f"/api/jobs/{j['id']}")["events"]]
+    for log in sorted((Path(ws.data_dir) / "worker-logs").glob("*.log")):
+        out.append(f"--- {log.name}\n{log.read_text(errors='replace')[-3000:]}")
+    return "\n".join(out)
+
+
 async def test_remote_drive_rips_into_the_controller_library(controller, tmp_path, monkeypatch):
     url, app = controller
     monkeypatch.setenv("RIPSHELF_FAKE_RIP_SECONDS", "0.5")
@@ -128,8 +139,11 @@ async def test_shared_scratch_skips_the_upload(controller, tmp_path, monkeypatch
     agent = Agent(ws, FakeDrives(present={PM}))
     task = asyncio.create_task(agent.run_forever())
     try:
-        job = await asyncio.to_thread(wait_http, lambda: next(
-            (j for j in api(url, "/api/jobs") if j["rip"]["state"] == "done"), None))
+        try:
+            job = await asyncio.to_thread(wait_http, lambda: next(
+                (j for j in api(url, "/api/jobs") if j["rip"]["state"] == "done"), None))
+        except AssertionError:
+            raise AssertionError(f"timed out\n{what_happened(url, ws)}") from None
         assert job["rip"]["file"] and Path(job["rip"]["file"]).exists()
         assert uploads == []
         conf = (ws.makemkv_dir / "fake-ihas122" / ".MakeMKV" / "settings.conf").read_text()
@@ -396,6 +410,29 @@ async def test_short_outage_mid_rip_ends_nothing(controller, tmp_path, monkeypat
         await client.aclose()
 
 
+async def test_output_on_its_way_when_the_run_ends_still_arrives(tmp_path, monkeypatch):
+    # A slow controller (or link): MakeMKV's last lines, which say the rip worked, were in a
+    # batch still being sent when the run ended, and were dropped, so the rip "failed".
+    agent = Agent(worker_settings(tmp_path, "http://controller.test"), FakeDrives(present=set()))
+    sent, sending = [], asyncio.Event()
+
+    async def slow_post(url, json=None, **kw):
+        sending.set()
+        await asyncio.sleep(0.3)
+        sent.extend(json["lines"])
+        return httpx.Response(200, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(agent.client, "post", slow_post)
+    pending, stop = ["PRGV:1,2,3"], asyncio.Event()
+    flush = asyncio.create_task(agent._flush_lines(7, pending, stop))
+    await sending.wait()
+    pending.append('MSG:5036,260,1,"Copy complete. 1 titles saved."')
+    stop.set()
+    await asyncio.wait_for(flush, 5)
+    assert sent == ["PRGV:1,2,3", 'MSG:5036,260,1,"Copy complete. 1 titles saved."'] and pending == []
+    await agent.client.aclose()
+
+
 async def test_a_run_the_controller_gave_up_on_is_stopped_on_the_worker(controller, tmp_path, monkeypatch):
     url, app = controller
     monkeypatch.setenv("RIPSHELF_FAKE_RIP_SECONDS", "60")
@@ -437,6 +474,42 @@ async def test_refused_token_stops_the_worker_with_one_clear_message(tmp_path, m
     refused = [r for r in caplog.records if "refused the worker token" in r.getMessage()]
     assert len(refused) == 1 and refused[0].levelname == "ERROR" and "new token" in refused[0].getMessage()
     assert not any("unreachable" in r.getMessage() for r in caplog.records)
+
+
+async def test_a_worker_started_first_waits_for_the_controller_and_follows_its_restart(tmp_path, monkeypatch, caplog):
+    # Down at first (the worker came up before it), then up without the MakeMKV settings
+    # (not fatal), then restarted, forgetting the worker: it registers again each time.
+    calls = []
+    script = {"register": [httpx.ConnectError("refused"), httpx.ConnectError("refused")]}
+    heartbeats = [httpx.Response(404, json={"detail": "unknown worker"})]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        calls.append(path)
+        if path.endswith("/register"):
+            if script["register"]:
+                raise script["register"].pop(0)
+            return httpx.Response(200, json={})
+        if path.endswith("/makemkv"):
+            return httpx.Response(500)
+        if path.endswith("/heartbeat"):
+            return heartbeats.pop(0) if heartbeats else httpx.Response(200, json={})
+        await asyncio.sleep(0.05)  # a long-poll with nothing to do
+        return httpx.Response(200, json={"commands": []})
+
+    monkeypatch.setattr(agentmod, "UNREACHABLE_RETRY_S", 0.01)
+    monkeypatch.setattr(agentmod, "RESTART_RETRY_S", 0.01)
+    client = httpx.AsyncClient(base_url="http://c", transport=httpx.MockTransport(handler))
+    agent = Agent(worker_settings(tmp_path, "http://c"), FakeDrives(present=set()), client=client)
+    task = asyncio.create_task(agent.run_forever())
+    try:
+        await until(lambda: calls.count("/api/workers/register") >= 4, what="registering again after the restart")
+    finally:
+        task.cancel()
+    logged = [r.getMessage() for r in caplog.records]
+    assert sum("controller unreachable (ConnectError); retrying" in m for m in logged) == 2
+    assert any(m.startswith("could not fetch MakeMKV settings from the controller") for m in logged)
+    assert any("registering again" in m for m in logged)
 
 
 def test_leftover_rip_folders_are_removed_at_start(tmp_path):

@@ -82,13 +82,24 @@ def test_fake_tmdb_and_roomy_disks_with_the_fake_hardware(settings, monkeypatch)
     assert shutil.disk_usage(settings.data_dir).free >= 2**40
 
 
-def test_without_the_fake_hardware_there_are_no_fakes(settings, monkeypatch):
+@pytest.mark.parametrize("ui", [False, True], ids=["no-ui", "built-ui"])
+def test_without_the_fake_hardware_there_are_no_fakes(settings, monkeypatch, tmp_path, ui):
     monkeypatch.setenv("RIPSHELF_FAKE_TMDB", "1")
     monkeypatch.setattr(tmdb, "API", tmdb.API)
     settings.fake_hardware = False
+    # Not whatever web/build holds: a built UI answers every unknown path with its index.html.
+    settings.static_dir = tmp_path / "ui"
+    settings.static_dir.mkdir()
+    if ui:
+        (settings.static_dir / "index.html").write_text("<!doctype html><title>ripshelf</title>")
     with TestClient(main.create_app(settings, backend=FakeDrives(present=set()))) as c:
-        assert c.get("/fake-tmdb/3/configuration").status_code == 404
-        assert c.get("/fake-escl/eSCL/ScannerCapabilities").status_code == 404
+        for path in ("/fake-tmdb/3/configuration", "/fake-escl/eSCL/ScannerCapabilities"):
+            r = c.get(path)
+            if ui:
+                assert r.status_code == 200 and r.text.startswith("<!doctype html>"), \
+                    "the UI's page, not a fake mounted ahead of it"
+            else:
+                assert r.status_code == 404
     assert tmdb.API == "https://api.themoviedb.org/3"
 
 

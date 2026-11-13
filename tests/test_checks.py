@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 import httpx
 import respx
 from fastapi.testclient import TestClient
@@ -17,7 +15,7 @@ from ripshelf.main import create_app
 from ripshelf.makemkv import runner
 from ripshelf.models import SettingsUpdate
 
-from .conftest import posix_only
+from .conftest import fake_program, needs_permissions, read_only
 
 
 def client(settings):
@@ -86,13 +84,16 @@ async def test_emby(settings):
     assert not (await checks.emby(settings, SettingsUpdate())).ok
 
 
-@posix_only
 async def test_makemkv_key(settings, tmp_path):
-    fake = tmp_path / "makemkvcon"
-    fake.write_text("#!/bin/sh\n[ \"$2\" = good ] && { echo 'Registration key saved.'; exit 0; }\n"
-                    "echo 'Key not found or invalid'; exit 1\n")
-    fake.chmod(0o755)
-    settings.makemkvcon, settings.fake_hardware = str(fake), False
+    fake = fake_program(tmp_path / "makemkvcon", """
+        import sys
+        if sys.argv[2] == "good":
+            print("Registration key saved.")
+            sys.exit(0)
+        print("Key not found or invalid")
+        sys.exit(1)
+    """)
+    settings.makemkvcon, settings.fake_hardware = fake, False
     assert (await checks.makemkv(settings, SettingsUpdate(makemkv_key="good"))).ok
     r = await checks.makemkv(settings, SettingsUpdate(makemkv_key="bad"))
     assert not r.ok and "not valid" in r.message
@@ -107,12 +108,9 @@ async def test_makemkv_key(settings, tmp_path):
     assert "not checked" in (await checks.makemkv(settings, SettingsUpdate(makemkv_key="k"))).message
 
 
-@posix_only
 async def test_check_key_timeout(tmp_path):
-    slow = tmp_path / "slow"
-    slow.write_text(f"#!{sys.executable}\nimport time; time.sleep(30)\n")
-    slow.chmod(0o755)
-    ok, msg = await runner.check_key(str(slow), "k", timeout=0.5)
+    slow = fake_program(tmp_path / "slow", "import time; time.sleep(30)")
+    ok, msg = await runner.check_key(slow, "k", timeout=0.5)
     assert not ok and "did not answer" in msg
 
 
@@ -148,3 +146,85 @@ def test_a_blank_box_says_it_tested_the_saved_key(settings):
         assert r["ok"] and "tested the saved key" in r["message"]
         r = c.post("/api/settings/test", json={"check": "tmdb", "values": {"tmdb_api_key": "typed"}}).json()
         assert r["ok"] and "saved" not in r["message"]
+
+
+# --- when the thing being tested isn't right --------------------------------------------
+
+
+@respx.mock
+async def test_tmdb_having_trouble(settings):
+    respx.get(f"{TMDB}/configuration").mock(return_value=httpx.Response(503))
+    r = await checks.tmdb(settings, SettingsUpdate(tmdb_api_key="k"))
+    assert not r.ok and r.message == "TMDB returned HTTP 503"
+    respx.get(f"{TMDB}/configuration").mock(side_effect=httpx.ConnectError("refused"))
+    r = await checks.tmdb(settings, SettingsUpdate(tmdb_api_key="k"))
+    assert not r.ok and r.message == "Could not reach TMDB (ConnectError)"
+
+
+@respx.mock
+async def test_a_web_search_that_cant_be_reached(settings):
+    respx.get("http://searx.test/search").mock(side_effect=httpx.ConnectError("refused"))
+    r = await checks.catalogue(settings, SettingsUpdate(searxng_url="http://searx.test"))
+    assert not r.ok and r.message == "Web search failed (ConnectError)"
+
+
+@needs_permissions
+async def test_a_folder_that_cant_be_written(settings):
+    with read_only(settings.library_dir):
+        r = await checks.paths(settings, SettingsUpdate())
+    assert not r.ok and "is not writable" in r.message and "Data:" in r.details[0]
+
+
+async def test_the_scanner_address(settings):
+    assert (await checks.scanner(settings, SettingsUpdate())).message == "No scanner address"
+    r = await checks.scanner(settings, SettingsUpdate(scanner_url="ftp://scanner"))
+    assert not r.ok and r.message == "ftp://scanner is not a scanner's address", "the address as typed"
+
+
+def tesseract(tmp_path, langs: str) -> str:
+    return fake_program(tmp_path / "tesseract", f"""
+        import sys
+        if "--version" in sys.argv:
+            print("tesseract 5.3.4")
+        elif "--list-langs" in sys.argv:
+            print("List of available languages (2):")
+            print({langs!r})
+    """)
+
+
+async def test_ocr_languages(settings, tmp_path):
+    settings.tesseract = tesseract(tmp_path, "eng\nosd")
+    r = await checks.ocr(settings, SettingsUpdate(ocr_languages="eng"))
+    assert r.ok and r.message == "tesseract 5.3.4 is ready" and "Orientation (osd): installed" in r.details
+    r = await checks.ocr(settings, SettingsUpdate(ocr_languages="eng+deu"))
+    assert not r.ok and r.message == "tesseract 5.3.4 has no deu language data"
+    (tmp_path / "no-osd").mkdir()
+    settings.tesseract = tesseract(tmp_path / "no-osd", "eng")
+    r = await checks.ocr(settings, SettingsUpdate(ocr_languages="eng"))
+    assert r.ok and any(d.startswith("Orientation (osd): missing") for d in r.details)
+
+
+async def test_ocr_without_tesseract(settings, tmp_path):
+    settings.tesseract = str(tmp_path / "no-tesseract")
+    r = await checks.ocr(settings, SettingsUpdate())
+    assert not r.ok and r.details == ["See docs/cover-scans.md for installing it"]
+
+
+async def test_the_ai_models_need_an_address_or_a_key(settings):
+    settings.vision_url = None
+    for check in (checks.vision_model, checks.label_ai):
+        r = await check(settings, SettingsUpdate(vision_provider="local"))
+        assert not r.ok and r.message.startswith("No address for the")
+        r = await check(settings, SettingsUpdate(vision_provider="anthropic"))
+        assert not r.ok and r.message == "No Anthropic API key"
+
+
+async def test_the_label_model_failing(settings, monkeypatch):
+    from ripshelf.identify import ai_label
+
+    async def fails(*a, **kw):
+        raise ai_label.LabelError("the model declined to answer")
+
+    monkeypatch.setattr(ai_label, "read", fails)
+    r = await checks.label_ai(settings, SettingsUpdate(vision_provider="local", vision_url="http://x.test"))
+    assert not r.ok and r.message == "The model declined to answer"

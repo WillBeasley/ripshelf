@@ -25,6 +25,7 @@ This will be 0.7.0. Release candidates: [0.7.0-rc1](https://github.com/WillBeasl
 - The daily backup keeps `settings.json` and the MakeMKV data (`makemkv/`, `makemkv-files/`) too, as `ripshelf-<date>-files.tar.gz` beside the database copy ([settings.md](docs/settings.md#daily-backups)).
 - Dependabot proposes updates to the UI's packages, the CI actions and the Dockerfile's base images each week, and the base images are pinned by digest. A weekly workflow checks the Python locks for known vulnerabilities.
 - The barcode on a cover scan is looked up on TheDiscDB, then UPCitemdb, then a paid barcode service if you set one up (Barcode Lookup or EAN-Search, Settings → Identify → Barcodes on covers), then your SearXNG. A lookup that failed is tried again next time instead of being kept as "not found", and a changed barcode is looked up again.
+- A covers shelf: scan a stack of case sheets ahead of their discs (both sides at once, or in two passes turning the stack over), or upload pictures and PDFs. Each sheet is read, blank sides are left out, and when its disc goes in the job offers it to use as its scans ([cover-scans.md](docs/cover-scans.md#the-covers-shelf)). PDFs are read with pypdfium2, a new Python dependency.
 
 ### Changed
 
@@ -35,6 +36,19 @@ This will be 0.7.0. Release candidates: [0.7.0-rc1](https://github.com/WillBeasl
 
 - A `settings.json` with only disabled virtual drives is treated as a new install, so the setup page shows instead of ripping whatever is in the drives.
 - A long title isn't copied whole into the library once it has been split ([#33](https://github.com/WillBeasley/ripshelf/pull/33)).
+- A cover from the shelf that couldn't all be added to a job went back on the shelf but left its first side on the job, so using it again added that side twice. The side comes off again now.
+- Searching for a TV show by hand with TheTVDB or TVmaze down showed no shows, as if none matched. It says the service failed now.
+- Cancelling a job and pressing Retry scan (or retrying) straight after was refused as "the drive is busy", because Cancel returned while MakeMKV was still being stopped; it returns once the drive is free now. And a button that asks the drive while the regular check of it is under way waits for that answer, instead of saying "there is no disc in the drive".
+- A TV disc whose copy into the library failed part way left the episodes it had already copied there, so a retry stopped at "already in the library" on its own episodes. They're taken out again when the copy fails (not one you chose to overwrite), so a retry starts clean.
+- A job could show Done (or Failed) while it was still finishing, copying its cover scans into the library, so deleting it, identifying it again or putting a failed move back straight away was refused as "still running". A job is marked done only once everything is filed.
+- An error that starts with an address no longer has it capitalised ("Ftp://scanner is not a scanner's address", "Http://… refused the key") on the Settings Test buttons, a cover the vision model couldn't read, or a failed web search.
+- Deleting a film's job with its files left the film's folder behind, holding only its `.disc` record. The record goes too now, unless another version of the film (kept with "keep both") is still in the folder.
+- A rip on a worker could be called failed when it had worked. MakeMKV's last lines ("Copy complete"), which say the rip worked, were dropped if they were still on their way to the controller as the rip ended, which a busy worker or a slow link made likely.
+- **Windows:** a disc's content fingerprint is the same as on Linux. Its structure files were named with backslashes, so a disc read on Windows wasn't recognised from a Linux rip, or by TheDiscDB.
+- **Windows:** a library, TV, backup or daily-backup folder you can't write to is reported on the setup page and stops the job before the copy. Windows ignored the folder's permissions, so the job only failed when the copy started.
+- **Windows:** identifying a TV disc again wrote its `.disc/disc.json` file names with backslashes.
+- A kind of disc with transcoding switched off isn't read with ffprobe first, so without ffprobe it's copied as is instead of warning that the file couldn't be read.
+- The whole test suite runs on Windows in CI, not just the Windows-only code.
 
 ## 0.6.0 (2026-11-08)
 

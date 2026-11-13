@@ -87,6 +87,11 @@ class TranscodeMixin:
         task.add_done_callback(lambda t: t.cancelled() and coro.close())
         return task
 
+    def _bg_running(self, job_id: int) -> bool:
+        """Whether the job's background task is still at work. One that has ended counts as
+        done, although it leaves ``_bg`` only on the loop's next turn."""
+        return any(not t.done() for t in self._bg.get(job_id, ()))
+
     def _cancel_bg(self, job_id: int) -> None:
         t = self._transcoders.get(job_id)
         if t:
@@ -163,6 +168,11 @@ class TranscodeMixin:
     async def _transcode_file(self, job_id: int, idx: int, src: Path, encoder: str, of: str = "") -> TranscodeFile:
         job = self.db.get_job(job_id)
         rec = TranscodeFile(title_index=idx, size_before=src.stat().st_size if src.exists() else None)
+        off = transcode.kind_off(self.s, job.disc.kind.value if job.disc.kind else None)
+        if off:  # no need to read the file
+            rec.note = off
+            self._event(job, "info", f"Title {idx}: no transcode ({off})")
+            return rec
         self._set_step(job, f"Checking whether title {idx} needs transcoding{of}",
                        "Reading the video format (ffprobe)")
         info = await transcode.probe(self.s.ffprobe, src)

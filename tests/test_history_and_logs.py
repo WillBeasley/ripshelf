@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,6 +16,63 @@ from ripshelf.models import Candidate, JobsDeleted, JobState
 from .conftest import until
 
 PM = "/dev/fake-sr1"
+
+
+async def filed_film(h):
+    job = await h.wait_job(lambda j: j.state == JobState.review)
+    await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
+    done = await h.wait_job(lambda j: j.state == JobState.done)
+    return h.job(done.id)
+
+
+async def test_deleting_a_film_with_its_files_removes_them_and_their_empty_folder(harness, settings):
+    async with harness(PM) as h:
+        done = await filed_film(h)
+        film = Path(done.destination)
+        extra = film.parent / "Featurettes" / "Growing the Orchard.mkv"
+        extra.parent.mkdir()
+        extra.write_bytes(b"x")
+        done.filed_extras = {3: str(extra)}
+        h.db.save_job(done)
+        assert (film.parent / ".disc" / "disc.json").is_file()
+        _, files = h.m.delete_jobs([done.id], delete_files=True)
+        assert {str(film), str(extra)} <= set(files) and any(f.endswith("disc.json") for f in files)
+        assert not film.parent.exists(), "no folder left holding only the .disc record"
+        assert settings.movies.is_dir(), "the films folder itself stays"
+
+
+async def test_another_version_kept_beside_the_film_keeps_the_disc_record(harness, settings):
+    async with harness(PM) as h:
+        done = await filed_film(h)
+        film = Path(done.destination)
+        other = film.with_name("Moonlit Orchard (1998) - 2160p.mkv")
+        other.write_bytes(b"the other version")
+        _, files = h.m.delete_jobs([done.id], delete_files=True)
+        assert files == [str(film)] and other.exists() and (film.parent / ".disc" / "disc.json").is_file()
+
+
+async def test_deleting_files_never_reaches_outside_the_library(harness, settings, tmp_path, caplog):
+    async with harness(PM) as h:
+        done = await filed_film(h)
+        film = Path(done.destination)
+        outside = tmp_path / "not-the-library.mkv"
+        outside.write_bytes(b"keep me")
+        done.filed_extras = {3: str(outside), 4: str(settings.movies)}  # odd records, or tampered ones
+        h.db.save_job(done)
+        with caplog.at_level(logging.WARNING):
+            _, files = h.m.delete_jobs([done.id], delete_files=True)
+        assert str(film) in files and str(outside) not in files and outside.read_bytes() == b"keep me"
+        assert settings.movies.is_dir()
+
+
+async def test_a_full_disc_backup_is_kept_when_its_job_is_deleted(harness, settings):
+    settings.rip_mode = "backup"
+    async with harness("/dev/fake-sr2") as h:
+        job = await h.wait_job(lambda j: j.state == JobState.review)
+        await h.m.confirm(job.id, Candidate(source="manual", title="The Brass Heron", year=2024))
+        done = await h.wait_job(lambda j: j.state == JobState.done)
+        assert h.m.delete_jobs([done.id], delete_files=True) == ([done.id], [])
+        assert (Path(done.destination) / "BDMV").is_dir()
 
 
 @pytest.mark.slow
