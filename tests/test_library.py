@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,8 @@ from ripshelf.library import (
     safe_name,
     write_disc_folder,
 )
+
+from .conftest import needs_permissions, read_only
 
 
 @pytest.mark.parametrize("raw, want", [
@@ -178,13 +181,15 @@ def test_write_disc_folder(tmp_path):
 
 def test_copy_verified_across_filesystems(tmp_path):
     # Scratch and library on different filesystems, so no rename across them, only
-    # a copy, then a rename within the destination folder.
+    # a copy, then a rename within the destination folder. /dev/shm on Linux; the runner's
+    # temp folder is on another drive on GitHub's Windows runners.
     import tempfile
 
-    shm = Path("/dev/shm")
-    if not shm.is_dir() or os.stat(shm).st_dev == os.stat(tmp_path).st_dev:
-        pytest.skip("needs /dev/shm on another filesystem")
-    with tempfile.TemporaryDirectory(dir=shm) as d:
+    other = next((d for d in ("/dev/shm", os.environ.get("RUNNER_TEMP"))
+                  if d and os.path.isdir(d) and os.stat(d).st_dev != os.stat(tmp_path).st_dev), None)
+    if not other:
+        pytest.skip("needs /dev/shm (or RUNNER_TEMP) on another filesystem")
+    with tempfile.TemporaryDirectory(dir=other) as d:
         src = Path(d) / "rip.mkv"
         src.write_bytes(os.urandom(3 * 1024 * 1024 + 7))
         dest = tmp_path / "Movies" / "Film (2000)" / "Film (2000).mkv"
@@ -194,19 +199,22 @@ def test_copy_verified_across_filesystems(tmp_path):
         assert not list(dest.parent.glob(".*.partial"))
 
 
-def test_check_library_messages_and_read_only_folder(tmp_path):
+def test_check_library_messages(tmp_path):
     with pytest.raises(LibraryError, match=r"^movies folder .*missing does not exist \(is the share mounted\?\)$"):
         check_library(tmp_path / "missing", "movies folder")
+    check_library(tmp_path)
+
+
+@needs_permissions
+def test_a_read_only_library_folder(tmp_path):
     ro = tmp_path / "ro"
     ro.mkdir()
-    ro.chmod(0o500)  # readable and searchable, not writable
-    try:
-        if os.access(ro, os.W_OK):
-            pytest.skip("running as root, so permissions are not enforced")
+    with read_only(ro):
         with pytest.raises(LibraryError, match=r"^library folder .*ro is not writable$"):
             check_library(ro)
-    finally:
-        ro.chmod(0o700)
+    check_library(ro)
+    if sys.platform == "win32":
+        return
     no_x = tmp_path / "nox"
     no_x.mkdir()
     no_x.chmod(0o600)  # writable but not searchable, so files can't be created in it
