@@ -86,3 +86,24 @@ def test_preset_needs_a_pick():
         Preset(media=MediaKind.movie)
     with pytest.raises(ValidationError):
         Preset(media=MediaKind.tv, candidate=FILM)
+
+
+async def test_a_tmdb_show_named_without_a_tmdb_key_is_said_and_passed_over(harness, settings):
+    settings.tmdb_api_key = None
+    async with harness(SD) as h:
+        job = await h.wait_job(lambda j: j.state == JobState.scanning)
+        await h.m.set_preset(job.id, Preset(media=MediaKind.tv, show=Show(tmdb_id=46866, name="Pippa & Goose"),
+                                            season=3))
+        job = await h.wait_job(lambda j: j.state == JobState.review, timeout=60)
+        msgs = [e.message for e in h.db.events(job.id)]
+    assert "No TMDB API key set, so Pippa & Goose, the show you picked, can't be looked up" in msgs
+
+
+async def test_a_film_marked_tv_with_its_disc_out_asks_for_it_back(harness):
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done", timeout=60)
+        h.backend.present.discard(PM)
+        job = await h.m.set_media(job.id, MediaKind.tv)
+        msgs = [e.message for e in h.db.events(job.id)]
+        assert h.job(job.id).rip.state == "done", "the film's title stays ripped"
+    assert "Put the disc back in to rip the episodes" in msgs
