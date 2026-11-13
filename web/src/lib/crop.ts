@@ -34,3 +34,23 @@ export const turnLeft = (x: Box): Box => ({ l: x.t, t: 1 - x.r, r: x.b, b: 1 - x
 export const mirror = (x: Box): Box => ({ l: 1 - x.r, t: x.t, r: 1 - x.l, b: x.b });
 // ...mirrored top to bottom.
 export const mirrorDown = (x: Box): Box => ({ l: x.l, t: 1 - x.b, r: x.r, b: 1 - x.t });
+
+// Turns and mirrors made in the editor before they're saved, on the picture as it shows
+// now: mirrored if `flip`, after turning clockwise by `turn`.
+export type View = { turn: number; flip: boolean };
+type Quarter = 0 | 90 | 180 | 270;
+export const NO_CHANGE: View = { turn: 0, flip: false };
+const quarter = (r: number) => ((r % 360) + 360) % 360;
+
+// Turned a quarter clockwise (90) or anticlockwise (-90) as shown: mirrored, the
+// turn underneath goes the other way.
+export const turnView = (v: View, by: number): View => ({ turn: quarter(v.turn + (v.flip ? -by : by)), flip: v.flip });
+// Mirrored left to right as shown.
+export const flipView = (v: View): View => ({ turn: v.turn, flip: !v.flip });
+// Mirrored top to bottom as shown: mirrored left to right and turned upside down.
+export const flipDownView = (v: View): View => ({ turn: quarter(v.turn + 180), flip: !v.flip });
+
+// The side's turn and mirroring (of the original) once the view is saved.
+export function applyView(rotate: number, flip: boolean, v: View): { rotate: Quarter; flip: boolean } {
+	return { rotate: quarter(rotate + (flip ? -v.turn : v.turn)) as Quarter, flip: flip !== v.flip };
+}
