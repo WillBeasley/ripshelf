@@ -51,6 +51,7 @@ from .models import (
     ScanSource,
     ScanText,
     ShelfCover,
+    ShelfDeleted,
     ShelfReading,
     ShelfScanRequest,
     ShelfSide,
@@ -330,14 +331,25 @@ class ShelfMixin:
     # --- changing and removing ----------------------------------------------------------------
 
     async def delete_shelf_cover(self, cover_id: str) -> None:
+        if not (await self.delete_shelf_covers([cover_id])).deleted:
+            raise KeyError(cover_id)
+
+    async def delete_shelf_covers(self, cover_ids: list[str]) -> ShelfDeleted:
+        """Delete covers (picked together on the Covers page), with their files; those
+        already gone are said so."""
         async with self._shelf_lock:
             idx = self._shelf_index()
-            c = next((c for c in idx.covers if c.id == cover_id), None)
-            if not c:
-                raise KeyError(cover_id)
-            idx.covers.remove(c)
-            self._save_shelf(idx)
-        self._drop_cover_files(c)
+            gone = [c for c in idx.covers if c.id in cover_ids]
+            for c in gone:
+                idx.covers.remove(c)
+            if gone:
+                self._save_shelf(idx)
+        for c in gone:
+            self._drop_cover_files(c)
+            self._shelf_vision_asked.pop(c.id, None)
+            self._shelf_edited.discard(c.id)
+        ids, asked = {c.id for c in gone}, list(dict.fromkeys(cover_ids))
+        return ShelfDeleted(deleted=[i for i in asked if i in ids], missing=[i for i in asked if i not in ids])
 
     def _drop_cover_files(self, c: ShelfCover) -> None:
         for name in ("outside", "inside"):

@@ -90,6 +90,8 @@ from .models import (
     SettingsView,
     SetupTools,
     ShelfCover,
+    ShelfDeleted,
+    ShelfDeleteRequest,
     ShelfScanRequest,
     ShelfSideName,
     ShelfSideUpdate,
@@ -849,6 +851,13 @@ async def shelf_vision(cover_id: str, request: Request, body: ShelfVisionRequest
 async def vision_models(request: Request):
     """The models the vision model's connection offers, to pick one for a reading."""
     return await manager(request).vision_models()
+
+
+@api.post("/covers/delete", response_model=ShelfDeleted)
+async def shelf_delete_many(body: ShelfDeleteRequest, request: Request):
+    """Delete several covers at once, as deleting each would (their pictures, readings
+    and thumbnails go too)."""
+    return await _contribution_call(lambda: manager(request).delete_shelf_covers(body.ids))
 
 
 @api.delete("/covers/{cover_id}", status_code=204)
