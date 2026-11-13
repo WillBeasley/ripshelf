@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,87 @@ async def test_uhd_disc_is_backed_up_whole(settings: Settings):
         rip_log = (settings.jobs_dir / str(job.id) / "rip.log").read_text()
         assert "Backup done." in rip_log
         assert UHD not in backend.present, "auto-ejected"
+    finally:
+        await m.stop()
+        db.close()
+
+
+async def backup_to_review(settings: Settings):
+    settings.rip_mode = "backup"
+    m, db, backend = await run_manager(settings, {UHD})
+    job = await until(lambda: next(iter(db.list_jobs([JobState.review.value])), None))
+    return m, db, job
+
+
+HERON = Candidate(source="manual", title="The Brass Heron", year=2024)
+
+
+def ended(db, job_id):
+    return until(lambda: (j := db.get_job(job_id)) and j.state in (JobState.done, JobState.failed) and j)
+
+
+async def test_a_backup_already_in_the_library_is_not_overwritten_and_retry_files_it(settings: Settings):
+    dest = settings.library_dir / "Disc backups/The Brass Heron (2024) - 2160p"
+    (dest / "BDMV").mkdir(parents=True)
+    (dest / "BDMV/index.bdmv").write_bytes(b"theirs")
+    m, db, job = await backup_to_review(settings)
+    try:
+        await m.confirm(job.id, HERON)
+        failed = await ended(db, job.id)
+        assert failed.problem.code == "destination_exists" and "identify_again" in failed.problem.actions
+        assert (dest / "BDMV/index.bdmv").read_bytes() == b"theirs"
+        # Removed, then retried: the backup kept in scratch is filed, with nothing ripped again.
+        shutil.rmtree(dest)
+        await m.retry(job.id)
+        await until(lambda: db.get_job(job.id).state == JobState.done)
+        assert (dest / "BDMV/index.bdmv").read_bytes().startswith(b"INDX")
+    finally:
+        await m.stop()
+        db.close()
+
+
+async def test_a_backup_folder_that_isnt_there_fails_the_job(settings: Settings):
+    settings.disc_backups_dir = settings.library_dir / "not-mounted"
+    m, db, job = await backup_to_review(settings)
+    try:
+        await m.confirm(job.id, HERON)
+        failed = await ended(db, job.id)
+        assert failed.problem.code == "library_missing" and "does not exist" in failed.problem.message
+        assert not settings.disc_backups_dir.exists(), "an unmounted share isn't replaced by a folder"
+    finally:
+        await m.stop()
+        db.close()
+
+
+@pytest.mark.parametrize(("error", "code"), [(OSError(28, "No space left on device"), "copy_failed"),
+                                             (FileExistsError(17, "File exists"), "destination_exists")])
+async def test_a_backup_copy_that_fails_keeps_the_rip(settings: Settings, monkeypatch, error, code):
+    def fail(*a):
+        raise error
+
+    monkeypatch.setattr(library, "copy_tree_verified", fail)
+    m, db, job = await backup_to_review(settings)
+    try:
+        await m.confirm(job.id, HERON)
+        failed = await ended(db, job.id)
+        assert failed.problem.code == code and "retry" in failed.problem.actions
+        assert (Path(failed.rip.file) / "BDMV/index.bdmv").exists(), "the backup stays in scratch for a retry"
+    finally:
+        await m.stop()
+        db.close()
+
+
+async def test_a_disc_folder_that_cant_be_written_is_only_a_warning(settings: Settings, monkeypatch):
+    def fail(*a):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(library, "write_disc_folder", fail)
+    m, db, job = await backup_to_review(settings)
+    try:
+        await m.confirm(job.id, HERON)
+        done = await ended(db, job.id)
+        assert done.state == JobState.done
+        assert any("Could not write .disc folder" in e.message for e in db.events(job.id))
     finally:
         await m.stop()
         db.close()
