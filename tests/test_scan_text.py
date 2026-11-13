@@ -27,7 +27,8 @@ from .conftest import until
 from .test_contribute import heron_job, put
 from .test_scans import picture, sheet
 
-TESSERACT = os.environ.get("RIPSHELF_TESSERACT", "tesseract")
+# Where the app would find it: on the PATH, or on Windows in the installer's folder.
+TESSERACT = os.environ.get("RIPSHELF_TESSERACT") or ocr.default_command("tesseract")
 needs_tesseract = pytest.mark.skipif(not (shutil.which(TESSERACT) or os.path.isfile(TESSERACT)),
                                      reason="Tesseract isn't installed")
 

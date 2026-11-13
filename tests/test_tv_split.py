@@ -19,6 +19,9 @@ from .tvfix import mock_show
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 needs_ffmpeg = pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg and ffprobe")
+# Where the app would find it: on the PATH, or on Windows in MKVToolNix's folder.
+MKVMERGE = split.default_mkvmerge("mkvmerge")
+needs_mkvmerge = pytest.mark.skipif(not shutil.which(MKVMERGE), reason="needs mkvmerge (MKVToolNix)")
 
 
 def title(i: int, minutes: float, chapters: int = 0) -> TitleInfo:
@@ -310,18 +313,18 @@ async def test_chapters_and_breaks_from_a_real_file(seagull_rip):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(shutil.which("mkvmerge") is None, reason="needs mkvmerge (MKVToolNix)")
+@needs_mkvmerge
 async def test_real_mkvmerge_splits_at_chapters(seagull_rip, tmp_path):
-    files = await split.split_file("mkvmerge", seagull_rip, tmp_path, [2, 4])
+    files = await split.split_file(MKVMERGE, seagull_rip, tmp_path, [2, 4])
     from ripshelf.tv import verify
     lengths = [round(await verify.duration("ffprobe", f)) for f in files]
     assert lengths == [1800, 1680, 1980]
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(shutil.which("mkvmerge") is None, reason="needs mkvmerge (MKVToolNix)")
+@needs_mkvmerge
 async def test_real_mkvmerge_splits_at_timestamps(chapterless_rip, tmp_path):
-    files = await split.split_file("mkvmerge", chapterless_rip, tmp_path, [1, 2], [1800.0, 3480.0])
+    files = await split.split_file(MKVMERGE, chapterless_rip, tmp_path, [1, 2], [1800.0, 3480.0])
     from ripshelf.tv import verify
     lengths = [round(await verify.duration("ffprobe", f)) for f in files]
     assert lengths == [1800, 1680, 1980]
