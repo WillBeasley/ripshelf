@@ -479,3 +479,8 @@ async def test_the_label_reader_uses_the_default_model_too(harness, settings):
         assert h.m.label_provider().model == VISION_MODELS["anthropic"]
         settings.label_ai_model = "claude-haiku-5-5"
         assert h.m.label_provider().model == "claude-haiku-5-5"
+
+
+async def test_the_test_button_keeps_an_address_as_typed():
+    ok, message_, _ = await vision.check(scripted("local", lambda hx: hx.Response(401)))
+    assert not ok and message_ == "http://x.test/v1 refused the key (HTTP 401)"
