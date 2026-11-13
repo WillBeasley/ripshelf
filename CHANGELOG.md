@@ -36,6 +36,7 @@ This will be 0.7.0. Release candidates: [0.7.0-rc1](https://github.com/WillBeasl
 
 - A `settings.json` with only disabled virtual drives is treated as a new install, so the setup page shows instead of ripping whatever is in the drives.
 - A long title isn't copied whole into the library once it has been split ([#33](https://github.com/WillBeasley/ripshelf/pull/33)).
+- A TV disc whose copy into the library failed part way left the episodes it had already copied there, so a retry stopped at "already in the library" on its own episodes. They're taken out again when the copy fails (not one you chose to overwrite), so a retry starts clean.
 - A job could show Done (or Failed) while it was still finishing, copying its cover scans into the library, so deleting it, identifying it again or putting a failed move back straight away was refused as "still running". A job is marked done only once everything is filed.
 - An error that starts with an address no longer has it capitalised ("Ftp://scanner is not a scanner's address", "Http://… refused the key") on the Settings Test buttons, a cover the vision model couldn't read, or a failed web search.
 - Deleting a film's job with its files left the film's folder behind, holding only its `.disc` record. The record goes too now, unless another version of the film (kept with "keep both") is still in the folder.
