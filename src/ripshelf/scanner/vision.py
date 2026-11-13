@@ -27,7 +27,7 @@ import httpx
 from PIL import Image, ImageDraw
 from pydantic import BaseModel, ValidationError
 
-from ..models import AudioTrack, Listing, ListingDetails, ListingItem, SubtitleTrack
+from ..models import AudioTrack, Listing, ListingDetails, ListingItem, SubtitleTrack, sentence
 from .listing import EXTRAS_TYPES, LANGUAGE, QUOTED
 
 log = logging.getLogger(__name__)
@@ -407,7 +407,7 @@ async def check(provider: Provider) -> tuple[bool, str, list[str]]:
     try:
         listing, secs = await read_listing(provider, test_card())
     except VisionError as e:
-        return False, str(e)[:1].upper() + str(e)[1:], []
+        return False, sentence(str(e)), []
     found = [f"{i.title} ({i.extra_type or i.kind})" for i in listing.items]
     details = [f"Took {secs:.0f} s", "Read: " + (", ".join(found) or "no items")]
     if listing.details.feature_runtime_min:

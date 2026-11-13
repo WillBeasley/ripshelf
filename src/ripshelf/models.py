@@ -7,6 +7,7 @@ TypeScript types from them, so change them here first.
 from __future__ import annotations
 
 import operator
+import re
 from datetime import date, datetime
 from enum import StrEnum
 from functools import reduce
@@ -1284,6 +1285,12 @@ def _view_model() -> type[BaseModel]:
 
 SettingsUpdate = _update_model()
 SettingsView = _view_model()
+
+
+def sentence(message: str) -> str:
+    """An error shown as a sentence: capitalised, unless it starts with an address (a
+    scanner's or a server's), which stays as it was typed ("ftp://scanner is not ...")."""
+    return message if re.match(r"\S+://", message) else message[:1].upper() + message[1:]
 
 
 # Settings that mean nothing on Windows: the render node VAAPI and Quick Sync open on Linux.
