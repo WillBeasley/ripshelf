@@ -36,6 +36,10 @@ This will be 0.7.0. Release candidates: [0.7.0-rc1](https://github.com/WillBeasl
 
 - A `settings.json` with only disabled virtual drives is treated as a new install, so the setup page shows instead of ripping whatever is in the drives.
 - A long title isn't copied whole into the library once it has been split ([#33](https://github.com/WillBeasley/ripshelf/pull/33)).
+- **Windows:** a disc's content fingerprint is the same as on Linux. Its structure files were named with backslashes, so a disc read on Windows wasn't recognised from a Linux rip, or by TheDiscDB.
+- **Windows:** identifying a TV disc again wrote its `.disc/disc.json` file names with backslashes.
+- A kind of disc with transcoding switched off isn't read with ffprobe first, so without ffprobe it's copied as is instead of warning that the file couldn't be read.
+- The whole test suite runs on Windows in CI, not just the Windows-only code.
 
 ## 0.6.0 (2026-11-08)
 

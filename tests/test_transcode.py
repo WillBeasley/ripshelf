@@ -285,7 +285,7 @@ async def test_transcoder_progress_parsing(tmp_path):
     seen = []
     await transcode.Transcoder().run(cmd, 10, lambda f, sp, fps: seen.append((f, sp, fps)), tmp_path / "l")
     assert seen == [(0.5, 2.5, None), (0.5, 2.5, None), (1.0, 2.5, 59.5)], "never backwards"
-    log = (tmp_path / "l").read_text().splitlines()
+    log = (tmp_path / "l").read_text(encoding="utf-8").splitlines()
     assert log[0].startswith(f"$ {sys.executable}") or log[0].startswith(f"$ '{sys.executable}'")
     assert [line.split("] ")[1] for line in log[1:]] == ["50% · 2.5×", "100% · 59.5 fps · 2.5×", "ffmpeg exited with code 0"]
 

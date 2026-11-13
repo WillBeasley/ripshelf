@@ -73,7 +73,8 @@ async def extract_structure(sevenzip: str, device: str, out_dir: Path, timeout: 
                                          *STRUCTURE_PATTERNS], timeout)
         if got is None:
             return []
-        files = sorted(str(p.relative_to(out_dir)) for p in out_dir.rglob("*") if p.is_file() and p.name != SIZES)
+        files = sorted(p.relative_to(out_dir).as_posix() for p in out_dir.rglob("*")
+                       if p.is_file() and p.name != SIZES)
         if files:
             break
         log.info("7z read no structure files from %s%s: %s", device, f" as {t[2:]}" if t else "",
