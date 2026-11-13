@@ -265,6 +265,60 @@ async def test_tv_lookup_has_no_tmdb_date(harness, settings):
         assert any("TMDB has no disc release dates for TV" in n for n in found.notes)
 
 
+SEARX = "http://searx.test"
+
+
+def searx(router, *urls):
+    return router.get(f"{SEARX}/search").mock(return_value=httpx.Response(200, json={"results": [
+        {"title": "The Brass Heron", "url": u, "content": ""} for u in urls]}))
+
+
+async def test_a_label_that_is_a_barcode_and_an_asin_from_a_web_search(harness, settings, monkeypatch):
+    settings.thediscdb_contribute = "ask"
+    settings.catalogue_search, settings.searxng_url = "searxng", SEARX
+
+    class NoDates:
+        async def release_dates(self, tmdb_id):
+            from ripshelf.identify.tmdb import TmdbError
+            raise TmdbError("HTTP 503")
+
+    async with harness() as h:
+        job = heron_job()
+        job.disc.label = UPC_GB  # some discs are labelled with their barcode
+        job = put(h, job)
+        monkeypatch.setattr(h.m, "_tmdb", lambda: NoDates())
+        with respx.mock(assert_all_called=False) as router:
+            router.get(f"{release_info.UPCITEMDB}/lookup").mock(return_value=httpx.Response(200, json={"items": []}))
+            router.get(f"{release_info.UPCITEMDB}/search").mock(return_value=httpx.Response(200, json={"items": []}))
+            searx(router, "https://www.amazon.co.uk/dp/B0D7654321", "https://www.amazon.co.uk/x/dp/B0D7654321")
+            found = await h.m.release_lookup(job.id)
+        notes = " | ".join(found.notes)
+        assert found.suggested.upc == UPC_GB and f"The disc's label is a barcode, {UPC_GB}." in notes
+        assert f"UPCitemdb doesn't know the barcode {UPC_GB}." in notes
+        assert found.suggested.asin == "B0D7654321" and "from a web search of amazon.co.uk" in notes
+        assert "No release date from TMDB (HTTP 503)." in notes
+
+
+@pytest.mark.parametrize(("reply", "note"), [
+    (httpx.Response(200, json={"results": []}), "No ASIN found on amazon.co.uk."),
+    (httpx.ConnectError("refused"), "No web search for the ASIN:"),
+])
+async def test_no_asin_from_the_web_search(harness, settings, reply, note):
+    settings.thediscdb_contribute = "ask"
+    settings.catalogue_search, settings.searxng_url = "searxng", SEARX
+    async with harness() as h:
+        job = put(h, heron_job())
+        with respx.mock(assert_all_called=False) as router:
+            router.get(f"{release_info.UPCITEMDB}/lookup").mock(return_value=httpx.Response(404))
+            router.get(f"{release_info.UPCITEMDB}/search").mock(return_value=httpx.Response(200, json={"items": []}))
+            if isinstance(reply, Exception):
+                router.get(f"{SEARX}/search").mock(side_effect=reply)
+            else:
+                router.get(f"{SEARX}/search").mock(return_value=reply)
+            found = await h.m.release_lookup(job.id, upc=UPC_GB)
+        assert found.suggested.asin is None and any(n.startswith(note) for n in found.notes)
+
+
 @pytest.fixture
 def client(settings):
     with TestClient(create_app(settings, backend=FakeDrives(present=set()))) as c:
