@@ -510,3 +510,76 @@ def test_api(client):
     assert client.delete(f"/api/covers/{other}").status_code == 204
     assert client.delete(f"/api/covers/{other}").status_code == 404
     assert client.get("/api/covers", params={"q": "nothing like it"}).json()["covers"] == []
+
+
+# --- when the shelf can't do it --------------------------------------------------------------------------------
+
+
+async def test_uploads_that_cant_be_taken(harness, monkeypatch):
+    from ripshelf.providers import release_info
+
+    async with harness() as h:
+        with pytest.raises(ValueError, match="no pages were uploaded"):
+            await h.m.add_shelf_upload([], [])
+        monkeypatch.setattr(release_info, "MAX_COVER_BYTES", 100)
+        with pytest.raises(ValueError, match="larger than 20 MB"):
+            await h.m.add_shelf_upload([outside()], [])
+        assert not h.m.shelf().covers
+
+
+async def test_a_cover_that_cant_go_to_the_job_stays_on_the_shelf(harness, monkeypatch):
+    from ripshelf import scanjobs
+
+    async with harness("fake-pioneer") as h:
+        job = put(h, heron_job(state=JobState.review))
+        c = (await h.m.add_shelf_upload([outside(), inside()], [])).covers[0]
+        monkeypatch.setattr(scanjobs, "MAX_SCANS", 1)
+        with pytest.raises(ValueError, match="at most 1 pictures"):
+            await h.m.use_shelf_cover(c.id, job.id)
+        monkeypatch.setattr(scanjobs, "MAX_SCANS", 60)
+
+        real, calls = h.m.add_scan, []
+
+        async def second_fails(*a, **kw):
+            calls.append(a)
+            if len(calls) == 2:
+                raise OSError(28, "No space left on device")
+            return await real(*a, **kw)
+
+        monkeypatch.setattr(h.m, "add_scan", second_fails)
+        with pytest.raises(OSError):
+            await h.m.use_shelf_cover(c.id, job.id)
+        assert [x.id for x in h.m.shelf().covers] == [c.id], "put back, not lost"
+        assert h.db.get_job(job.id).scans == [], "and the side already added taken off, not left twice"
+        assert h.m.shelf_file(c.id, "outside")[0].read_bytes() == outside()
+
+
+async def test_a_cover_that_cant_wait_for_the_drive_stays_on_the_shelf(harness, monkeypatch):
+    async with harness("fake-pioneer") as h:
+        drive = next(iter(h.m.drives))
+        c = (await h.m.add_shelf_upload([outside(), inside()], [])).covers[0]
+        real, calls = h.m.add_pending, []
+
+        async def second_fails(*a, **kw):
+            calls.append(a)
+            if len(calls) == 2:
+                raise OSError(28, "No space left on device")
+            return await real(*a, **kw)
+
+        monkeypatch.setattr(h.m, "add_pending", second_fails)
+        with pytest.raises(OSError):
+            await h.m.shelf_cover_for_drive(c.id, drive)
+        assert h.m.pending_scans(drive).scans == [], "the side already kept for the drive is taken back"
+        assert [x.id for x in h.m.shelf().covers] == [c.id]
+
+
+async def test_the_stack_buttons_with_nothing_to_act_on(harness):
+    async with harness() as h:
+        with pytest.raises(ValueError, match="no stack waiting"):
+            await h.m.pair_stack()
+        with pytest.raises(KeyError):
+            await h.m.drop_stack_page("nope")
+        with pytest.raises(KeyError):
+            await h.m.swap_shelf_sides("nope")
+        await h.m.cancel_stack()  # nothing held: harmless
+        assert h.m.shelf().stack is None

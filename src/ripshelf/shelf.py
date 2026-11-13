@@ -400,10 +400,13 @@ class ShelfMixin:
             raise ValueError(f"a job keeps at most {scanjobs.MAX_SCANS} pictures; remove some first")
         c, data = await self._take_cover(cover_id)
         source = "upload" if c.source == "camera" else c.source
+        added = []
         try:
             for name, d in data.items():
-                await self.add_scan(job_id, d, KINDS[name], source)
+                added.append(await self.add_scan(job_id, d, KINDS[name], source))
         except (OSError, ValueError, KeyError):
+            for sc in added:  # the side already added comes off, as the cover goes back whole
+                await self.delete_scan(job_id, sc.id)
             await self._put_back(c)
             raise
         self._drop_cover_files(c)
