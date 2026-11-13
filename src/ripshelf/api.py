@@ -92,6 +92,7 @@ from .models import (
     ShelfCover,
     ShelfScanRequest,
     ShelfSideName,
+    ShelfSideUpdate,
     ShelfStack,
     ShelfSuggestion,
     ShelfUploadResult,
@@ -798,12 +799,13 @@ async def shelf_stack_page(page_id: str, request: Request, thumb: bool = False):
 
 @api.get("/covers/{cover_id}/{side}")
 async def shelf_image(cover_id: str, side: ShelfSideName, request: Request, thumb: bool = False,
-                      large: bool = False):
-    """A side as it came, or with ``thumb`` a small JPEG trimmed and turned (``large``: up
-    to 1600 pixels)."""
+                      large: bool = False, whole: bool = False):
+    """A side as it came, or with ``thumb`` a small JPEG as it's used (``large``: up to
+    1600 pixels). With ``whole``, a large one turned and flipped but not trimmed or
+    straightened, to edit it on."""
     m = manager(request)
-    if thumb or large:
-        p = await m.shelf_thumb(cover_id, side, large)
+    if thumb or large or whole:
+        p = await m.shelf_thumb(cover_id, side, large, whole)
         if not p:
             raise HTTPException(404)
         return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
@@ -811,6 +813,13 @@ async def shelf_image(cover_id: str, side: ShelfSideName, request: Request, thum
     if not found:
         raise HTTPException(404)
     return FileResponse(found[0], media_type=found[1])
+
+
+@api.patch("/covers/{cover_id}/{side}", response_model=ShelfCover)
+async def shelf_edit(cover_id: str, side: ShelfSideName, body: ShelfSideUpdate, request: Request):
+    """Crop, turn, flip or straighten a side by hand, or put it back as it came (the
+    original is kept). The cover is read again."""
+    return await _contribution_call(lambda: manager(request).edit_shelf_side(cover_id, side, body))
 
 
 @api.post("/covers/{cover_id}/swap", response_model=ShelfCover)

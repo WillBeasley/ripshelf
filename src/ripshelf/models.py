@@ -482,6 +482,7 @@ CoverSide = Literal["front", "back"]
 ScanKind = Literal["front", "back", "outside_full", "inside_full", "insert", "other"]
 ScanSource = Literal["scanner", "upload", "camera"]
 ScanRotate = Literal[0, 90, 180, 270]
+STRAIGHTEN_MAX = 15  # degrees either way
 
 
 class ScanSplit(BaseModel):
@@ -745,7 +746,12 @@ class ShelfSide(BaseModel):
     size_bytes: int
     rotate: ScanRotate = Field(0, description="turned clockwise by this much when shown or used")
     crop: list[int] | None = Field(None, description="the sheet within the scan, [left, top, right, bottom] in "
-                                                     "the original's pixels, when trimmed")
+                                                     "the original's pixels (once straightened), when trimmed")
+    flip: bool = Field(False, description="mirrored left to right, after the turn")
+    straighten: float = Field(0, ge=-STRAIGHTEN_MAX, le=STRAIGHTEN_MAX, description=(
+        "degrees turned clockwise before the trim, to level a sheet laid askew (on the original, so a flipped "
+        "side shows it the other way)"))
+    by_hand: bool = Field(False, description="edited by hand: its crop and turn are kept as they are")
     split: ScanSplit | None = Field(None, description="where the spine is, for the outside")
 
 
@@ -1017,13 +1023,37 @@ class ScanUpdate(BaseModel):
     @field_validator("crop", mode="after")
     @classmethod
     def _crop_box(cls, v: list[float] | None) -> list[float] | None:
-        if v is not None:
-            left, top, right, bottom = v
-            if not (0 <= left < right <= 1 and 0 <= top < bottom <= 1):
-                raise ValueError("the crop must be [left, top, right, bottom] within 0 to 1")
-            if right - left < 0.05 or bottom - top < 0.05:
-                raise ValueError("the crop leaves too little of the scan")
-        return v
+        return _crop_box(v)
+
+
+def _crop_box(v: list[float] | None) -> list[float] | None:
+    if v is not None:
+        left, top, right, bottom = v
+        if not (0 <= left < right <= 1 and 0 <= top < bottom <= 1):
+            raise ValueError("the crop must be [left, top, right, bottom] within 0 to 1")
+        if right - left < 0.05 or bottom - top < 0.05:
+            raise ValueError("the crop leaves too little of the scan")
+    return v
+
+
+class ShelfSideUpdate(BaseModel):
+    """A shelf cover's side edited by hand. The original is kept, so any of it can be
+    undone (``reset``)."""
+
+    rotate: ScanRotate | None = None
+    flip: bool | None = Field(None, description="mirror it left to right")
+    straighten: float | None = Field(None, ge=-STRAIGHTEN_MAX, le=STRAIGHTEN_MAX, description=(
+        "degrees clockwise, as shown, to level a sheet laid askew"))
+    crop: list[float] | None = Field(None, min_length=4, max_length=4, description=(
+        "[left, top, right, bottom] as fractions of the whole side as shown (straightened, turned and "
+        "flipped, not trimmed)"))
+    reset: bool = Field(False, description="back to the side as it came: trimmed automatically, not turned, "
+                                           "flipped or straightened (the rest of the request applies after)")
+
+    @field_validator("crop", mode="after")
+    @classmethod
+    def _crop_box(cls, v: list[float] | None) -> list[float] | None:
+        return _crop_box(v)
 
 
 class ScannerScanRequest(BaseModel):

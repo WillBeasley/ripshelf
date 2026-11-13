@@ -38,6 +38,7 @@ import type {
 	ScanUpdate,
 	ShelfCover,
 	ShelfScanRequest,
+	ShelfSideUpdate,
 	ShelfStack,
 	ShelfSuggestion,
 	ShelfUploadResult,
@@ -181,8 +182,15 @@ export const api = {
 	shelfPageUrl: (page: string) => `/api/covers/stack/pages/${page}?thumb=true`,
 	shelfSideUrl: (c: ShelfCover, side: 'outside' | 'inside', large = false) => {
 		const s = c[side];
-		return `/api/covers/${c.id}/${side}?${large ? 'large' : 'thumb'}=true&v=${s?.sha256.slice(0, 8)}-${s?.rotate}`;
+		const v = `${s?.sha256.slice(0, 8)}-${s?.rotate}-${s?.flip ? 'f' : ''}${s?.straighten ?? 0}-${(s?.crop ?? []).join('.')}`;
+		return `/api/covers/${c.id}/${side}?${large ? 'large' : 'thumb'}=true&v=${v}`;
 	},
+	shelfWholeUrl: (c: ShelfCover, side: 'outside' | 'inside') => {
+		const s = c[side];
+		return `/api/covers/${c.id}/${side}?whole=true&v=${s?.sha256.slice(0, 8)}-${s?.rotate}${s?.flip ? 'f' : ''}`;
+	},
+	shelfEdit: (id: string, side: 'outside' | 'inside', body: ShelfSideUpdate) =>
+		call<ShelfCover>('PATCH', `/covers/${id}/${side}`, body),
 	shelfSwap: (id: string) => call<ShelfCover>('POST', `/covers/${id}/swap`),
 	shelfReadAgain: (id: string) => call<ShelfCover>('POST', `/covers/${id}/read`),
 	shelfVision: (id: string) => call<ShelfCover>('POST', `/covers/${id}/vision`),

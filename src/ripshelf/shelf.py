@@ -11,6 +11,10 @@ When its disc comes, the cover is used for that job (its sides become the job's 
 read and filed like any other) or kept for a drive's next disc, and leaves the shelf.
 A job in review is offered the covers that look like it (``suggestions``).
 
+A side can be cropped, turned, mirrored and straightened by hand. The original is kept
+and the edits are numbers beside it, so they can be undone; a side edited by hand goes
+to its job as the picture it shows.
+
 The shelf lives in ``<data>/covers``: an ``index.json`` and the pictures, kept until
 used or deleted. A two-pass stack's first pass waits in ``covers/stack`` for the second.
 """
@@ -48,6 +52,7 @@ from .models import (
     ShelfScanRequest,
     ShelfSide,
     ShelfSideName,
+    ShelfSideUpdate,
     ShelfStack,
     ShelfSuggestion,
     ShelfUploadResult,
@@ -147,17 +152,22 @@ class ShelfMixin:
         p = self._side_path(cover_id, side, s) if s else None
         return (p, s.content_type) if p and p.is_file() else None
 
-    async def shelf_thumb(self, cover_id: str, side: ShelfSideName, large: bool = False) -> Path | None:
-        """A JPEG of the side, trimmed and turned: a thumbnail, or a large one to look at."""
+    async def shelf_thumb(self, cover_id: str, side: ShelfSideName, large: bool = False,
+                          whole: bool = False) -> Path | None:
+        """A JPEG of the side as it's used: a thumbnail, or a large one to look at. With
+        ``whole``, a large one turned and flipped but neither trimmed nor straightened, to
+        edit it on (the editor levels it as it goes)."""
         found = self.shelf_file(cover_id, side)
         if not found:
             return None
         s = getattr(self.shelf_cover(cover_id), side)
-        out = self._shelf_dir / f"{cover_id}.{side}.{'view' if large else 'thumb'}.jpg"
+        size = "whole" if whole else "view" if large else "thumb"
+        out = self._shelf_dir / f"{cover_id}.{side}.{size}.jpg"
         if not out.is_file():
             def write():
-                img = images.render(found[0].read_bytes(), s.crop, s.rotate)
-                out.write_bytes(images.thumbnail(img, images.VIEW_PX if large else images.THUMB_PX))
+                data = found[0].read_bytes()
+                img = images.render(data, None, s.rotate, s.flip) if whole else _render(data, s)
+                out.write_bytes(images.thumbnail(img, images.VIEW_PX if large or whole else images.THUMB_PX))
             await asyncio.to_thread(write)
         return out
 
@@ -351,8 +361,49 @@ class ShelfMixin:
         if c.outside:
             data = self._side_path(c.id, "outside", c.outside).read_bytes()
             s = c.outside
-            split = await asyncio.to_thread(lambda: images.find_spine(images.render(data, s.crop, s.rotate)))
+            split = await asyncio.to_thread(lambda: images.find_spine(_render(data, s)))
             await self._update_cover(cover_id, lambda x: setattr(x.outside, "split", split) if x.outside else None)
+        self.read_shelf()
+        return self.shelf_cover(cover_id)
+
+    async def edit_shelf_side(self, cover_id: str, side: ShelfSideName, body: ShelfSideUpdate) -> ShelfCover:
+        """Crop, turn, mirror or straighten a side by hand (or put it back as it came),
+        and read the cover again. The original file isn't touched."""
+        c = self.shelf_cover(cover_id)
+        s: ShelfSide | None = getattr(c, side)
+        found = self.shelf_file(cover_id, side)
+        if not s or not found:
+            raise KeyError(side)
+        data = found[0].read_bytes()
+        s = s.model_copy()
+        if body.reset:
+            trim = self.s.scanner_trim
+            s.crop = await asyncio.to_thread(lambda: stack.render_trimmed(data, trim)[1])
+            s.rotate, s.flip, s.straighten, s.by_hand = 0, False, 0, False
+        if body.flip is not None:
+            s.flip = body.flip
+        if body.rotate is not None:
+            s.rotate = body.rotate
+        if body.straighten is not None:
+            s.straighten = -body.straighten if s.flip else body.straighten  # kept as on the original
+        if body.crop is not None:
+            s.crop = images.crop_from_shown(body.crop, s.width, s.height, s.rotate, s.flip)
+        if body.flip is not None or body.rotate is not None or body.straighten is not None or body.crop is not None:
+            s.by_hand = True
+        if side == "outside" and (s.split is None or s.split.auto):
+            try:
+                s.split = await asyncio.to_thread(lambda: images.find_spine(_render(data, s)))
+            except images.ImageError:
+                s.split = None
+        sha = s.sha256
+
+        def change(x: ShelfCover) -> None:
+            if (old := getattr(x, side)) and old.sha256 == sha:  # not swapped meanwhile
+                setattr(x, side, s)
+                x.reading = ShelfReading()
+        if not await self._update_cover(cover_id, change):
+            raise KeyError(cover_id)
+        self._forget_shelf_thumbs(cover_id)
         self.read_shelf()
         return self.shelf_cover(cover_id)
 
@@ -381,6 +432,9 @@ class ShelfMixin:
                 raise KeyError(cover_id)
             data = {name: self._side_path(c.id, name, s).read_bytes() for name in ("outside", "inside")
                     if (s := getattr(c, name))}
+            for name, d in data.items():
+                if (s := getattr(c, name)).by_hand:  # the job gets the picture as it was edited
+                    data[name] = await asyncio.to_thread(lambda d=d, s=s: images.jpeg(_render(d, s)))
             idx.covers.remove(c)
             self._save_shelf(idx)
         return c, data
@@ -595,9 +649,10 @@ class ShelfMixin:
 
     @staticmethod
     def _texts_key(c: ShelfCover) -> str:
-        """What the text read depends on: the sides' files and trims (not the turn, which
-        the reading itself finds)."""
-        return "|".join(f"{n}:{s.sha256}:{s.crop}" for n in ("outside", "inside") if (s := getattr(c, n)))
+        """What the text read depends on: the sides' files, trims, mirroring and
+        straightening (not the turn, which the reading itself finds)."""
+        return "|".join(f"{n}:{s.sha256}:{s.crop}" + (f":{s.flip}:{s.straighten}" if s.flip or s.straighten else "")
+                        for n in ("outside", "inside") if (s := getattr(c, n)))
 
     def _saved_texts(self, c: ShelfCover) -> list[ScanText] | None:
         try:
@@ -709,7 +764,7 @@ class ShelfMixin:
                     continue
                 try:
                     data = self._side_path(c.id, name, s).read_bytes()
-                    img = await asyncio.to_thread(images.render, data, s.crop, s.rotate)
+                    img = await asyncio.to_thread(_render, data, s)
                     got = await ocr.read_picture(reader, img, KINDS[name], s.split)
                 except (OSError, images.ImageError) as e:
                     await self._set_reading(cover_id, ShelfReading(state="failed",
@@ -721,8 +776,10 @@ class ShelfMixin:
                     def turn(x: ShelfCover, name=name, got=got, sha=s.sha256) -> None:
                         side = getattr(x, name)
                         if side and side.sha256 == sha:
-                            side.rotate = (side.rotate + got.turned) % 360
-                            if name == "outside" and (side.split is None or side.split.auto):
+                            if not side.by_hand:  # mirrored, a turn shows the other way round
+                                side.rotate = (side.rotate + (-got.turned if side.flip else got.turned)) % 360
+                            if name == "outside" and (side.split is None or side.split.auto) and (
+                                    not side.by_hand or not got.turned):  # found the way it's shown
                                 side.split = got.split
                     await self._update_cover(cover_id, turn)
                     self._forget_shelf_thumbs(cover_id)
@@ -741,7 +798,7 @@ class ShelfMixin:
             await self._update_cover(c.id, lambda x: setattr(x.reading, "vision_state", "reading"))
             try:
                 data = self._side_path(c.id, "outside", s).read_bytes()
-                img = await asyncio.to_thread(images.render, data, s.crop, s.rotate)
+                img = await asyncio.to_thread(_render, data, s)
                 listing, secs = await vision.read_listing(provider, img)
             except (vision.VisionError, OSError, images.ImageError) as e:
                 log.info("the vision model couldn't read shelf cover %s: %s", c.id, e)
@@ -783,6 +840,10 @@ class ShelfMixin:
 
 
 # --- pure helpers -------------------------------------------------------------------------------
+
+
+def _render(data: bytes, s: ShelfSide):
+    return images.render(data, s.crop, s.rotate, s.flip, s.straighten)
 
 
 def _mismatch(st: ShelfStack) -> str:

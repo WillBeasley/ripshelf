@@ -21,10 +21,11 @@ from ripshelf.models import (
     ShelfReading,
     ShelfScanRequest,
     ShelfSide,
+    ShelfSideUpdate,
 )
-from ripshelf.scanner import ocr, stack
+from ripshelf.scanner import images, ocr, stack
 
-from .conftest import until
+from .conftest import read_picture, until
 from .test_contribute import heron_job, put
 from .test_scan_text import FakeReader
 from .test_scans import URL, fake_scanner
@@ -254,6 +255,69 @@ async def test_search(harness):
         assert len(h.m.shelf(" ").covers) == 2
 
 
+# --- editing by hand ----------------------------------------------------------------------------------
+
+
+def test_render_flips_after_the_turn_and_straightens_in_place():
+    img = Image.new("RGB", (40, 20), (0, 0, 255))
+    img.paste((255, 0, 0), (0, 0, 10, 20))  # red down the left
+    data = png(img)
+    assert images.render(data, None, 0, flip=True).getpixel((35, 10)) == (255, 0, 0)
+    turned = images.render(data, None, 90, flip=True)  # red along the top, then mirrored: still the top
+    assert turned.size == (20, 40) and turned.getpixel((10, 2)) == (255, 0, 0)
+    level = images.render(data, None, 0, straighten=10)
+    assert level.size == (40, 20) and level.getpixel((0, 0)) == (255, 255, 255)  # a corner turned out of it
+
+
+@pytest.mark.parametrize("rotate", [0, 90, 180, 270])
+def test_a_crop_drawn_on_a_flipped_side(rotate):
+    img = Image.new("RGB", (200, 100), (0, 0, 0))
+    img.paste((255, 255, 255), (20, 10, 60, 40))  # a white patch near the top left
+    data = png(img)
+    shown = images.render(data, None, rotate, flip=True)
+    bbox = shown.convert("L").point(lambda v: 255 if v > 128 else 0).getbbox()  # where the patch shows
+    frac = [bbox[0] / shown.width, bbox[1] / shown.height, bbox[2] / shown.width, bbox[3] / shown.height]
+    assert images.crop_from_shown(frac, 200, 100, rotate, flip=True) == [20, 10, 60, 40]
+
+
+async def test_edit_a_side_by_hand_and_undo_it(harness, settings):
+    async with harness() as h:
+        h.m.text_reader = FakeReader(["THE LANTERN KEEPER"], turn=90)
+        c = (await h.m.add_shelf_upload([outside(), inside()], [])).covers[0]
+        await until(lambda: h.m.shelf_cover(c.id).reading.state == "done", 10, "reading")
+        assert h.m.shelf_cover(c.id).inside.rotate == 90  # the reading turned it
+        reads = h.m.text_reader.reads
+        await h.m.shelf_thumb(c.id, "inside", large=True)
+        e = await h.m.edit_shelf_side(c.id, "inside", ShelfSideUpdate(
+            rotate=0, flip=True, straighten=4.5, crop=[0.1, 0.2, 0.9, 0.8]))
+        s = e.inside
+        assert (s.rotate, s.flip, s.straighten, s.by_hand) == (0, True, -4.5, True)  # kept as on the original
+        assert s.crop == [60, 60, 540, 240] and e.reading.state == "waiting"
+        assert h.m.shelf_file(c.id, "inside")[0].read_bytes() == inside()  # the original stays
+        assert not (h.m._shelf_dir / f"{c.id}.inside.view.jpg").exists()
+        whole = await h.m.shelf_thumb(c.id, "inside", whole=True)
+        assert read_picture(whole).size == (600, 300)
+        done = await until(lambda: (x := h.m.shelf_cover(c.id)).reading.state == "done" and x, 10, "read again")
+        assert h.m.text_reader.reads > reads  # read again, as it shows now
+        assert done.inside.rotate == 0  # not turned back over what was set by hand
+        back = await h.m.edit_shelf_side(c.id, "inside", ShelfSideUpdate(reset=True))
+        assert (back.inside.rotate, back.inside.flip, back.inside.straighten, back.inside.by_hand) == (0, False, 0, False)
+        assert back.inside.crop == c.inside.crop
+        with pytest.raises(KeyError):
+            await h.m.edit_shelf_side("nope", "outside", ShelfSideUpdate(rotate=90))
+
+
+async def test_an_edited_side_goes_to_the_job_as_shown(harness, settings):
+    async with harness("fake-pioneer") as h:
+        job = put(h, heron_job(state=JobState.review))
+        c = (await h.m.add_shelf_upload([outside(), inside()], [])).covers[0]
+        await h.m.edit_shelf_side(c.id, "inside", ShelfSideUpdate(rotate=90))
+        done = await h.m.use_shelf_cover(c.id, job.id)
+        out, ins = done.scans
+        assert out.sha256 == c.outside.sha256  # not edited: the original
+        assert ins.content_type == "image/jpeg" and ins.height > ins.width  # trimmed, and turned
+
+
 # --- reading -----------------------------------------------------------------------------------------
 
 
@@ -479,6 +543,13 @@ def test_api(client):
     assert client.get(f"/api/covers/{cid}/inside", params={"thumb": True}).headers["content-type"] == "image/jpeg"
     assert client.get(f"/api/covers/{cid}/outside", params={"large": True}).status_code == 200
     assert client.get(f"/api/covers/{cid}/sideways").status_code == 422
+    r = client.patch(f"/api/covers/{cid}/outside", json={"rotate": 180, "flip": True})
+    assert r.status_code == 200 and r.json()["outside"]["flip"] and r.json()["outside"]["by_hand"]
+    assert client.get(f"/api/covers/{cid}/outside", params={"whole": True}).headers["content-type"] == "image/jpeg"
+    assert client.patch(f"/api/covers/{cid}/outside", json={"straighten": 20}).status_code == 422
+    assert client.patch(f"/api/covers/{cid}/outside", json={"crop": [0.5, 0, 0.52, 1]}).status_code == 422
+    assert client.patch(f"/api/covers/{cid}/outside", json={"reset": True}).json()["outside"]["by_hand"] is False
+    assert client.patch("/api/covers/nope/outside", json={"rotate": 90}).status_code == 404
     assert client.post(f"/api/covers/{cid}/swap").json()["outside"]["sha256"] == view["covers"][-1]["inside"]["sha256"]
     assert client.post(f"/api/covers/{cid}/read").status_code == 200
     assert client.post(f"/api/covers/{cid}/vision").status_code == 409  # no vision model
