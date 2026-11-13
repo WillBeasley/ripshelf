@@ -17,13 +17,21 @@ RUN npx svelte-kit sync && npm run build
 # which may not be combined with MakeMKV's proprietary makemkvcon, so it gets its
 # own LGPL build (no --enable-gpl, no external libraries), linked in statically.
 # Debian's ffmpeg program stays for transcoding, as a separate program.
-FROM docker.io/library/python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9 AS ffmpeg-lgpl
-ARG FFMPEG_VERSION=7.1.5
-ARG FFMPEG_SHA256=de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f
+# The two compiles (this LGPL libavcodec and MakeMKV) run on plain Debian, pinned on its
+# own, not on the Python image: a new Python digest then reinstalls only the packages
+# and ripshelf, and both compiles come from the build cache. Both are Debian bookworm,
+# so what's built here links against the same libraries the final image installs.
+FROM docker.io/library/debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc AS build-base
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential pkg-config wget ca-certificates xz-utils nasm \
- && mkdir /build && cd /build \
+        libssl-dev libexpat1-dev zlib1g-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+FROM build-base AS ffmpeg-lgpl
+ARG FFMPEG_VERSION=7.1.5
+ARG FFMPEG_SHA256=de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f
+RUN mkdir /build && cd /build \
  && wget -q https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz \
  && echo "${FFMPEG_SHA256}  ffmpeg-${FFMPEG_VERSION}.tar.xz" | sha256sum -c - \
  && tar xJf ffmpeg-${FFMPEG_VERSION}.tar.xz && cd ffmpeg-${FFMPEG_VERSION} \
@@ -35,68 +43,71 @@ RUN apt-get update \
  && make -j"$(nproc)" && make install \
  && mkdir -p /opt/sources && mv /build/ffmpeg-${FFMPEG_VERSION}.tar.xz /opt/sources/
 
-FROM docker.io/library/python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9
-
-ARG MAKEMKV_VERSION=2.0.0
-# Releases other than the newest live under /download/old (pass --build-arg for them).
-ARG MAKEMKV_URL_BASE=https://www.makemkv.com/download
-ARG MAKEMKV_OSS_SHA256=435316b2d219eb48c880526557addd076b5f5e6de5171424c7651f9cac95b161
-ARG MAKEMKV_BIN_SHA256=f1265e74875a186efdfbbbec7459a64e969033515e53cbc4d805f0a374f0a124
-
-COPY --from=ffmpeg-lgpl /opt/ffmpeg-lgpl /opt/ffmpeg-lgpl
-COPY --from=ffmpeg-lgpl /opt/sources /usr/share/doc/makemkv/source
-
+# MakeMKV, installed into /out with the same layout as on /, for the final stage to copy.
 # makemkv-bin is installed by hand as its Makefile does, without accepting the EULA
 # on anyone's behalf. Whoever runs the image accepts it by setting
 # RIPSHELF_ACCEPT_MAKEMKV_EULA=yes; until then ripshelf doesn't run MakeMKV. The
 # EULA text stays in /usr/share/doc/makemkv, as it requires when repackaged, and
 # the sources of the LGPL and GPL parts are kept in /usr/share/doc/makemkv/source.
-# mkvmerge (mkvtoolnix) splits a TV title holding several episodes at its chapters.
-# Build deps are removed again; the runtime libraries stay. The Intel media driver
-# (iHD, non-free) is for VAAPI and Quick Sync. Debian's ffmpeg reaches Quick Sync
-# through libmfx1, whose own runtime predates 12th gen (Alder Lake) and fails with
-# "unsupported (-3)" there; libmfx-gen1.2 is the oneVPL runtime it loads instead.
-# Tesseract (with its English and orientation data) reads the text on scans of the
-# box, and zbar (libzbar0, for pyzbar) their barcodes.
-RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
-        /etc/apt/sources.list.d/debian.sources \
- && apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        build-essential pkg-config wget ca-certificates libc6-dev libssl-dev \
-        libexpat1-dev zlib1g-dev \
-        libssl3 libexpat1 zlib1g p7zip-full util-linux ffmpeg mkvtoolnix \
-        vainfo default-jre-headless \
-        tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd libzbar0 \
- && if [ "$(dpkg --print-architecture)" = amd64 ]; then \
-        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            intel-media-va-driver-non-free libmfx-gen1.2; fi \
- && mkdir /build && cd /build \
+FROM build-base AS makemkv
+ARG MAKEMKV_VERSION=2.0.0
+# Releases other than the newest live under /download/old (pass --build-arg for them).
+ARG MAKEMKV_URL_BASE=https://www.makemkv.com/download
+ARG MAKEMKV_OSS_SHA256=435316b2d219eb48c880526557addd076b5f5e6de5171424c7651f9cac95b161
+ARG MAKEMKV_BIN_SHA256=f1265e74875a186efdfbbbec7459a64e969033515e53cbc4d805f0a374f0a124
+COPY --from=ffmpeg-lgpl /opt/ffmpeg-lgpl /opt/ffmpeg-lgpl
+COPY --from=ffmpeg-lgpl /opt/sources /out/usr/share/doc/makemkv/source
+RUN mkdir /build && cd /build \
  && wget -q ${MAKEMKV_URL_BASE}/makemkv-oss-${MAKEMKV_VERSION}.tar.gz \
             ${MAKEMKV_URL_BASE}/makemkv-bin-${MAKEMKV_VERSION}.tar.gz \
  && echo "${MAKEMKV_OSS_SHA256}  makemkv-oss-${MAKEMKV_VERSION}.tar.gz" | sha256sum -c - \
  && echo "${MAKEMKV_BIN_SHA256}  makemkv-bin-${MAKEMKV_VERSION}.tar.gz" | sha256sum -c - \
  && tar xzf makemkv-oss-${MAKEMKV_VERSION}.tar.gz \
  && tar xzf makemkv-bin-${MAKEMKV_VERSION}.tar.gz \
- && cp makemkv-oss-${MAKEMKV_VERSION}.tar.gz /usr/share/doc/makemkv/source/ \
+ && cp makemkv-oss-${MAKEMKV_VERSION}.tar.gz /out/usr/share/doc/makemkv/source/ \
  && cd makemkv-oss-${MAKEMKV_VERSION} \
  && export PKG_CONFIG_PATH=/opt/ffmpeg-lgpl/lib/pkgconfig \
  && ./configure --disable-gui \
         ffmpeg_CFLAGS="$(pkg-config --cflags libavcodec libavutil)" \
         ffmpeg_LIBS="$(pkg-config --static --libs libavcodec libavutil)" \
- && make -j"$(nproc)" && make install \
+ && make -j"$(nproc)" && make install DESTDIR=/out \
  && cd ../makemkv-bin-${MAKEMKV_VERSION} \
  && arch=$(dpkg --print-architecture) \
- && install -d /usr/share/MakeMKV \
- && install bin/${arch}/makemkvcon /usr/bin/ \
- && install -m 644 src/share/appdata.tar src/share/blues.jar src/share/blues.policy /usr/share/MakeMKV/ \
- && ln -sf makemkvcon /usr/bin/sdftool \
- && install -m 644 src/eula_en_linux.txt /usr/share/doc/makemkv/ \
- && install -m 644 ../makemkv-oss-${MAKEMKV_VERSION}/License.txt /usr/share/doc/makemkv/oss-License.txt \
- && cd / && rm -rf /build /opt/ffmpeg-lgpl && ldconfig \
- && if ldd /usr/lib/libmakemkv.so.1 | grep -q libavcodec; then \
-        echo "libmakemkv links a shared libavcodec, not the LGPL build" >&2; exit 1; fi \
- && apt-get purge -y build-essential pkg-config wget libc6-dev libssl-dev libexpat1-dev zlib1g-dev \
- && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+ && install -d /out/usr/bin /out/usr/share/MakeMKV \
+ && install bin/${arch}/makemkvcon /out/usr/bin/ \
+ && install -m 644 src/share/appdata.tar src/share/blues.jar src/share/blues.policy /out/usr/share/MakeMKV/ \
+ && ln -sf makemkvcon /out/usr/bin/sdftool \
+ && install -m 644 src/eula_en_linux.txt /out/usr/share/doc/makemkv/ \
+ && install -m 644 ../makemkv-oss-${MAKEMKV_VERSION}/License.txt /out/usr/share/doc/makemkv/oss-License.txt \
+ && if ldd /out/usr/lib/libmakemkv.so.1 | grep -q libavcodec; then \
+        echo "libmakemkv links a shared libavcodec, not the LGPL build" >&2; exit 1; fi
+
+FROM docker.io/library/python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9
+
+# Runtime packages only; MakeMKV comes built from the stage above.
+# mkvmerge (mkvtoolnix) splits a TV title holding several episodes at its chapters.
+# The Intel media driver (iHD, non-free) is for VAAPI and Quick Sync. Debian's ffmpeg
+# reaches Quick Sync through libmfx1, whose own runtime predates 12th gen (Alder Lake)
+# and fails with "unsupported (-3)" there; libmfx-gen1.2 is the oneVPL runtime it loads
+# instead. Tesseract (with its English and orientation data) reads the text on scans
+# of the box, and zbar (libzbar0, for pyzbar) their barcodes.
+RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
+        /etc/apt/sources.list.d/debian.sources \
+ && apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        libssl3 libexpat1 zlib1g p7zip-full util-linux ffmpeg mkvtoolnix \
+        vainfo default-jre-headless \
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd libzbar0 \
+ && if [ "$(dpkg --print-architecture)" = amd64 ]; then \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            intel-media-va-driver-non-free libmfx-gen1.2; fi \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=makemkv /out/ /
+# Built elsewhere, so check every library it needs is here.
+RUN ldconfig \
+ && if ldd /usr/bin/makemkvcon /usr/lib/libmakemkv.so.1 /usr/lib/libdriveio.so.0 | grep "not found"; then \
+        echo "MakeMKV needs a library the image doesn't have" >&2; exit 1; fi
 
 LABEL org.opencontainers.image.licenses="MIT AND LicenseRef-MakeMKV-EULA AND GPL-2.0-or-later" \
       org.opencontainers.image.description="ripshelf with MakeMKV. See /usr/share/doc/ripshelf/THIRD-PARTY-NOTICES.md"

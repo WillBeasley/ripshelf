@@ -66,7 +66,12 @@ jobs:
           platforms: ${{ matrix.platform }}
           load: true
           tags: localhost/ripshelf:smoke
-          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+          # The registry cache lasts from one release to the next (the Actions cache is
+          # dropped after a week unused, and a tag can't read another tag's). main's
+          # cache from test.yml's image job (amd64 only) fills in what it doesn't have.
+          cache-from: |
+            type=registry,ref=${{ env.IMAGE }}:buildcache-${{ env.PLATFORM_PAIR }}
+            type=gha,scope=ci-${{ env.PLATFORM_PAIR }}
       - name: Start it
         run: scripts/smoke-image.sh localhost/ripshelf:smoke
       # Pushed by digest only; the merge job gives the digests their tags.
@@ -77,8 +82,11 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
-          cache-to: type=gha,scope=${{ env.PLATFORM_PAIR }},mode=max
+          cache-from: |
+            type=registry,ref=${{ env.IMAGE }}:buildcache-${{ env.PLATFORM_PAIR }}
+            type=gha,scope=ci-${{ env.PLATFORM_PAIR }}
+          # Every stage (mode=max), so the ffmpeg and MakeMKV compiles are kept too.
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache-${{ env.PLATFORM_PAIR }},mode=max,image-manifest=true,oci-mediatypes=true
       - name: Export digest
         run: |
           mkdir -p "$RUNNER_TEMP/digests"

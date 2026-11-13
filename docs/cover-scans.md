@@ -103,6 +103,8 @@ With a cloud service, the pictures of the box leave your network. Settings says 
 
 **Test the vision model** sends a small made-up back cover and checks that the trailer on it is read.
 
+To choose between Anthropic's models, `scripts/compare-vision.py` reads the same scans with several of them (Haiku 5.5, Sonnet 5.5 and Opus 5.5 unless you name others) and shows what each read, where they disagree, and what each cost. Run it from the checkout with `ANTHROPIC_API_KEY` set, on the scans in `data/`. It costs about $0.06 a scan for the three.
+
 **How the two readings are combined:**
 - **Barcode:** always comes from the bars when zbar decoded them.
 - **Running times:** come from Tesseract when it read them. Every model tried got "2Hrs 45mins" wrong.

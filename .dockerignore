@@ -1,0 +1,32 @@
+# Only what the Dockerfile copies matters; the rest would only slow down sending the
+# build context (and web/node_modules would be copied over the image's own).
+.git
+.github
+**/node_modules
+**/__pycache__
+**/*.pyc
+.venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+web/.svelte-kit
+web/build
+web/test-results
+web/playwright-report
+tests
+docs
+scripts
+*.env
+.env
+# State a native run keeps next to the checkout
+/data
+/var
+/scratch
+/library
+*.egg-info
+/build
+/dist
+src/ripshelf/static
+.claude
