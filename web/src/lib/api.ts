@@ -37,6 +37,7 @@ import type {
 	ScanSplit,
 	ScanUpdate,
 	ShelfCover,
+	ShelfDeleted,
 	ShelfScanRequest,
 	ShelfSideUpdate,
 	ShelfStack,
@@ -57,6 +58,7 @@ import type {
 	TitleMapUpdate,
 	TvProposeRequest,
 	TvSplitRequest,
+	VisionModels,
 	WebResult
 } from './api-types';
 
@@ -193,8 +195,12 @@ export const api = {
 		call<ShelfCover>('PATCH', `/covers/${id}/${side}`, body),
 	shelfSwap: (id: string) => call<ShelfCover>('POST', `/covers/${id}/swap`),
 	shelfReadAgain: (id: string) => call<ShelfCover>('POST', `/covers/${id}/read`),
-	shelfVision: (id: string) => call<ShelfCover>('POST', `/covers/${id}/vision`),
+	// With a model, that one this once (Settings aren't changed).
+	shelfVision: (id: string, model?: string) =>
+		call<ShelfCover>('POST', `/covers/${id}/vision`, model ? { model } : undefined),
 	shelfDelete: (id: string) => call<void>('DELETE', `/covers/${id}`),
+	shelfDeleteMany: (ids: string[]) => call<ShelfDeleted>('POST', '/covers/delete', { ids }),
+	visionModels: () => call<VisionModels>('GET', '/vision/models'),
 	shelfUseInJob: (id: string, job: number) => call<Job>('POST', `/covers/${id}/use/job/${job}`),
 	shelfForDrive: (id: string, drive: string) =>
 		call<PendingScans>('POST', `/covers/${id}/use/drive/${encodeURIComponent(drive)}`),
