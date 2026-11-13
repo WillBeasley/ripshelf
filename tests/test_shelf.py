@@ -381,6 +381,31 @@ async def test_vision_now_reads_with_the_model(harness, settings, monkeypatch):
         assert h.m.text_reader.reads == reads
 
 
+async def test_an_edit_keeps_the_vision_reading_and_doesnt_ask_again(harness, settings, monkeypatch):
+    from ripshelf.models import Listing, ListingDetails
+    seen = []
+
+    async def read_listing(provider, img):
+        seen.append(img.size)
+        return Listing(details=ListingDetails(title="The Lantern Keeper", year=2011)), 1.0
+    monkeypatch.setattr(shelf_mod.vision, "read_listing", read_listing)
+    settings.vision_mode, settings.vision_provider, settings.vision_url = "every", "local", "http://vision.test"
+    async with harness() as h:
+        h.m.text_reader = FakeReader(["x"])
+        c = (await h.m.add_shelf_upload([outside()], [], both_sides=False)).covers[0]
+        await until(lambda: h.m.shelf_cover(c.id).reading.vision_state == "done", 10, "vision")
+        assert len(seen) == 1
+        for body in (ShelfSideUpdate(rotate=90), ShelfSideUpdate(crop=[0.1, 0.1, 0.9, 0.9])):
+            assert (await h.m.edit_shelf_side(c.id, "outside", body)).reading.state == "waiting"
+            r = (await until(lambda: (x := h.m.shelf_cover(c.id)).reading.state == "done" and x, 10, "read")).reading
+            assert len(seen) == 1, "not asked again after an edit"
+            assert r.vision and r.vision_state == "done" and r.title == "The Lantern Keeper", "its reading kept"
+        await h.m.ask_shelf_vision(c.id)
+        await until(lambda: len(seen) == 2 and h.m.shelf_cover(c.id).reading.vision_state == "done", 10, "asked")
+        await h.m.delete_shelf_cover(c.id)
+        assert not list(h.m._shelf_dir.glob(f"{c.id}.*"))
+
+
 # --- the scanner ---------------------------------------------------------------------------------------
 
 
