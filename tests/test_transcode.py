@@ -362,9 +362,10 @@ async def test_keep_original(harness, tc_settings):
 
 
 @needs_ffmpeg
-async def test_failed_transcode_keeps_the_rip(harness, tc_settings):
-    tc_settings.transcode_encoder = "vaapi"
-    tc_settings.vaapi_device = "/dev/nonexistent"
+async def test_failed_transcode_keeps_the_rip(harness, tc_settings, monkeypatch):
+    # An encoder no ffmpeg has, so it fails on every platform (Windows never uses VAAPI).
+    real = transcode.command
+    monkeypatch.setattr(transcode, "command", lambda *a: [*real(*a)[:-1], "-c:v:0", "hevc_nowhere", real(*a)[-1]])
     async with harness(PM) as h:
         job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done")
         await h.m.confirm(job.id, MANUAL)
