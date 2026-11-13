@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 from .db import now
-from .models import CoverScan, Listing, ScanText
+from .models import CoverScan, Listing, ScanText, sentence
 from .scanner import images, vision
 from .scanner import listing as parse
 
@@ -198,7 +198,7 @@ class VisionMixin:
             img = await asyncio.to_thread(images.render, found[0].read_bytes(), sc.crop, sc.rotate)
             listing, secs = await vision.read_listing(provider, img)
         except (vision.VisionError, OSError, images.ImageError) as e:
-            self._set_vision(job_id, scan_id, "failed", str(e)[:1].upper() + str(e)[1:])
+            self._set_vision(job_id, scan_id, "failed", sentence(str(e)))
             return
         job = self.db.get_job(job_id)
         sc = next((x for x in job.scans if x.id == scan_id), None) if job else None

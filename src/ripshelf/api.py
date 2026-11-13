@@ -106,6 +106,7 @@ from .models import (
     TvSplitRequest,
     WebResult,
     WebSearchRequest,
+    sentence,
     setting_fields,
 )
 from .providers import contribute as contribute_provider
@@ -879,7 +880,7 @@ async def web_search(body: WebSearchRequest, request: Request):
         return await catalogue.web_search(settings(request), body.query.strip())
     except catalogue.CatalogueError as e:
         msg = str(e)
-        raise HTTPException(400, msg[:1].upper() + msg[1:]) from None
+        raise HTTPException(400, sentence(msg)) from None
 
 
 @api.get("/jobs/{job_id}/snapshots", response_model=Snapshots)

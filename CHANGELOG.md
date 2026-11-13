@@ -36,6 +36,7 @@ This will be 0.7.0. Release candidates: [0.7.0-rc1](https://github.com/WillBeasl
 
 - A `settings.json` with only disabled virtual drives is treated as a new install, so the setup page shows instead of ripping whatever is in the drives.
 - A long title isn't copied whole into the library once it has been split ([#33](https://github.com/WillBeasley/ripshelf/pull/33)).
+- An error that starts with an address no longer has it capitalised ("Ftp://scanner is not a scanner's address", "Http://… refused the key") on the Settings Test buttons, a cover the vision model couldn't read, or a failed web search.
 - Deleting a film's job with its files left the film's folder behind, holding only its `.disc` record. The record goes too now, unless another version of the film (kept with "keep both") is still in the folder.
 - A rip on a worker could be called failed when it had worked. MakeMKV's last lines ("Copy complete"), which say the rip worked, were dropped if they were still on their way to the controller as the rip ended, which a busy worker or a slow link made likely.
 - **Windows:** a disc's content fingerprint is the same as on Linux. Its structure files were named with backslashes, so a disc read on Windows wasn't recognised from a Linux rip, or by TheDiscDB.

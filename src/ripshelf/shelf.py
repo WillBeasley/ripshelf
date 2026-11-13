@@ -54,6 +54,7 @@ from .models import (
     ShelfView,
     StackMode,
     StackPage,
+    sentence,
 )
 from .providers import release_info
 from .scanner import images, ocr, stack, vision
@@ -741,7 +742,7 @@ class ShelfMixin:
                 listing, secs = await vision.read_listing(provider, img)
             except (vision.VisionError, OSError, images.ImageError) as e:
                 log.info("the vision model couldn't read shelf cover %s: %s", c.id, e)
-                return None, str(e)[:1].upper() + str(e)[1:]
+                return None, sentence(str(e))
         return listing, f"{provider.model} read it in {secs:.0f} s"
 
     async def _shelf_barcode(self, reading: ShelfReading, code: str) -> None:

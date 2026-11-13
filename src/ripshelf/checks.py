@@ -19,7 +19,7 @@ from .identify import ai_label
 from .identify import catalogue as catalogue_lookup
 from .identify.tmdb import API as TMDB_API
 from .makemkv import runner
-from .models import DiscFacts, DiscKind, MediaServer, SettingsTestResult, SettingsUpdate
+from .models import DiscFacts, DiscKind, MediaServer, SettingsTestResult, SettingsUpdate, sentence
 from .providers.omdb import Omdb, OmdbError
 from .providers.thediscdb import DiscDbError, TheDiscDb
 from .providers.tvmaze import Tvmaze, TvmazeError
@@ -71,7 +71,7 @@ async def tvdb(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
         hits = await client.search_series("Garden")
     except TvdbError as e:
         msg = str(e)
-        return _fail(msg[:1].upper() + msg[1:])
+        return _fail(sentence(msg))
     finally:
         await client.aclose()
     return SettingsTestResult(ok=True, message="TheTVDB accepted the key",
@@ -98,7 +98,7 @@ async def tvmaze(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
         hits = await client.search("Garden")
     except TvmazeError as e:
         msg = str(e)
-        return _fail(msg[:1].upper() + msg[1:])
+        return _fail(sentence(msg))
     finally:
         await client.aclose()
     return SettingsTestResult(ok=True, message="TVmaze answered (it needs no key)", details=[f"a test search found {len(hits)} shows"])
@@ -110,7 +110,7 @@ async def thediscdb(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
         hits = await client.search("Boardwalk Empire")
     except DiscDbError as e:
         msg = str(e)
-        return _fail(msg[:1].upper() + msg[1:])
+        return _fail(sentence(msg))
     finally:
         await client.aclose()
     return SettingsTestResult(ok=True, message="TheDiscDB answered (it needs no key)", details=[f"a test search found {len(hits)} entries"])
@@ -193,7 +193,7 @@ async def catalogue(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
         found = await catalogue_lookup.lookup(test, "EO51710", "dvd")
     except catalogue_lookup.CatalogueError as e:
         msg = str(e)
-        return _fail(msg[:1].upper() + msg[1:])
+        return _fail(sentence(msg))
     took = f"{time.monotonic() - started:.1f} s"
     if not found.names:
         return _fail(f"The search worked but found no page naming EO51710 ({took})",
@@ -252,7 +252,7 @@ async def scanner(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
         st = await client.status()
     except (ValueError, ScannerError) as e:
         msg = str(e)
-        return _fail(msg[:1].upper() + msg[1:], f"Tried {_escl_base(url)}/ScannerCapabilities")
+        return _fail(sentence(msg), f"Tried {_escl_base(url)}/ScannerCapabilities")
     details = [f"Address: {client.base}"]
     for name in caps.sources:
         src = caps.source(name)
@@ -322,7 +322,7 @@ async def label_ai(s: Settings, v: SettingsUpdate) -> SettingsTestResult:
     try:
         reading = await ai_label.read(provider, facts, None, [108 * 60], tv=False)
     except ai_label.LabelError as e:
-        return _fail(str(e)[:1].upper() + str(e)[1:])
+        return _fail(sentence(str(e)))
     details = [f"Took {reading.seconds:.0f} s", "Read BTTF2 as " + (" / ".join(reading.titles) or "nothing")]
     if provider.cloud:
         details.append("Labels and running times are sent to this service, outside your network")
