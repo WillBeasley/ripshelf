@@ -22,7 +22,8 @@ Dependabot covers the rest (`.github/dependabot.yml`): one grouped pull request 
 
 - Each platform builds natively on its own runner, `ubuntu-24.04` for amd64 and `ubuntu-24.04-arm` for arm64. No QEMU, so MakeMKV compiles at full speed on both.
 - Each build is pushed by digest only. A last job, `merge`, joins the two digests into one multi-arch manifest and gives it the tags.
-- Layers are cached in the GitHub Actions cache, one scope per platform. A tag can't read another tag's cache, so a new release builds from scratch, MakeMKV included, and a rebuild of the same tag reuses its own cache.
+- Layers are cached in the registry, as `ghcr.io/<owner>/ripshelf:buildcache-linux-amd64` and `:buildcache-linux-arm64`, every stage included (`mode=max`). Unlike the GitHub Actions cache, which drops what goes unused for a week and which a tag can't share with another tag, it lasts from one release to the next, so a release compiles ffmpeg and MakeMKV again only when they or the Debian image they build on change. The amd64 build also reads `main`'s Actions cache from `test.yml`, and `test.yml` reads the registry cache (when the package is public, or the job can log in). Those two tags show up beside the release tags in the package; deleting them only makes the next release build from scratch.
+- ffmpeg and MakeMKV build on `debian:bookworm-slim`, pinned on its own, and the final stage copies them in. A newer Python image then reinstalls only the packages and ripshelf.
 
 ## Setting it up
 

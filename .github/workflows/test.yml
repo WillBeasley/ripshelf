@@ -122,6 +122,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+      - name: Names
+        run: echo "CACHE_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ripshelf" >> "$GITHUB_ENV"
       - uses: docker/setup-buildx-action@v4
       # Only main writes the cache, which pull requests can read; a pull request's own
       # cache would hold another copy of MakeMKV's build for every one.
@@ -130,7 +132,11 @@ jobs:
           context: .
           load: true
           tags: localhost/ripshelf:ci
-          cache-from: type=gha,scope=ci-linux-amd64
+          # images.yml's registry cache too, for the stages main hasn't built lately
+          # (such as MakeMKV, after the Actions cache drops it a week unused).
+          cache-from: |
+            type=gha,scope=ci-linux-amd64
+            type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache-linux-amd64
           cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=ci-linux-amd64,mode=max' || '' }}
       - name: Start it
         run: scripts/smoke-image.sh localhost/ripshelf:ci
