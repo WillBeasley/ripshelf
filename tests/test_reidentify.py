@@ -185,6 +185,44 @@ async def test_only_a_finished_job_can_be_identified_again(harness, settings):
                 await refused
 
 
+async def test_identify_again_needs_the_files_still_in_the_library(harness, settings):
+    async with harness() as h:
+        with pytest.raises(ValueError, match="no such job"):
+            await h.m.reidentify(999)
+        job, folder, dest = filed_film(h, settings)
+        for p in (dest, dest.with_name(f"{dest.stem} - original.mkv"), folder / "featurettes" / "Making Of.mkv"):
+            p.unlink()  # moved or deleted by hand
+        with pytest.raises(ValueError, match="none of this job's files are in the library any more"):
+            await h.m.reidentify(job.id)
+        job.destination = None
+        h.db.save_job(job)
+        with pytest.raises(ValueError, match="didn't put anything in the library"):
+            await h.m.reidentify(job.id)
+        backup = put(h, heron_job(identity=WRONG, mode="backup", destination=str(settings.library_dir / "gone")))
+        with pytest.raises(ValueError, match="isn't in the library any more"):
+            await h.m.reidentify(backup.id)
+
+
+async def test_confirming_with_the_library_unmounted_moves_nothing(harness, settings):
+    async with harness() as h:
+        job, folder, dest = filed_film(h, settings)
+        await h.m.reidentify(job.id)
+        settings.movies_dir = settings.library_dir / "not-mounted"
+        with pytest.raises(ValueError, match="does not exist"):
+            await h.m.confirm(job.id, RIGHT)
+        assert dest.read_bytes() == b"film" and h.db.get_job(job.id).state == JobState.review
+
+
+async def test_keeping_the_old_identity_before_anything_moved(harness, settings):
+    async with harness() as h:
+        with pytest.raises(ValueError, match="isn't being identified again"):
+            await h.m.keep_identity(999)
+        job, folder, dest = filed_film(h, settings)
+        await h.m.reidentify(job.id)
+        back = await h.m.keep_identity(job.id)
+        assert back.state == JobState.done and back.identity == WRONG and dest.read_bytes() == b"film"
+
+
 async def test_a_disc_backup_folder_moves(harness, settings):
     async with harness() as h:
         job = put(h, heron_job(identity=WRONG, mode="backup"))
