@@ -1513,9 +1513,11 @@ class TvMixin:
         job.destination = str(folder)
         await self._refresh_servers(job, [str(p) for i, p, _ in targets if i in copied])
         job.problem = None
+        self._save(job)
+        await self.file_scans(job, filing=True)
+        job = self.db.get_job(job.id)
         self._set_state(job, JobState.done, f"Done: {plan.show.name}, {len(copied)} titles")
         self._spawn_notify(job, "done")
-        await self.file_scans(self.db.get_job(job.id))
 
     def _tv_disc_json(self, job: JobRecord, copied: dict[int, dict]) -> dict:
         plan = job.tv

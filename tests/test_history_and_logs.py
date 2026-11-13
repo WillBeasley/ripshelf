@@ -22,7 +22,6 @@ async def filed_film(h):
     job = await h.wait_job(lambda j: j.state == JobState.review)
     await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
     done = await h.wait_job(lambda j: j.state == JobState.done)
-    await until(lambda: not h.m._bg.get(done.id), what="the job's task to end")
     return h.job(done.id)
 
 
@@ -72,7 +71,6 @@ async def test_a_full_disc_backup_is_kept_when_its_job_is_deleted(harness, setti
         job = await h.wait_job(lambda j: j.state == JobState.review)
         await h.m.confirm(job.id, Candidate(source="manual", title="The Brass Heron", year=2024))
         done = await h.wait_job(lambda j: j.state == JobState.done)
-        await until(lambda: not h.m._bg.get(done.id), what="the job's task to end")
         assert h.m.delete_jobs([done.id], delete_files=True) == ([done.id], [])
         assert (Path(done.destination) / "BDMV").is_dir()
 
@@ -83,9 +81,6 @@ async def test_delete_finished_job_keeps_library_and_disc_cache(harness, setting
         job = await h.wait_job(lambda j: j.state == JobState.review)
         await h.m.confirm(job.id, Candidate(source="manual", title="Moonlit Orchard", year=1998))
         done = await h.wait_job(lambda j: j.state == JobState.done)
-        # Done comes before its task has finished filing (stats, scans), and until then
-        # the job can't be deleted.
-        await until(lambda: not h.m._bg.get(done.id), what="the job's task to end")
         work = h.m.work_dir(done)
         assert work.exists()
         seen = []
