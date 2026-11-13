@@ -28,7 +28,7 @@ The image is `ghcr.io/willbeasley/ripshelf`, for `linux/amd64` and `linux/arm64`
 
 By default films go to `./movies` and TV to `./tv` next to the compose file. To use an existing library, change the left-hand side of the `/movies` and `/tv` mounts (for example `/media/Movies:/movies`). Or mount one folder holding `Movies/` and `TV/` at `/library`, and delete the `RIPSHELF_MOVIES_DIR` and `RIPSHELF_TV_DIR` lines. Each folder must already exist. ripshelf never creates them, so an unmounted disk can't fill your system disk.
 
-There's no login on the UI, so keep it on your LAN or VPN. It does refuse changes sent by web pages on other sites, and answers only to the names a LAN uses, so a page open in your browser can't use it behind your back. If you open it by a public name (through a reverse proxy, or a Tailscale name), set that address in Settings → System or add the name to `RIPSHELF_ALLOWED_HOSTS` ([settings.md](settings.md#settings-that-arent-on-the-settings-page)).
+There's no login on the UI, so keep it on your LAN or VPN. It does refuse changes sent by web pages on other sites, and answers only to the names a LAN uses, so a page open in your browser can't use it behind your back. If you open it by a public name (through a reverse proxy, or a Tailscale name), set that address in Settings → System or add the name to `RIPSHELF_ALLOWED_HOSTS` ([behind a reverse proxy](#behind-a-reverse-proxy)).
 
 The compose files have a healthcheck, so `docker compose ps` shows the controller as `healthy` once it answers and its database opens. It asks `GET /api/health` (200, or 503 while shutting down or when the database fails), which monitoring tools such as Uptime Kuma can use too. In `compose.per-drive.yaml` the drive workers wait for it.
 
@@ -70,6 +70,55 @@ Before moving to a new release, read its **Upgrading** notes in its [release not
 The database, settings and MakeMKV data are in `./data`, so they survive updates and switching between a pulled image and one you built. Daily database backups go to `./backups`.
 
 When a release changes how the database is laid out, the first start copies it aside first, as `data/ripshelf-before-vN.db`, and then upgrades it. To go back to the older release, stop ripshelf and put that copy back as `data/ripshelf.db` (jobs from after the upgrade are lost). From 0.7 on, a release refuses to open a database a later release has upgraded, rather than misread it. A job the new release can't read at all is left out of the job list and named in the log (`skipping jobs row N`), instead of stopping ripshelf.
+
+## Behind a reverse proxy
+
+To open ripshelf by a name of its own over HTTPS, put it behind Caddy, nginx or Traefik and set its address in Settings → System → this UI's address, for example `https://rip.example.com` (or `RIPSHELF_PUBLIC_URL`). Open the UI by its IP address to get there the first time. That address is the name ripshelf answers to, and the page changes may come from, so nothing else is needed whether the proxy passes the `Host` header on or replaces it with ripshelf's own address. `RIPSHELF_ALLOWED_HOSTS` adds more names ([settings.md](settings.md#settings-that-arent-on-the-settings-page)).
+
+- It needs a name of its own. The UI asks for `/api/...` and its pages from the root, so it can't be served under a path such as `/ripshelf/`.
+- `X-Forwarded-Host` and `Forwarded` are ignored on purpose, since any client can send them. ripshelf goes by `Host` and the address you set.
+- The proxy must pass the browser's `Origin` header on unchanged. Proxies do unless told not to.
+- The UI is kept up to date by a stream at `/api/events`, which must not be buffered. It sends a ping every 15 seconds, and a remote worker's poll waits 20, so the usual 60-second timeouts are fine.
+- Remote workers can reach the controller by any name, since `/api/workers/...` has its own tokens. If they go through the proxy, it must take uploads as big as a rip (up to about 110 GB for a 4K disc) without holding them on its own disk first.
+
+Caddy (`reverse_proxy` passes `Host` on and doesn't buffer the event stream):
+
+```
+rip.example.com {
+	reverse_proxy 192.168.1.10:8380
+}
+```
+
+nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name rip.example.com;
+    # ssl_certificate ...;
+
+    client_max_body_size 0;          # uploads from remote workers are whole rips
+    proxy_request_buffering off;
+
+    location / {
+        proxy_pass http://192.168.1.10:8380;
+        proxy_set_header Host $host;
+        proxy_http_version 1.1;
+        proxy_buffering off;         # the UI's event stream (ripshelf also sends X-Accel-Buffering: no)
+    }
+}
+```
+
+Traefik, with ripshelf's container on the same Docker network (it passes `Host` on and has no upload limit by default):
+
+```yaml
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ripshelf.rule=Host(`rip.example.com`)
+      - traefik.http.routers.ripshelf.entrypoints=websecure
+      - traefik.http.routers.ripshelf.tls=true
+      - traefik.http.services.ripshelf.loadbalancer.server.port=8380
+```
 
 ## Other ways to run it
 

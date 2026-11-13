@@ -6,7 +6,7 @@ Start with [Installation](installation.md).
 
 | Page | What it covers |
 |---|---|
-| [Installation](installation.md) | the prebuilt image with Docker Compose, first-run configuration, tags and updating |
+| [Installation](installation.md) | the prebuilt image with Docker Compose, first-run configuration, tags, updating and running behind a reverse proxy |
 | [How it works](how-it-works.md) | what happens to a disc, from scan to library, and how files are named |
 | [Settings](settings.md) | every setting and its environment variable |
 | [Troubleshooting](troubleshooting.md) | common problems and fixes, including drives that hang in MakeMKV |
