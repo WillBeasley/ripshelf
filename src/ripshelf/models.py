@@ -820,6 +820,15 @@ class ShelfView(BaseModel):
     limit: int = Field(description="the most covers the shelf keeps")
 
 
+class ShelfDeleteRequest(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=500, description="the covers to delete")
+
+
+class ShelfDeleted(BaseModel):
+    deleted: list[str] = []
+    missing: list[str] = Field(default=[], description="covers that weren't on the shelf (gone already)")
+
+
 class ShelfVisionRequest(BaseModel):
     model: str | None = Field(None, max_length=200, description=(
         "the model to ask this once, on the vision model's connection; Settings' if left out"))

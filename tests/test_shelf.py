@@ -240,6 +240,23 @@ async def test_swap_delete_and_the_cap(harness, monkeypatch):
         assert len(out.covers) == 1 and "shelf is full" in out.notes[0]
 
 
+async def test_delete_several_at_once(harness, settings):
+    async with harness() as h:
+        h.m.text_reader = FakeReader(["THE LANTERN KEEPER"])
+        made = [(await h.m.add_shelf_upload([outside(n), inside(n)], [])).covers[0] for n in (1, 2, 3)]
+        await until(lambda: all(c.reading.state == "done" for c in h.m.shelf().covers), 10, "reading")
+        for c in made:
+            await h.m.shelf_thumb(c.id, "outside")
+            assert list(h.m._shelf_dir.glob(f"{c.id}.*"))
+        a, b, keep = (c.id for c in made)
+        out = await h.m.delete_shelf_covers([a, "nope", b, a])
+        assert (out.deleted, out.missing) == ([a, b], ["nope"])
+        assert [c.id for c in h.m.shelf().covers] == [keep]
+        assert not list(h.m._shelf_dir.glob(f"{a}.*")) and not list(h.m._shelf_dir.glob(f"{b}.*")), \
+            "the pictures, text and thumbnails go, as deleting one does"
+        assert list(h.m._shelf_dir.glob(f"{keep}.*"))
+
+
 async def test_search(harness):
     async with harness() as h:
         a = (await h.m.add_shelf_upload([outside(1)], [], both_sides=False)).covers[0]
@@ -602,6 +619,8 @@ def test_api(client):
     assert [s["kind"] for s in r.json()["scans"]] == ["outside_full", "inside_full"]
     assert client.post(f"/api/covers/{cid}/use/job/{job.id}").status_code == 404
     assert client.post(f"/api/covers/{cid}/use/drive/nope").status_code == 404
+    assert client.post("/api/covers/delete", json={"ids": []}).status_code == 422
+    assert client.post("/api/covers/delete", json={"ids": ["nope"]}).json() == {"deleted": [], "missing": ["nope"]}
     other = client.get("/api/covers").json()["covers"][0]["id"]
     assert client.delete(f"/api/covers/{other}").status_code == 204
     assert client.delete(f"/api/covers/{other}").status_code == 404
