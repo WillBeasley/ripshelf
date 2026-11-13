@@ -410,6 +410,29 @@ async def test_short_outage_mid_rip_ends_nothing(controller, tmp_path, monkeypat
         await client.aclose()
 
 
+async def test_output_on_its_way_when_the_run_ends_still_arrives(tmp_path, monkeypatch):
+    # A slow controller (or link): MakeMKV's last lines, which say the rip worked, were in a
+    # batch still being sent when the run ended, and were dropped, so the rip "failed".
+    agent = Agent(worker_settings(tmp_path, "http://controller.test"), FakeDrives(present=set()))
+    sent, sending = [], asyncio.Event()
+
+    async def slow_post(url, json=None, **kw):
+        sending.set()
+        await asyncio.sleep(0.3)
+        sent.extend(json["lines"])
+        return httpx.Response(200, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(agent.client, "post", slow_post)
+    pending, stop = ["PRGV:1,2,3"], asyncio.Event()
+    flush = asyncio.create_task(agent._flush_lines(7, pending, stop))
+    await sending.wait()
+    pending.append('MSG:5036,260,1,"Copy complete. 1 titles saved."')
+    stop.set()
+    await asyncio.wait_for(flush, 5)
+    assert sent == ["PRGV:1,2,3", 'MSG:5036,260,1,"Copy complete. 1 titles saved."'] and pending == []
+    await agent.client.aclose()
+
+
 async def test_a_run_the_controller_gave_up_on_is_stopped_on_the_worker(controller, tmp_path, monkeypatch):
     url, app = controller
     monkeypatch.setenv("RIPSHELF_FAKE_RIP_SECONDS", "60")
