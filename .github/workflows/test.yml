@@ -128,12 +128,12 @@ jobs:
         run: scripts/smoke-image.sh localhost/ripshelf:ci
 
   windows:
-    # The Windows-only code (Job Objects, drive letters, volume details) against the real
-    # kernel32, and the start-up and process tests, which also pretend to be Windows. Not
-    # the whole suite: most of it runs fake rips through POSIX tools and file modes, and
-    # takes over half an hour on Windows. The runner has no optical drive.
+    # The whole suite on Windows, so the Windows-only code (Job Objects, drive letters,
+    # volume details) meets the real kernel32 and everything else meets Windows paths,
+    # file locks and encodings. Tests of Linux-only code (sysfs, SG_IO, signals, process
+    # groups, file modes) skip. The runner has no optical drive and no ffmpeg.
     runs-on: windows-2025
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -146,4 +146,4 @@ jobs:
           pip install -q -r requirements-dev.lock
           pip install -q --no-deps -e .
       - name: Tests
-        run: pytest -q tests/test_proc.py tests/test_windows_drives.py tests/test_main.py
+        run: pytest -q -n 4 --dist worksteal
