@@ -4,11 +4,20 @@
     python scripts/compare-vision.py data/jobs/*/scans/*.jpg
     python scripts/compare-vision.py --models claude-haiku-5-5,claude-opus-5-5 --px 2576 back.jpg
     python scripts/compare-vision.py --effort low --json results.json scans/*.jpg
+    python scripts/compare-vision.py --shelf /data           # every cover on the covers shelf
 
 Each scan is trimmed to the box the way the app trims a new scan (``images.trim_box``),
 made into the same JPEG the app sends (``vision.picture``, at ``--px``), and sent with the
-app's own prompt and schema, once to each model. Run from the checkout with ripshelf
-installed (``pip install -e .``).
+app's own prompt and schema, once to each model. With ``--shelf``, it reads the outside of
+every cover on the shelf in that data folder instead, turned and cropped as you left it in
+the cover viewer, exactly as the app sends it, and shows what the shelf's own reading made
+of it (title, year, the barcode's name) beside the models'. Run it from the checkout with
+ripshelf installed (``pip install -e .``), or inside the running container:
+
+    docker cp scripts/compare-vision.py ripshelf:/tmp/
+    docker exec ripshelf python /tmp/compare-vision.py --shelf /data > compare.md
+
+Without ``ANTHROPIC_API_KEY`` set, it uses the vision model key from ripshelf's settings.
 
 It prints, in Markdown: for each scan, the episodes and extras each model read and the
 details where the models disagree; then for each model its cost, time, failures and how
@@ -25,6 +34,7 @@ import argparse
 import asyncio
 import base64
 import json
+import os
 import re
 import sys
 import time
@@ -50,12 +60,34 @@ def norm(s: str | None) -> str:
     return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
 
-def prepare(path: Path, px: int, trim: bool) -> bytes:
+def prepare(path: Path, trim: bool):
     img = images.open_image(path.read_bytes())
     if trim and (box := images.trim_box(img)):
         img = img.crop(tuple(box))
-    vision.MAX_PX = px
-    return vision.picture(img)
+    return img
+
+
+def shelf_covers(data_dir: Path) -> list[tuple[str, object, str]]:
+    """Each shelf cover's outside as the app renders it for the vision model, a name for it,
+    and what the shelf's own reading says."""
+    from ripshelf.shelf import EXTS, _Index
+    folder = data_dir / "covers"
+    idx = _Index.model_validate_json((folder / "index.json").read_text(encoding="utf-8"))
+    out = []
+    for c in idx.covers:
+        s = c.outside
+        if s is None:
+            continue
+        data = (folder / f"{c.id}.outside.{EXTS[s.content_type]}").read_bytes()
+        img = images.render(data, s.crop, s.rotate, s.flip, s.straighten)
+        r = c.reading
+        known = ", ".join(x for x in (
+            f"{r.title} ({r.year})" if r.title and r.year else r.title,
+            f"barcode {r.barcode}" + (f" = {r.barcode_name} ({r.barcode_source})" if r.barcode_name else "")
+            if r.barcode else None,
+            "vision model used" if r.vision else None) if x)
+        out.append((f"{c.id} ({c.created_at:%Y-%m-%d})", img, known or "nothing"))
+    return out
 
 
 async def ask(client: anthropic.AsyncAnthropic, model: str, jpeg: bytes, effort: str | None) -> dict:
@@ -106,12 +138,15 @@ def agreement(listing: dict, ref: dict) -> tuple[int, int, int, int, int]:
     return len(mine & theirs), len(theirs - mine), len(mine - theirs), agree, have
 
 
-def report(results: dict[str, dict[str, dict]], models: list[str], reference: str) -> str:
+def report(results: dict[str, dict[str, dict]], models: list[str], reference: str,
+           known: dict[str, str]) -> str:
     lines: list[str] = []
     totals = {m: {"cost": 0.0, "secs": 0.0, "n": 0, "failed": 0, "items": [0, 0, 0], "details": [0, 0],
                   "in": 0, "out": 0} for m in models}
     for scan, by_model in results.items():
         lines += [f"## {scan}", ""]
+        if scan in known:
+            lines += [f"The shelf's reading: {known[scan]}", ""]
         for m in models:
             r = by_model[m]
             t = totals[m]
@@ -134,14 +169,14 @@ def report(results: dict[str, dict[str, dict]], models: list[str], reference: st
                     a = agreement(by_model[m]["listing"], ref)
                     totals[m]["items"] = [x + y for x, y in zip(totals[m]["items"], a[:3], strict=True)]
                     totals[m]["details"] = [x + y for x, y in zip(totals[m]["details"], a[3:], strict=True)]
-            rows = []
-            for k in DETAILS:
-                vals = {m: by_model[m]["listing"]["details"].get(k) for m in models if "listing" in by_model[m]}
-                if len({norm(str(v)) for v in vals.values()}) > 1:
-                    rows.append(f"| {k} | " + " | ".join(str(vals.get(m, "")) for m in models) + " |")
-            if rows:
-                lines += ["Details the models disagree on:", "", "| | " + " | ".join(models) + " |",
-                          "|---" * (len(models) + 1) + "|", *rows, ""]
+        rows = []
+        for k in DETAILS:
+            vals = {m: by_model[m]["listing"]["details"].get(k) for m in models if "listing" in by_model[m]}
+            if k in ("title", "year") or len({norm(str(v)) for v in vals.values()}) > 1:
+                rows.append(f"| {k} | " + " | ".join(str(vals.get(m, "")) for m in models) + " |")
+        if rows:
+            lines += ["Title, year, and the details the models disagree on:", "",
+                      "| | " + " | ".join(models) + " |", "|---" * (len(models) + 1) + "|", *rows, ""]
     lines += ["## Summary", "", f"Agreement is with {reference}.", "",
               "| model | scans | failed | tokens in / out (mean) | cost | per scan | mean time "
               "| items matched | missed | extra | details agreeing |",
@@ -160,7 +195,9 @@ def report(results: dict[str, dict[str, dict]], models: list[str], reference: st
 
 async def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    p.add_argument("scans", nargs="+", type=Path, help="cover scans (JPEG, PNG, ...)")
+    p.add_argument("scans", nargs="*", type=Path, help="cover scans (JPEG, PNG, ...)")
+    p.add_argument("--shelf", type=Path, metavar="DATA_DIR",
+                   help="read every cover on the covers shelf in this data folder (/data in the container)")
     p.add_argument("--models", default=DEFAULT_MODELS, help=f"comma-separated (default {DEFAULT_MODELS})")
     p.add_argument("--reference", help="the model to compare the others with (default: the last of --models)")
     p.add_argument("--px", type=int, default=vision.MAX_PX,
@@ -174,18 +211,34 @@ async def main() -> int:
     reference = a.reference or models[-1]
     if reference not in models:
         p.error("--reference must be one of --models")
+    if not a.scans and not a.shelf:
+        p.error("name some scans, or --shelf")
 
-    client = anthropic.AsyncAnthropic(max_retries=2, timeout=vision.CLOUD_TIMEOUT_S * 2)
+    inputs = [(str(path), prepare(path, not a.no_trim), "") for path in a.scans]
+    if a.shelf:
+        inputs += shelf_covers(a.shelf)
+    known = {name: k for name, _, k in inputs if k}
+    vision.MAX_PX = a.px
+
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        from ripshelf.config import load_settings
+        secret = load_settings().vision_api_key
+        key = secret.get_secret_value() if secret else None
+    if not key:
+        p.error("set ANTHROPIC_API_KEY, or a vision model key in ripshelf's settings")
+    client = anthropic.AsyncAnthropic(api_key=key, max_retries=2, timeout=vision.CLOUD_TIMEOUT_S * 2)
     results: dict[str, dict[str, dict]] = {}
-    for path in a.scans:
-        jpeg = prepare(path, a.px, not a.no_trim)
-        print(f"{path}: {len(jpeg) // 1024} KB, asking {len(models)} models", file=sys.stderr)
+    for n, (name, img, _) in enumerate(inputs, 1):
+        jpeg = vision.picture(img)
+        print(f"{n}/{len(inputs)} {name}: {len(jpeg) // 1024} KB, asking {len(models)} models", file=sys.stderr)
         replies = await asyncio.gather(*(ask(client, m, jpeg, a.effort) for m in models))
-        name = str(path) if str(path) not in results else f"{path} ({len(results) + 1})"
+        if name in results:
+            name = f"{name} ({n})"
         results[name] = dict(zip(models, replies, strict=True))
     await client.close()
 
-    sys.stdout.write(report(results, models, reference))
+    sys.stdout.write(report(results, models, reference, known))
     if a.json:
         a.json.write_text(json.dumps(results, indent=2))
     return 0
