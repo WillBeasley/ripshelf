@@ -455,3 +455,26 @@ async def test_a_handled_disc_is_read_once_per_insertion(harness, monkeypatch):
         await until(lambda: calls)
         await asyncio.sleep(h.s.poll_interval_s * 5)
         assert calls == [PM]
+
+
+async def test_a_scan_that_talks_but_never_ends_hits_the_time_limit(harness, settings, mkv_script):
+    settings.scan_timeout_s, settings.scan_max_s = 30, 2  # never quiet for long, but never done
+    settings.makemkvcon = mkv_script(info="""
+        while True:
+            out('PRGV:1,2,3'); time.sleep(0.2)
+    """)
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.state == JobState.failed, timeout=20)
+        assert job.problem.code == "scan_timeout"
+        assert job.problem.message.startswith("MakeMKV was still scanning after 2 s.")
+        assert job.problem.actions == ["retry_scan", "eject"]
+
+
+async def test_cancelling_while_the_disc_is_scanned(harness, settings, mkv_script):
+    settings.makemkvcon = mkv_script(info="time.sleep(60)")
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.state == JobState.scanning)
+        await until(lambda: h.m.drives[job.drive_id].scan is not None, what="MakeMKV to start")
+        done = await h.m.cancel(job.id)
+        assert done.state == JobState.cancelled and h.m.drives[job.drive_id].scan is None
+        assert h.job(job.id).problem is None, "cancelled, not failed"
