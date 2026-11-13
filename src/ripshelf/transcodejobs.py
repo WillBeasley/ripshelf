@@ -87,6 +87,11 @@ class TranscodeMixin:
         task.add_done_callback(lambda t: t.cancelled() and coro.close())
         return task
 
+    def _bg_running(self, job_id: int) -> bool:
+        """Whether the job's background task is still at work. One that has ended counts as
+        done, although it leaves ``_bg`` only on the loop's next turn."""
+        return any(not t.done() for t in self._bg.get(job_id, ()))
+
     def _cancel_bg(self, job_id: int) -> None:
         t = self._transcoders.get(job_id)
         if t:

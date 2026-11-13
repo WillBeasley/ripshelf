@@ -1281,7 +1281,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 return
             if job.rip.state == RipState.done:
                 # Transcode (if on) and copy run apart from the drive, so it can take the next disc.
-                if job.state not in (JobState.transcoding, JobState.finalising) and not self._bg.get(job.id):
+                if job.state not in (JobState.transcoding, JobState.finalising) and not self._bg_running(job.id):
                     self._spawn_bg(self._finish(job.id), job.id)
             elif job.rip.state in (RipState.pending, RipState.running):
                 self._set_state(job, JobState.ripping,
@@ -1527,9 +1527,11 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         job.rip.file = None
         await self._refresh_servers(job, [str(dest)])
         job.problem = None
+        self._save(job)
+        await self.file_scans(job, filing=True)
+        job = self.db.get_job(job.id)
         self._set_state(job, JobState.done, f"Done: {dest.name}")
         self._spawn_notify(job, "done")
-        await self.file_scans(self.db.get_job(job.id))
 
     async def _refresh_servers(self, job: JobRecord, paths: list[str]) -> None:
         """Tell Emby, Jellyfin and Plex (those set up) about the new files. A failure is
@@ -1590,9 +1592,11 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         shutil.rmtree(self.scratch_dir(job), ignore_errors=True)
         job.rip.file = None
         job.problem = None
+        self._save(job)
+        await self.file_scans(job, filing=True)
+        job = self.db.get_job(job.id)
         self._set_state(job, JobState.done, f"Done: {dest.name}")
         self._spawn_notify(job, "done")
-        await self.file_scans(self.db.get_job(job.id))
 
     def _disc_json(self, job: JobRecord, dest: Path, sha: str) -> dict:
         d = self.drives.get(job.drive_id)
@@ -1691,7 +1695,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         if missing:
             raise KeyError(f"no job {missing[0]}")
         busy = [j.id for j in jobs if j.state not in TERMINAL_STATES
-                or self._bg.get(j.id)]
+                or self._bg_running(j.id)]
         if busy:
             raise ValueError(f"job {busy[0]} is still running; cancel it first")
         gone = [j.id for j in jobs]

@@ -67,7 +67,7 @@ class RefileMixin:
             raise ValueError("no such job")
         if job.state in (JobState.transcoding, JobState.finalising):
             raise ValueError("the job is still transcoding or copying, so wait for it to finish")
-        if job.state != JobState.done or self._bg.get(job.id):
+        if job.state != JobState.done or self._bg_running(job.id):
             raise ValueError("only a finished job can be identified again")
         if not job.identity or not job.destination:
             raise ValueError("this job didn't put anything in the library")
@@ -300,11 +300,13 @@ class RefileMixin:
         await self._refresh_servers(job, [job.destination, r.destination])
         job.refile = None
         job.problem = None
+        self._save(job)
+        await self.file_scans(job, filing=True)  # added while it was in review
+        job = self.db.get_job(job.id)
         self._set_state(job, JobState.done, f"Done: {filed_as(job)}")
         job.finished_at = r.finished_at or job.finished_at  # it finished when it was ripped
         self._save(job)
         self.db.record_stats(job)
-        await self.file_scans(self.db.get_job(job.id))  # added while it was in review
 
     def _rewrite_disc_record(self, job: JobRecord, new) -> None:
         """The .disc/disc.json beside the files says what the disc is, so it says the new title."""
@@ -369,7 +371,7 @@ class RefileMixin:
         job = self.db.get_job(job_id)
         if job is None or not job.refile:
             raise ValueError("this job isn't being identified again")
-        if job.state not in (JobState.review, JobState.failed) or self._bg.get(job.id):
+        if job.state not in (JobState.review, JobState.failed) or self._bg_running(job.id):
             raise ValueError("the files are being moved, so wait for that to finish")
         r = job.refile
         back = [mv for mv in r.moves if mv.done]

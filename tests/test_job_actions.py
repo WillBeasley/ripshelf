@@ -3,11 +3,14 @@ and how a job that crashed is left: failed with a reason and a retry, never stuc
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from ripshelf.models import Candidate, JobState, RipState
 
 from .conftest import until
+from .test_scans import picture
 
 PM = "/dev/fake-sr1"
 ORCHARD = Candidate(source="manual", title="Moonlit Orchard", year=1998)
@@ -155,3 +158,46 @@ async def test_thediscdb_being_down_is_a_warning_not_a_failure(harness, discdb, 
     async with harness(PM) as h:
         job = await h.wait_job(lambda j: j.state == JobState.review)
         assert any(e.message == "TheDiscDB: HTTP 503" for e in h.db.events(job.id))
+
+
+async def on_state(h, job_id: int, state: str, q) -> None:
+    """Return as soon as the job's update saying ``state`` is published: the moment the
+    UI could show it, and the user act on it."""
+    while True:
+        msg = json.loads(await q.get())
+        if msg.get("type") == "job" and msg["job"]["id"] == job_id and msg["job"]["state"] == state:
+            return
+
+
+async def test_a_job_can_be_deleted_the_moment_it_shows_done(harness):
+    # Filing used to carry on after "done" (copying the cover scans in), so a Delete
+    # straight away was refused as "still running".
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.state == JobState.review and j.rip.state == "done")
+        await h.m.add_scan(job.id, picture(), "outside_full", "upload")
+        with h.bus.subscribe() as q:
+            await h.m.confirm(job.id, ORCHARD)
+            await on_state(h, job.id, "done", q)
+            assert h.m.delete_jobs([job.id]) == ([job.id], [])
+        assert h.job(job.id) is None
+
+
+async def test_a_failed_move_can_be_put_back_the_moment_it_shows_failed(harness, settings, monkeypatch):
+    from ripshelf import library
+
+    from .test_reidentify import RIGHT, filed_film
+
+    settings.movies.mkdir(parents=True, exist_ok=True)
+
+    def full(src, dst):
+        raise OSError(28, "No space left on device")
+
+    async with harness() as h:
+        job, _, dest = filed_film(h, settings)
+        await h.m.reidentify(job.id)
+        monkeypatch.setattr(library, "move_path", full)
+        with h.bus.subscribe() as q:
+            await h.m.confirm(job.id, RIGHT)
+            await on_state(h, job.id, "failed", q)
+            back = await h.m.keep_identity(job.id)
+        assert back.state == JobState.done and dest.read_bytes() == b"film"
