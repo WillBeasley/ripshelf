@@ -162,7 +162,8 @@ class TvMixin:
         """The show searches there are without a TMDB key (TheTVDB, TVmaze), in order."""
         return [n for n in providers.enabled(self.s, "tv") if n in keyless.SOURCES]
 
-    async def _find_shows(self, tmdb: Tmdb | None, name: str, episode_s: float | None) -> list[Show]:
+    async def _find_shows(self, tmdb: Tmdb | None, name: str, episode_s: float | None,
+                          failed: list[str] | None = None) -> list[Show]:
         """Shows for ``name`` from the providers in Settings' "TV shows" list, in order.
         Without a TMDB key, TheTVDB's or TVmaze's shows, keyed by their own ids."""
         sources = [n for n in providers.enabled(self.s, "tv") if n != "thediscdb"]
@@ -171,7 +172,7 @@ class TvMixin:
         try:
             if not tmdb:
                 return await keyless.find_shows(name, episode_s, sources=self._keyless_sources(), tvdb=tvdb,
-                                                tvmaze=maze)
+                                                tvmaze=maze, failed=failed)
             return await tmdb_tv.find_shows(tmdb, name, episode_s, tvdb=tvdb, sources=sources, tvmaze=maze) \
                 if sources else []
         finally:
@@ -996,13 +997,17 @@ class TvMixin:
         tmdb = self._tmdb()
         if not tmdb and not self._keyless_sources():
             raise ValueError("No TV show search is on: set a TMDB key, or switch TVmaze on in Settings → Identify")
+        failed: list[str] = []
         try:
-            return await self._find_shows(tmdb, query, None)
+            shows = await self._find_shows(tmdb, query, None, failed)
         except LOOKUP_ERRORS as e:
             raise ValueError(str(e)) from None
         finally:
             if tmdb:
                 await tmdb.aclose()
+        if not shows and failed:  # not "nothing found" when nothing could be asked
+            raise ValueError("; ".join(failed))
+        return shows
 
     async def tv_match_text(self, job_id: int, text: str) -> JobRecord:
         """Map titles, in disc order, to episodes named in pasted text (a case's run order)."""
