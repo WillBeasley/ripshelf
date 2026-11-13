@@ -62,9 +62,10 @@ def tvdb_show(r: dict, language: str = "eng") -> Show | None:
 
 async def find_shows(show_name: str, episode_s: float | None, year: int | None = None,
                      sources: list[str] | None = None, tvdb: Tvdb | None = None,
-                     tvmaze: Tvmaze | None = None) -> list[Show]:
+                     tvmaze: Tvmaze | None = None, failed: list[str] | None = None) -> list[Show]:
     """Shows for a name, from ``sources`` (TheTVDB, TVmaze) asked in order until one
-    finds something, keyed by that provider's id."""
+    finds something, keyed by that provider's id. A source that fails is passed over,
+    and named in ``failed`` (if given)."""
     show_name = split_show_name(show_name).show
     names = [show_name, *queries_for(show_name)[1:2]]
     for src in sources or SOURCES:
@@ -83,6 +84,8 @@ async def find_shows(show_name: str, episode_s: float | None, year: int | None =
                     break
         except (TvdbError, TvmazeError) as e:
             log.warning("%s search for %r failed: %s", providers.label(src), show_name, e)
+            if failed is not None:
+                failed.append(str(e))
         if shows:
             return rank_shows(list(shows.values()), names, episode_s, year)
     return []

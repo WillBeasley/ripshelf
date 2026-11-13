@@ -103,6 +103,28 @@ async def test_a_film_moves_to_the_right_title(harness, settings):
         assert "Re-identified: Moonlit Orchard (2004) → Captain Comet (2011)" in msgs
 
 
+async def test_what_isnt_the_jobs_stays_and_the_user_is_told(harness, settings, monkeypatch):
+    from .test_contribute import contribute_state
+
+    def no_record(*a):
+        raise PermissionError(13, "Permission denied")
+
+    async with harness() as h:
+        job, old, _ = filed_film(h, settings)
+        (old / "my notes.txt").write_text("mine")  # the user's own file in the film's folder
+        job.contribution = contribute_state("sent")
+        h.db.save_job(job)
+        await h.m.reidentify(job.id)
+        monkeypatch.setattr(h.m, "_rewrite_disc_record", no_record)
+        await h.m.confirm(job.id, RIGHT)
+        job = await done(h, job.id)
+        msgs = [e.message for e in h.db.events(job.id)]
+    assert job.state == JobState.done and (old / "my notes.txt").read_text() == "mine"
+    assert f"{old} still has 1 file that isn't this job's, so it stays" in msgs
+    assert "TheDiscDB was sent this disc as Moonlit Orchard (2004), so correct it there" in msgs
+    assert "Could not update the .disc record: [Errno 13] Permission denied" in msgs
+
+
 async def test_a_film_already_in_the_library_is_never_overwritten(harness, settings):
     async with harness() as h:
         job, old, dest = filed_film(h, settings)
@@ -183,6 +205,44 @@ async def test_only_a_finished_job_can_be_identified_again(harness, settings):
         for refused in (h.m.identify_again(job.id), h.m.check_disc(job.id)):
             with pytest.raises(ValueError, match="being identified again"):
                 await refused
+
+
+async def test_identify_again_needs_the_files_still_in_the_library(harness, settings):
+    async with harness() as h:
+        with pytest.raises(ValueError, match="no such job"):
+            await h.m.reidentify(999)
+        job, folder, dest = filed_film(h, settings)
+        for p in (dest, dest.with_name(f"{dest.stem} - original.mkv"), folder / "featurettes" / "Making Of.mkv"):
+            p.unlink()  # moved or deleted by hand
+        with pytest.raises(ValueError, match="none of this job's files are in the library any more"):
+            await h.m.reidentify(job.id)
+        job.destination = None
+        h.db.save_job(job)
+        with pytest.raises(ValueError, match="didn't put anything in the library"):
+            await h.m.reidentify(job.id)
+        backup = put(h, heron_job(identity=WRONG, mode="backup", destination=str(settings.library_dir / "gone")))
+        with pytest.raises(ValueError, match="isn't in the library any more"):
+            await h.m.reidentify(backup.id)
+
+
+async def test_confirming_with_the_library_unmounted_moves_nothing(harness, settings):
+    async with harness() as h:
+        job, folder, dest = filed_film(h, settings)
+        await h.m.reidentify(job.id)
+        settings.movies_dir = settings.library_dir / "not-mounted"
+        with pytest.raises(ValueError, match="does not exist"):
+            await h.m.confirm(job.id, RIGHT)
+        assert dest.read_bytes() == b"film" and h.db.get_job(job.id).state == JobState.review
+
+
+async def test_keeping_the_old_identity_before_anything_moved(harness, settings):
+    async with harness() as h:
+        with pytest.raises(ValueError, match="isn't being identified again"):
+            await h.m.keep_identity(999)
+        job, folder, dest = filed_film(h, settings)
+        await h.m.reidentify(job.id)
+        back = await h.m.keep_identity(job.id)
+        assert back.state == JobState.done and back.identity == WRONG and dest.read_bytes() == b"film"
 
 
 async def test_a_disc_backup_folder_moves(harness, settings):

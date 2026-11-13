@@ -311,9 +311,10 @@ class ScansMixin:
 
     # --- the library ------------------------------------------------------------------
 
-    def _scans_folder(self, job: JobRecord) -> Path | None:
-        """``scans/`` in the film's folder (or backup's, or show's), once it's filed."""
-        if job.state != JobState.done or not job.destination:
+    def _scans_folder(self, job: JobRecord, filing: bool = False) -> Path | None:
+        """``scans/`` in the film's folder (or backup's, or show's), once it's filed (or, with
+        ``filing``, as it's being filed)."""
+        if not (filing or job.state == JobState.done) or not job.destination:
             return None
         dest = Path(job.destination)
         return dest / "scans" if dest.is_dir() else dest.parent / "scans"
@@ -336,11 +337,13 @@ class ScansMixin:
         if job and job.state == JobState.done:
             await self.file_scans(job)
 
-    async def file_scans(self, job: JobRecord) -> None:
-        """Copy the pictures not filed yet into the library. A failure is a warning."""
+    async def file_scans(self, job: JobRecord, filing: bool = False) -> None:
+        """Copy the pictures not filed yet into the library. A failure is a warning. With
+        ``filing``, the job's files are in but it isn't done yet: filing ends with this, so
+        that once a job is done nothing more is being done to it."""
         if not self.s.scans_to_library or not job.scans:
             return
-        folder = self._scans_folder(job)
+        folder = self._scans_folder(job, filing)
         todo = [sc for sc in job.scans if not sc.library_path]
         if not folder or not todo:
             return

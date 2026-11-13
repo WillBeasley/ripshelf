@@ -54,6 +54,7 @@ from .models import (
     ShelfView,
     StackMode,
     StackPage,
+    sentence,
 )
 from .providers import release_info
 from .scanner import images, ocr, stack, vision
@@ -399,10 +400,13 @@ class ShelfMixin:
             raise ValueError(f"a job keeps at most {scanjobs.MAX_SCANS} pictures; remove some first")
         c, data = await self._take_cover(cover_id)
         source = "upload" if c.source == "camera" else c.source
+        added = []
         try:
             for name, d in data.items():
-                await self.add_scan(job_id, d, KINDS[name], source)
+                added.append(await self.add_scan(job_id, d, KINDS[name], source))
         except (OSError, ValueError, KeyError):
+            for sc in added:  # the side already added comes off, as the cover goes back whole
+                await self.delete_scan(job_id, sc.id)
             await self._put_back(c)
             raise
         self._drop_cover_files(c)
@@ -741,7 +745,7 @@ class ShelfMixin:
                 listing, secs = await vision.read_listing(provider, img)
             except (vision.VisionError, OSError, images.ImageError) as e:
                 log.info("the vision model couldn't read shelf cover %s: %s", c.id, e)
-                return None, str(e)[:1].upper() + str(e)[1:]
+                return None, sentence(str(e))
         return listing, f"{provider.model} read it in {secs:.0f} s"
 
     async def _shelf_barcode(self, reading: ShelfReading, code: str) -> None:

@@ -407,6 +407,61 @@ async def test_a_failed_scan_says_why(harness, settings):
         assert h.db.get_job(job.id).scanner is None
 
 
+async def test_a_scan_can_be_stopped_part_way(harness, settings):
+    settings.scanner_enabled, settings.scanner_url = True, URL
+    async with harness() as h:
+        fake, h.m.escl_transport = fake_scanner(feeder_pages=3, page_delay_s=2)
+        h.m.escl_busy_wait_s = 0
+        job = put(h, heron_job())
+        await h.m.scanner_scan(job.id, ScannerScanRequest(kind="insert", source="feeder", dpi=100))
+        await until(lambda: fake.jobs, 10, "the scanner's job")
+        await h.m.cancel_scanner(job.id)
+        assert h.db.get_job(job.id).scanner is None and not (await h.m.scanner_info()).busy_job
+        await until(lambda: fake.cancelled, 5, "the scanner's job cancelled")
+
+
+async def test_the_scanner_being_off_is_shown_not_raised(harness, settings):
+    settings.scanner_enabled, settings.scanner_url = True, "http://192.0.2.1"
+
+    def refused(request):
+        raise httpx.ConnectError("refused")
+
+    async with harness() as h:
+        h.m.escl_transport = httpx.MockTransport(refused)
+        info = await h.m.scanner_info()
+        assert info.enabled and not info.ok and "didn't answer" in info.message
+
+
+async def test_a_scan_that_crashes_is_shown_failed_not_left_scanning(harness, settings, monkeypatch):
+    settings.scanner_enabled, settings.scanner_url = True, URL
+    async with harness() as h:
+        _, h.m.escl_transport = fake_scanner()
+
+        async def boom(*a, **kw):
+            raise RuntimeError("bad page")
+
+        monkeypatch.setattr(escl.Escl, "scan", boom)
+        job = put(h, heron_job())
+        await h.m.scanner_scan(job.id, ScannerScanRequest(kind="front"))
+        j = await until(lambda: (j := h.db.get_job(job.id)) and j.scanner and j.scanner.state == "failed" and j,
+                        10, "failure")
+        assert j.scanner.message == "The scan failed: bad page"
+
+
+async def test_a_job_keeps_a_limited_number_of_pictures(harness, monkeypatch):
+    from ripshelf import scanjobs
+
+    monkeypatch.setattr(scanjobs, "MAX_SCANS", 2)
+    async with harness() as h:
+        job = put(h, heron_job())
+        for colour in ((1, 1, 1), (2, 2, 2)):
+            await h.m.add_scan(job.id, picture(colour=colour), "insert", "upload")
+        with pytest.raises(ValueError, match="at most 2 pictures"):
+            await h.m.add_scan(job.id, picture(colour=(3, 3, 3)), "insert", "upload")
+        with pytest.raises(KeyError):
+            await h.m.scan_covers(job.id, "no-such-scan")
+
+
 async def test_scanning_needs_the_scanner_set_up(harness):
     async with harness() as h:
         job = put(h, heron_job())

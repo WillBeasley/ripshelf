@@ -152,6 +152,8 @@ class DriveRuntime:
     audio_cd: bool = False  # the disc its last job started with is a music CD
     ejecting_until: float = 0.0  # ejected, and the tray hasn't been seen open yet
     status_pending: bool = False
+    status_check: asyncio.Future | None = None  # the status call under way, and when it began
+    status_since: float = 0.0
     scan: runner.MakeMKV | RemoteMakeMKV | None = None
     rip: runner.MakeMKV | RemoteMakeMKV | None = None
     # For remote drives, their worker's backend, and (worker id, drive id on the worker).
@@ -466,21 +468,28 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         """The drive's status, or ``error`` if it does not answer in time.
 
         The ioctl runs in a thread that cannot be cancelled; while it is stuck no
-        new one is started (``status_pending`` clears only when it returns).
+        new one is started (``status_pending`` clears only when it returns). A call made
+        while one is under way (the poller's, as the user presses a button) waits for its
+        answer, unless that one has already taken too long.
         """
+        loop = asyncio.get_running_loop()
         if d.status_pending:
-            return DriveStatus.error
-        d.status_pending = True
-        fut = asyncio.ensure_future(asyncio.to_thread(self._be(d).status, d.hw.device))
+            timeout = STATUS_TIMEOUT_S - (loop.time() - d.status_since)
+            if d.status_check is None or timeout <= 0:
+                return DriveStatus.error
+            fut = d.status_check
+        else:
+            d.status_pending, d.status_since, timeout = True, loop.time(), STATUS_TIMEOUT_S
+            fut = d.status_check = asyncio.ensure_future(asyncio.to_thread(self._be(d).status, d.hw.device))
 
-        def finished(f: asyncio.Future) -> None:
-            d.status_pending = False
-            if not f.cancelled():
-                f.exception()  # retrieved, so it is not logged as unhandled
+            def finished(f: asyncio.Future) -> None:
+                d.status_pending, d.status_check = False, None
+                if not f.cancelled():
+                    f.exception()  # retrieved, so it is not logged as unhandled
 
-        fut.add_done_callback(finished)
+            fut.add_done_callback(finished)
         try:
-            return await asyncio.wait_for(asyncio.shield(fut), STATUS_TIMEOUT_S)
+            return await asyncio.wait_for(asyncio.shield(fut), timeout)
         except TimeoutError:
             return DriveStatus.error
         except Exception as e:
@@ -496,7 +505,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             t.cancel()
 
     def _busy(self, d: DriveRuntime) -> bool:
-        if d.tasks:
+        if any(not t.done() for t in d.tasks):
             return True
         job = self.db.get_job(d.job_id) if d.job_id else None
         return bool(job and job.state in ACTIVE_STATES and self._needs_disc(job))
@@ -1281,7 +1290,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 return
             if job.rip.state == RipState.done:
                 # Transcode (if on) and copy run apart from the drive, so it can take the next disc.
-                if job.state not in (JobState.transcoding, JobState.finalising) and not self._bg.get(job.id):
+                if job.state not in (JobState.transcoding, JobState.finalising) and not self._bg_running(job.id):
                     self._spawn_bg(self._finish(job.id), job.id)
             elif job.rip.state in (RipState.pending, RipState.running):
                 self._set_state(job, JobState.ripping,
@@ -1527,9 +1536,11 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         job.rip.file = None
         await self._refresh_servers(job, [str(dest)])
         job.problem = None
+        self._save(job)
+        await self.file_scans(job, filing=True)
+        job = self.db.get_job(job.id)
         self._set_state(job, JobState.done, f"Done: {dest.name}")
         self._spawn_notify(job, "done")
-        await self.file_scans(self.db.get_job(job.id))
 
     async def _refresh_servers(self, job: JobRecord, paths: list[str]) -> None:
         """Tell Emby, Jellyfin and Plex (those set up) about the new files. A failure is
@@ -1590,9 +1601,11 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         shutil.rmtree(self.scratch_dir(job), ignore_errors=True)
         job.rip.file = None
         job.problem = None
+        self._save(job)
+        await self.file_scans(job, filing=True)
+        job = self.db.get_job(job.id)
         self._set_state(job, JobState.done, f"Done: {dest.name}")
         self._spawn_notify(job, "done")
-        await self.file_scans(self.db.get_job(job.id))
 
     def _disc_json(self, job: JobRecord, dest: Path, sha: str) -> dict:
         d = self.drives.get(job.drive_id)
@@ -1691,7 +1704,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         if missing:
             raise KeyError(f"no job {missing[0]}")
         busy = [j.id for j in jobs if j.state not in TERMINAL_STATES
-                or self._bg.get(j.id)]
+                or self._bg_running(j.id)]
         if busy:
             raise ValueError(f"job {busy[0]} is still running; cancel it first")
         gone = [j.id for j in jobs]
@@ -1727,7 +1740,14 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                       if isinstance(t, dict) and t.get("file")]
             paths += [p for p in meta.rglob("*") if p.is_file()] if meta.is_dir() else []
         elif job.media == MediaKind.movie and job.mode != "backup" and job.destination:
-            paths += [Path(job.destination), *(Path(p) for p in job.filed_extras.values())]
+            film = Path(job.destination)
+            paths += [film, *(Path(p) for p in job.filed_extras.values())]
+            # Its .disc record too, unless another version of the film (kept both) stays beside it.
+            folder = film.parent
+            others = [p for p in folder.rglob("*") if p.is_file() and ".disc" not in p.relative_to(folder).parts
+                      and p not in paths] if folder.is_dir() else []
+            if not others:
+                paths += [p for p in (folder / ".disc").rglob("*") if p.is_file()]
         roots = [self.s.tv.resolve(), self.s.movies.resolve()]
         done: list[str] = []
         for p in paths:
@@ -1835,9 +1855,16 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             # The copy runs in a thread that cannot be interrupted safely.
             raise ValueError("the job is copying to the library; wait for it to finish")
         d = self.drives.get(job.drive_id)
+        stopping = [*(d.tasks if d and d.job_id == job_id else ()), *self._bg.get(job_id, ())]
         if d and d.job_id == job_id:
             self._stop_drive_work(d)
         self._cancel_bg(job_id)
+        # Until its tasks have ended (MakeMKV stopped, the drive let go), the job isn't
+        # cancelled: a retry straight after would find the drive still busy with it.
+        stopping = [t for t in stopping if t is not asyncio.current_task()]
+        if stopping:
+            await asyncio.wait(stopping, timeout=STOP_WAIT_S)
+        job = self.db.get_job(job_id)
         if job.rip.state in (RipState.pending, RipState.running):
             job.rip.state = RipState.cancelled
         self._set_state(job, JobState.cancelled, "Cancelled")
@@ -1878,7 +1905,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         return job
 
     def _busy_other(self, d: DriveRuntime, job_id: int) -> bool:
-        return bool(d.tasks) or (d.job_id not in (None, job_id) and self._busy(d))
+        return any(not t.done() for t in d.tasks) or (d.job_id not in (None, job_id) and self._busy(d))
 
     def _held(self, d: DriveRuntime) -> bool:
         """No jobs on this drive, because it's disabled, the setup isn't finished yet (a fresh
