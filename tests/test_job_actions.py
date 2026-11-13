@@ -201,3 +201,38 @@ async def test_a_failed_move_can_be_put_back_the_moment_it_shows_failed(harness,
             await on_state(h, job.id, "failed", q)
             back = await h.m.keep_identity(job.id)
         assert back.state == JobState.done and dest.read_bytes() == b"film"
+
+
+async def test_cancelling_mid_rip_frees_the_drive_at_once(harness, monkeypatch):
+    # Cancel used to return while its tasks were still stopping, so "Retry scan" straight
+    # after was refused as "the drive is busy".
+    monkeypatch.setenv("RIPSHELF_FAKE_RIP_SECONDS", "30")
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.rip.state == "running", what="the rip to start")
+        await h.m.cancel(job.id)
+        again = await h.m.rescan_drive("fake-ihas122")
+        assert again.id != job.id and h.job(job.id).state == JobState.cancelled
+
+
+async def test_a_status_check_under_way_is_shared_not_taken_for_no_disc(harness, monkeypatch):
+    # The poller's check in flight as the user pressed "Retry scan" read as "no disc".
+    import asyncio
+    import time
+
+    from ripshelf.models import DriveStatus
+
+    async with harness(PM) as h:
+        await h.wait_job(lambda j: j.state == JobState.review)
+        d = h.m.drives["fake-ihas122"]
+        real = h.backend.status
+
+        def slow(device):
+            time.sleep(0.3)
+            return real(device)
+
+        monkeypatch.setattr(h.backend, "status", slow)
+        assert await asyncio.gather(h.m._drive_status(d), h.m._drive_status(d)) == [DriveStatus.disc] * 2
+        # One that has hung past the timeout isn't waited on again.
+        d.status_pending, d.status_check, d.status_since = True, asyncio.get_running_loop().create_future(), 0.0
+        assert await h.m._drive_status(d) == DriveStatus.error
+        d.status_pending, d.status_check = False, None

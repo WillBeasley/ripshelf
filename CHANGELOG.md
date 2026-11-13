@@ -36,6 +36,7 @@ This will be 0.7.0. Release candidates: [0.7.0-rc1](https://github.com/WillBeasl
 
 - A `settings.json` with only disabled virtual drives is treated as a new install, so the setup page shows instead of ripping whatever is in the drives.
 - A long title isn't copied whole into the library once it has been split ([#33](https://github.com/WillBeasley/ripshelf/pull/33)).
+- Cancelling a job and pressing Retry scan (or retrying) straight after was refused as "the drive is busy", because Cancel returned while MakeMKV was still being stopped; it returns once the drive is free now. And a button that asks the drive while the regular check of it is under way waits for that answer, instead of saying "there is no disc in the drive".
 - A TV disc whose copy into the library failed part way left the episodes it had already copied there, so a retry stopped at "already in the library" on its own episodes. They're taken out again when the copy fails (not one you chose to overwrite), so a retry starts clean.
 - A job could show Done (or Failed) while it was still finishing, copying its cover scans into the library, so deleting it, identifying it again or putting a failed move back straight away was refused as "still running". A job is marked done only once everything is filed.
 - An error that starts with an address no longer has it capitalised ("Ftp://scanner is not a scanner's address", "Http://… refused the key") on the Settings Test buttons, a cover the vision model couldn't read, or a failed web search.
