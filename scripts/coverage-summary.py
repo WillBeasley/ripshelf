@@ -34,6 +34,13 @@ def files(data: str, tmp: Path) -> tuple[float, dict[str, float]]:
 
 
 def main(linux: str, windows: str) -> None:
+    missing = [f for f in (linux, windows) if not Path(f).is_file()]
+    if missing:  # that job failed before its tests finished
+        print("## Coverage\n\nNo coverage from " + " or ".join(f"`{f}`" for f in missing) + ", so nothing to compare.")
+        if len(missing) == 1:
+            coverage("combine", "--keep", linux if missing[0] == windows else windows)
+            print("\n" + coverage("report", "--skip-covered", "--format=markdown"))
+        return
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         # Each alone first, through combine, which maps its file names to the checkout's.

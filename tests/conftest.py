@@ -68,7 +68,9 @@ def read_only(folder: Path):
     """``folder`` made so that nothing can be written in it: by its mode on POSIX, and on
     Windows (which has no mode bits for it) by denying everyone writes in its ACL."""
     if sys.platform == "win32":
-        subprocess.run(["icacls", str(folder), "/deny", "*S-1-1-0:(W)"], check=True, capture_output=True)
+        # Adding files and folders only: the generic W would deny SYNCHRONIZE too, which
+        # stops the folder being opened at all.
+        subprocess.run(["icacls", str(folder), "/deny", "*S-1-1-0:(WD,AD)"], check=True, capture_output=True)
         try:
             yield
         finally:
