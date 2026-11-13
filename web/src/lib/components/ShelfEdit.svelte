@@ -1,13 +1,26 @@
 <script lang="ts">
 	// Editing a shelf cover's side by hand: turn it, mirror it, level a sheet laid askew,
-	// and crop it. The original is kept, so "As it came" undoes it all. Turns and mirrors
-	// are saved as they're made (carrying the crop and level along); the crop and the
-	// level are saved with "Save".
+	// and crop it. Nothing is saved until "Save" (turns and mirrors show here first,
+	// drawn from the side as it was), so "Cancel" leaves the side as it was. The original
+	// is kept, so "As it came" undoes every edit ever made (that one saves at once).
 	import { untrack } from 'svelte';
 	import type { ShelfCover, ShelfSide } from '../api-types';
 	import { api } from '../api';
 	import type { Action } from '../actions.svelte';
-	import { mirror, mirrorDown, shownBox, turnLeft, turnRight, type Box } from '../crop';
+	import {
+		applyView,
+		flipDownView,
+		flipView,
+		mirror,
+		mirrorDown,
+		NO_CHANGE,
+		shownBox,
+		turnLeft,
+		turnRight,
+		turnView,
+		type Box,
+		type View
+	} from '../crop';
 	import CropBox from './CropBox.svelte';
 
 	let { cover, side, act, onchange, onclose }: {
@@ -24,30 +37,89 @@
 
 	let box = $state<Box>(untrack(() => shownBox(s.crop, s.width, s.height, s.rotate, s.flip)));
 	let angle = $state(untrack(() => shownAngle(s)));
+	let view = $state<View>(NO_CHANGE); // turns and mirrors not saved yet
 
 	const crop = (x: Box): [number, number, number, number] => [x.l, x.t, x.r, x.b];
-	const quarter = (r: number) => (((r % 360) + 360) % 360) as ShelfSide['rotate'];
+	const changed = $derived(view.turn !== 0 || view.flip);
 
-	// Save the side, then take the box and level from what came back.
-	async function send(body: Parameters<typeof api.shelfEdit>[2]) {
-		const out = await act.run(() => api.shelfEdit(cover.id, side, body));
+	// The whole side as saved, and drawn turned and mirrored as the view says.
+	const whole = $derived(api.shelfWholeUrl(cover, side));
+	let base = $state<HTMLImageElement | null>(null);
+	let drawn = $state<string | null>(null);
+	$effect(() => {
+		const img = new Image();
+		img.onload = () => (base = img);
+		img.src = whole;
+		return () => (img.onload = null);
+	});
+	$effect(() => {
+		if (!base || !changed) {
+			drawn = null;
+			return;
+		}
+		const c = document.createElement('canvas');
+		const sideways = view.turn % 180 !== 0;
+		c.width = sideways ? base.naturalHeight : base.naturalWidth;
+		c.height = sideways ? base.naturalWidth : base.naturalHeight;
+		const ctx = c.getContext('2d');
+		if (!ctx) return;
+		if (view.flip) {
+			ctx.translate(c.width, 0);
+			ctx.scale(-1, 1);
+		}
+		ctx.translate(c.width / 2, c.height / 2);
+		ctx.rotate((view.turn * Math.PI) / 180);
+		ctx.drawImage(base, -base.naturalWidth / 2, -base.naturalHeight / 2);
+		let url: string | null = null;
+		let gone = false;
+		c.toBlob((b) => {
+			if (!b || gone) return;
+			url = URL.createObjectURL(b);
+			drawn = url;
+		}, 'image/jpeg', 0.9);
+		return () => {
+			gone = true;
+			if (url) URL.revokeObjectURL(url);
+		};
+	});
+
+	const turn = (by: 90 | -90) => {
+		box = by === 90 ? turnRight(box) : turnLeft(box);
+		view = turnView(view, by);
+	};
+	// Mirrored, a lean shows the other way.
+	const flipAcross = () => {
+		box = mirror(box);
+		view = flipView(view);
+		angle = -angle;
+	};
+	// Upside down and mirrored is mirrored top to bottom.
+	const flipDown = () => {
+		box = mirrorDown(box);
+		view = flipDownView(view);
+		angle = -angle;
+	};
+
+	async function save() {
+		const out = await act.run(() => api.shelfEdit(cover.id, side, {
+			...(changed ? applyView(s.rotate, s.flip, view) : {}),
+			crop: crop(box),
+			straighten: angle
+		}));
+		if (!out) return;
+		await onchange();
+		onclose();
+	}
+
+	async function reset() {
+		const out = await act.run(() => api.shelfEdit(cover.id, side, { reset: true }));
 		if (!out) return;
 		const x = out[side] as ShelfSide;
 		box = shownBox(x.crop, x.width, x.height, x.rotate, x.flip);
 		angle = shownAngle(x);
+		view = NO_CHANGE;
 		await onchange();
-		return out;
 	}
-
-	const turn = (by: 90 | -90) =>
-		send({ rotate: quarter(s.rotate + by), crop: crop(by === 90 ? turnRight(box) : turnLeft(box)), straighten: angle });
-	// Mirrored, a lean shows the other way.
-	const flipAcross = () => send({ flip: !s.flip, crop: crop(mirror(box)), straighten: -angle });
-	// Upside down and mirrored is mirrored top to bottom.
-	const flipDown = () =>
-		send({ flip: !s.flip, rotate: quarter(s.rotate + 180), crop: crop(mirrorDown(box)), straighten: -angle });
-	const save = () => send({ crop: crop(box), straighten: angle }).then((v) => v && onclose());
-	const reset = () => send({ reset: true });
 </script>
 
 <div class="edit">
@@ -64,17 +136,19 @@
 	</div>
 	<CropBox bind:box>
 		<div class="frame">
-			<img src={api.shelfWholeUrl(cover, side)} alt="The whole side, with the crop" draggable="false"
+			<img src={drawn ?? whole} alt="The whole side, with the crop" draggable="false"
 				style:transform={angle ? `rotate(${angle}deg)` : undefined} />
 		</div>
 	</CropBox>
 	<p class="small muted">
 		{s.by_hand ? 'Edited by hand.' : s.crop ? 'Trimmed automatically.' : 'The whole picture.'}
-		Drag the box's edges or corners, or use the sliders. The original is kept, and the cover is read again once it's saved.
+		Drag the box's edges or corners, or use the sliders. Nothing is kept until you save; the original is kept
+		too, and the cover's text is read again once it's saved.
 	</p>
 	<div class="row">
 		<button class="primary" disabled={act.busy} onclick={save}>Save</button>
-		<button disabled={act.busy || !(s.by_hand || s.flip || s.straighten || s.rotate)} title="Undo every edit: trimmed as it was scanned, not turned, flipped or straightened"
+		<button disabled={act.busy || !(s.by_hand || s.flip || s.straighten || s.rotate)}
+			title="Undo every edit, saved straight away: trimmed as it was scanned, not turned, flipped or straightened"
 			onclick={reset}>As it came</button>
 		<button class="link small" onclick={onclose}>Cancel</button>
 	</div>
