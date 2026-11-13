@@ -476,6 +476,42 @@ async def test_refused_token_stops_the_worker_with_one_clear_message(tmp_path, m
     assert not any("unreachable" in r.getMessage() for r in caplog.records)
 
 
+async def test_a_worker_started_first_waits_for_the_controller_and_follows_its_restart(tmp_path, monkeypatch, caplog):
+    # Down at first (the worker came up before it), then up without the MakeMKV settings
+    # (not fatal), then restarted, forgetting the worker: it registers again each time.
+    calls = []
+    script = {"register": [httpx.ConnectError("refused"), httpx.ConnectError("refused")]}
+    heartbeats = [httpx.Response(404, json={"detail": "unknown worker"})]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        calls.append(path)
+        if path.endswith("/register"):
+            if script["register"]:
+                raise script["register"].pop(0)
+            return httpx.Response(200, json={})
+        if path.endswith("/makemkv"):
+            return httpx.Response(500)
+        if path.endswith("/heartbeat"):
+            return heartbeats.pop(0) if heartbeats else httpx.Response(200, json={})
+        await asyncio.sleep(0.05)  # a long-poll with nothing to do
+        return httpx.Response(200, json={"commands": []})
+
+    monkeypatch.setattr(agentmod, "UNREACHABLE_RETRY_S", 0.01)
+    monkeypatch.setattr(agentmod, "RESTART_RETRY_S", 0.01)
+    client = httpx.AsyncClient(base_url="http://c", transport=httpx.MockTransport(handler))
+    agent = Agent(worker_settings(tmp_path, "http://c"), FakeDrives(present=set()), client=client)
+    task = asyncio.create_task(agent.run_forever())
+    try:
+        await until(lambda: calls.count("/api/workers/register") >= 4, what="registering again after the restart")
+    finally:
+        task.cancel()
+    logged = [r.getMessage() for r in caplog.records]
+    assert sum("controller unreachable (ConnectError); retrying" in m for m in logged) == 2
+    assert any(m.startswith("could not fetch MakeMKV settings from the controller") for m in logged)
+    assert any("registering again" in m for m in logged)
+
+
 def test_leftover_rip_folders_are_removed_at_start(tmp_path):
     s = worker_settings(tmp_path, "http://c")
     (s.scratch_dir / "remote-run-7").mkdir()
