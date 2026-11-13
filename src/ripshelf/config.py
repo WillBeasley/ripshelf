@@ -59,6 +59,8 @@ REQUIRED_FOLDERS = {"library_dir", "scratch_dir"}
 # The model each vision provider uses when none is set. A hosted OpenAI-compatible
 # service has none: its model names are its own.
 VISION_MODELS = {"local": "qwen3-vl:4b-instruct", "anthropic": "claude-opus-5-5"}
+# Offered to pick from for one reading, with Anthropic (its other providers list their own).
+ANTHROPIC_VISION_MODELS = ("claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5")
 
 
 def vision_model_for(provider: str, model: str | None) -> str | None:

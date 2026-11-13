@@ -33,6 +33,7 @@ from .listing import EXTRAS_TYPES, LANGUAGE, QUOTED
 log = logging.getLogger(__name__)
 
 MAX_PX = 1600
+LIST_TIMEOUT_S = 10
 LOCAL_TIMEOUT_S = 300  # a 4B model on a desktop CPU takes a minute or two a picture
 CLOUD_TIMEOUT_S = 90
 MAX_TOKENS = 8000
@@ -380,6 +381,29 @@ class Provider:
             raise VisionError("the model ran out of room before finishing")
         text = next((b.text for b in response.content if b.type == "text"), "")
         return _json(text)
+
+
+async def list_models(provider: Provider) -> list[str]:
+    """The models an OpenAI-compatible server offers (``/v1/models``; Ollama's own
+    ``/api/tags`` when that isn't there). VisionError when it can't be asked."""
+    if not provider.url:
+        raise VisionError("no address is set")
+    root = provider.url.rstrip("/").removesuffix("/v1")
+    headers = {"Authorization": f"Bearer {provider.key}"} if provider.key else {}
+    tried = []
+    async with httpx.AsyncClient(timeout=LIST_TIMEOUT_S, transport=provider.transport) as c:
+        for path, field, name in (("/v1/models", "data", "id"), ("/api/tags", "models", "name")):
+            try:
+                r = await c.get(root + path, headers=headers)
+                if r.status_code >= 400:
+                    tried.append(f"{path}: HTTP {r.status_code}")
+                    continue
+                return sorted({m[name] for m in r.json()[field] if isinstance(m.get(name), str)})
+            except httpx.HTTPError as e:
+                raise VisionError(f"couldn't reach {root} ({type(e).__name__})") from None
+            except (ValueError, KeyError, TypeError, AttributeError):
+                tried.append(f"{path}: not a list of models")
+    raise VisionError(f"{root} didn't list its models ({'; '.join(tried)})")
 
 
 async def read_listing(provider: Provider, img: Image.Image) -> tuple[Listing, float]:

@@ -820,6 +820,20 @@ class ShelfView(BaseModel):
     limit: int = Field(description="the most covers the shelf keeps")
 
 
+class ShelfVisionRequest(BaseModel):
+    model: str | None = Field(None, max_length=200, description=(
+        "the model to ask this once, on the vision model's connection; Settings' if left out"))
+
+
+class VisionModels(BaseModel):
+    """The models the vision model's connection offers, to pick one for a reading."""
+
+    provider: Literal["local", "openai", "anthropic"]
+    current: str | None = Field(None, description="the model Settings ask")
+    models: list[str] = []
+    message: str | None = Field(None, description="why the list is short or empty (it couldn't be fetched)")
+
+
 class ShelfScanRequest(BaseModel):
     mode: StackMode = "duplex"
     dpi: int | None = Field(None, description="the Settings default if left out")
