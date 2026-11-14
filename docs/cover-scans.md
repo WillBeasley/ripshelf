@@ -95,7 +95,7 @@ A vision model, a language model that reads pictures, gets most of these. ripshe
 **Where it runs:**
 - **On your network:** Ollama, or any other server with an OpenAI-compatible API (LM Studio, vLLM…). Set its address; the model is `qwen3-vl:4b-instruct` unless you name another.
 - **A cloud service with an OpenAI-compatible API:** its address, the model and a key.
-- **Anthropic's API:** a key. The model is `claude-opus-5-5` unless you name another from Anthropic's model list (a smaller one, such as `claude-haiku-5-5`, costs less a scan).
+- **Anthropic's API:** a key. The model is `claude-sonnet-5-5` unless you name another from Anthropic's model list: `claude-haiku-5-5` costs less a scan but misses more of the small print (regions, extras), and `claude-opus-5-5` costs about twice as much as Sonnet for no better reading on the covers tried. About $0.014 a slipcover with Sonnet.
 
 Left blank, the model is the default for where it runs; a hosted OpenAI-compatible service has none, so name one of its models. Switching where it runs clears a model name that was the old one's default.
 
