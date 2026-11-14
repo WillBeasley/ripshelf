@@ -532,7 +532,7 @@ async def test_models_to_pick_from(harness, settings):
     settings.vision_mode, settings.vision_provider = "manual", "anthropic"
     async with harness() as h:
         got = await h.m.vision_models()
-        assert got.current == "claude-opus-5-5" and got.models[0].startswith("claude-haiku") and not got.message
+        assert got.current == "claude-sonnet-5-5" and got.models[0].startswith("claude-haiku") and not got.message
         settings.vision_provider, settings.vision_url, settings.vision_model = "local", "http://ollama.test", "mine:7b"
         h.m.vision_transport = models_server({"/api/tags": (200, {"models": [{"name": "qwen3-vl:4b-instruct"}]})})
         got = await h.m.vision_models()

@@ -57,8 +57,9 @@ REQUIRED_FOLDERS = {"library_dir", "scratch_dir"}
 
 # The sections of the Settings screen, in order (web/src/lib/settings/sections.ts has their names).
 # The model each vision provider uses when none is set. A hosted OpenAI-compatible
-# service has none: its model names are its own.
-VISION_MODELS = {"local": "qwen3-vl:4b-instruct", "anthropic": "claude-opus-5-5"}
+# service has none: its model names are its own. On 22 slipcovers (scripts/compare-vision.py),
+# Sonnet read as well as Opus at less than half the cost, and faster.
+VISION_MODELS = {"local": "qwen3-vl:4b-instruct", "anthropic": "claude-sonnet-5-5"}
 # Offered to pick from for one reading, with Anthropic (its other providers list their own).
 ANTHROPIC_VISION_MODELS = ("claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5")
 

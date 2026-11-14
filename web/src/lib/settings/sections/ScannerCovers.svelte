@@ -79,7 +79,8 @@
 					On a desktop CPU, qwen3-vl:4b-instruct takes a minute or two a picture (qwen2.5vl:7b reads more carefully, at
 					twice the time). It waits while a transcode runs. Use an instruct model, not a "thinking" one.
 				{:else if f.vision_provider === 'anthropic'}
-					Any Claude model reads pictures; a smaller one, such as claude-haiku-5-5, costs less a scan.
+					Any Claude model reads pictures. claude-haiku-5-5 costs less a scan but misses more of the small print;
+					claude-opus-5-5 costs about twice as much as the default.
 				{:else}
 					Use a model the service lists as reading images.
 				{/if}
