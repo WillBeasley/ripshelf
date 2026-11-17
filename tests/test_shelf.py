@@ -27,7 +27,7 @@ from ripshelf.scanner import images, ocr, stack
 
 from .conftest import read_picture, until
 from .test_contribute import heron_job, put
-from .test_scan_text import FakeReader
+from .test_scan_text import FakeReader, wait_listing
 from .test_scans import URL, fake_scanner
 
 CODE = "5012345678900"
@@ -324,15 +324,66 @@ async def test_edit_a_side_by_hand_and_undo_it(harness, settings):
             await h.m.edit_shelf_side("nope", "outside", ShelfSideUpdate(rotate=90))
 
 
-async def test_an_edited_side_goes_to_the_job_as_shown(harness, settings):
+async def turned_by_hand(h) -> ShelfCover:
+    """A cover Tesseract always wants turned a quarter: the reading turns the inside,
+    and its outside and inside are then turned back by hand, the outside upside down."""
+    h.m.text_reader = FakeReader(["THE LANTERN KEEPER"], turn=90)
+    c = (await h.m.add_shelf_upload([outside(), inside()], [])).covers[0]
+    await until(lambda: h.m.shelf_cover(c.id).reading.state == "done", 10, "reading")
+    assert h.m.shelf_cover(c.id).inside.rotate == 90  # the reading turned it
+    await h.m.edit_shelf_side(c.id, "inside", ShelfSideUpdate(rotate=0))
+    await h.m.edit_shelf_side(c.id, "outside", ShelfSideUpdate(rotate=180))
+    return await until(lambda: (x := h.m.shelf_cover(c.id)).reading.state == "done" and x, 10, "read again")
+
+
+async def test_a_turn_set_on_the_shelf_stays_on_the_job(harness, settings):
+    """The job's own reading used to turn the picture again, as Tesseract wanted, over
+    the turn set by hand on the shelf."""
+    async with harness("fake-pioneer") as h:
+        job = put(h, heron_job(state=JobState.review))
+        c = await turned_by_hand(h)
+        assert (c.outside.rotate, c.inside.rotate) == (180, 0)
+        await h.m.use_shelf_cover(c.id, job.id)
+        done = await wait_listing(h, job.id)
+        out, ins = done.scans
+        assert (out.sha256, ins.sha256) == (c.outside.sha256, c.inside.sha256)  # the originals, for the library
+        assert (out.rotate, ins.rotate) == (180, 0) and out.rotate_by_hand and ins.rotate_by_hand
+        assert (out.crop, ins.crop) == (c.outside.crop, c.inside.crop)
+        assert h.m.scan_text(job.id, ins.id).turned == 0
+
+
+async def test_a_turn_set_on_the_shelf_stays_for_a_drives_next_disc(harness, settings):
+    async with harness("fake-pioneer") as h:
+        c = await turned_by_hand(h)
+        pending = (await h.m.shelf_cover_for_drive(c.id, "fake-pioneer")).scans
+        assert [(p.rotate, p.rotate_by_hand) for p in pending] == [(180, True), (0, True)]
+        job = put(h, heron_job(state=JobState.review))
+        assert await h.m.attach_pending(job.id) == 2
+        done = await wait_listing(h, job.id)
+        assert [(s.rotate, s.crop) for s in done.scans] == [(180, c.outside.crop), (0, c.inside.crop)]
+
+
+async def test_a_side_turned_by_the_reading_keeps_its_turn(harness, settings):
+    async with harness("fake-pioneer") as h:
+        h.m.text_reader = FakeReader(["THE LANTERN KEEPER"], turn=90)
+        c = (await h.m.add_shelf_upload([outside(), inside()], [])).covers[0]
+        c = await until(lambda: (x := h.m.shelf_cover(c.id)).reading.state == "done" and x, 10, "reading")
+        job = put(h, heron_job(state=JobState.review))
+        await h.m.use_shelf_cover(c.id, job.id)
+        ins = (await wait_listing(h, job.id)).scans[1]
+        assert ins.rotate == c.inside.rotate == 90, "not turned a second time"
+
+
+async def test_a_mirrored_side_goes_to_the_job_as_shown(harness, settings):
     async with harness("fake-pioneer") as h:
         job = put(h, heron_job(state=JobState.review))
         c = (await h.m.add_shelf_upload([outside(), inside()], [])).covers[0]
-        await h.m.edit_shelf_side(c.id, "inside", ShelfSideUpdate(rotate=90))
+        await h.m.edit_shelf_side(c.id, "inside", ShelfSideUpdate(rotate=90, flip=True))
         done = await h.m.use_shelf_cover(c.id, job.id)
         out, ins = done.scans
         assert out.sha256 == c.outside.sha256  # not edited: the original
-        assert ins.content_type == "image/jpeg" and ins.height > ins.width  # trimmed, and turned
+        assert ins.content_type == "image/jpeg" and ins.height > ins.width  # trimmed, turned and mirrored
+        assert (ins.rotate, ins.crop, ins.rotate_by_hand) == (0, None, True)
 
 
 # --- reading -----------------------------------------------------------------------------------------

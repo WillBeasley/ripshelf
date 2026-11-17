@@ -509,6 +509,8 @@ class CoverScan(BaseModel):
     sha256: str
     size_bytes: int
     rotate: ScanRotate = Field(0, description="turned clockwise by this much when shown or used")
+    rotate_by_hand: bool = Field(False, description="turned by hand (here or on the covers shelf): reading "
+                                                    "the text doesn't turn it again")
     crop: list[int] | None = Field(None, description="the picture within the scan, [left, top, right, "
                                                      "bottom] in the original's pixels, when trimmed")
     crop_by_hand: bool = Field(False, description="the crop was set by hand, not found by trimming")
