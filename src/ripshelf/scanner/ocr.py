@@ -279,15 +279,18 @@ def _unturn(box: tuple[int, int, int, int], size: tuple[int, int], turned: int) 
 
 
 async def read_picture(reader: Tesseract, img: Image.Image, kind: str, split: ScanSplit | None = None,
-                       barcodes: bool = True) -> Reading:
-    """Read one picture (already trimmed and turned as the scan says)."""
+                       barcodes: bool = True, orient: bool = True) -> Reading:
+    """Read one picture (already trimmed and turned as the scan says). Without ``orient``
+    it's read the way it is, never turned (it was turned by hand)."""
     img = img.convert("RGB")
-    small = img.copy()
-    small.thumbnail((OSD_PX, OSD_PX))
-    turn, conf = await reader.orientation(small)
+    turn, conf = 0, 0.0
+    if orient:
+        small = img.copy()
+        small.thumbnail((OSD_PX, OSD_PX))
+        turn, conf = await reader.orientation(small)
+        if kind == "outside_full" and await asyncio.to_thread(is_wrap, small):
+            turn, conf = await _wrap_turn(reader, small, turn, conf)
     out = Reading()
-    if kind == "outside_full" and await asyncio.to_thread(is_wrap, small):
-        turn, conf = await _wrap_turn(reader, small, turn, conf)
     if turn and conf >= OSD_MIN_CONFIDENCE:
         out.turned = turn
         img = img.rotate(-turn, expand=True)

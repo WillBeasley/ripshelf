@@ -17,7 +17,7 @@ A disc's box often says more than the disc does. The back lists the extras, the 
 | Insert page | booklet or leaflet pages, numbered in order |
 | Other | anything else (a slipcover, a steelbook's inside) |
 
-You can change a picture's kind after adding it, turn it a quarter at a time (⟳) and remove it. Click a thumbnail to see it larger, or to open the original file.
+You can change a picture's kind after adding it, turn it a quarter at a time (⟳) and remove it. A turn you make stays: reading the text doesn't turn it back. Click a thumbnail to see it larger, or to open the original file.
 
 ## What's on the disc
 
@@ -48,7 +48,7 @@ Reading takes a few seconds a picture, one job at a time.
 [Tesseract](https://github.com/tesseract-ocr/tesseract) reads the text, and [zbar](https://github.com/mchehab/zbar) the barcode. For each picture:
 
 1. **Size.** It is scaled to about 300 dpi.
-2. **Orientation.** It is turned the right way up if it was scanned on its side. The scan's thumbnail turns with it. A whole outer sheet (much wider than tall, or with a spine down it) is only ever turned to lie flat, never stood on its end; a front or back on its own is turned whichever way its text runs.
+2. **Orientation.** It is turned the right way up if it was scanned on its side (unless you turned it yourself). The scan's thumbnail turns with it. A whole outer sheet (much wider than tall, or with a spine down it) is only ever turned to lie flat, never stood on its end; a front or back on its own is turned whichever way its text runs.
 3. **Parts.** A whole outer sheet is read as its back, spine and front, cut where the spine is. **Cut into front and back covers…** moves the cut.
 4. **Two readings.** Each part is read as it is (best for flatbed scans) and with local contrast (best for phone photos, with glare and coloured stripes behind the text). The fuller reading of each line is kept.
 
@@ -293,7 +293,7 @@ The list beside **Read with the vision model** picks the model to read it with, 
 
 **Save** keeps it all; **Cancel** (or closing the cover) keeps none of it. The original file is never changed: the edits are kept beside it, so **As it came** undoes them all, back to the trim ripshelf found. Once a side is edited, the cover is read again as it now shows (Tesseract, zbar and the barcode lookups). The vision model isn't asked again: its last reading of the cover is kept, and **Read with the vision model** reads the edited cover when you want it to. The reading no longer turns it the way its text runs, so it stays as you set it.
 
-When an edited cover is used on a job or for a drive's next disc, the edited sides go as you see them (a JPEG of each), and the sides you didn't edit go as they were scanned.
+When a cover is used on a job or for a drive's next disc, its sides go as you see them: the file as it was scanned, with the same crop and turn (so the library gets the original), or, for a side mirrored or straightened, a JPEG of it as it's shown. A side turned by hand, or by the shelf's reading, isn't turned again by the job's.
 
 ### Using a cover
 

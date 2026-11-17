@@ -679,6 +679,10 @@ export interface CoverScan {
    */
   rotate: 0 | 90 | 180 | 270;
   /**
+   * turned by hand (here or on the covers shelf): reading the text doesn't turn it again
+   */
+  rotate_by_hand: boolean;
+  /**
    * the picture within the scan, [left, top, right, bottom] in the original's pixels, when trimmed
    */
   crop: number[] | null;
@@ -2088,6 +2092,10 @@ export interface PendingScan {
    * turned clockwise by this much when shown or used
    */
   rotate: 0 | 90 | 180 | 270;
+  /**
+   * turned by hand (here or on the covers shelf): reading the text doesn't turn it again
+   */
+  rotate_by_hand: boolean;
   /**
    * the picture within the scan, [left, top, right, bottom] in the original's pixels, when trimmed
    */

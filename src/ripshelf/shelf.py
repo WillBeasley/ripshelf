@@ -14,8 +14,10 @@ read and filed like any other) or kept for a drive's next disc, and leaves the s
 A job in review is offered the covers that look like it (``suggestions``).
 
 A side can be cropped, turned, mirrored and straightened by hand. The original is kept
-and the edits are numbers beside it, so they can be undone; a side edited by hand goes
-to its job as the picture it shows. An edit doesn't ask the vision model again.
+and the edits are numbers beside it, so they can be undone. A side goes to its job as
+it's shown: the original with the same crop and turn (a turn by hand stays, as the job's
+reading doesn't turn it again), or the picture it shows when mirrored or straightened.
+An edit doesn't ask the vision model again.
 
 The shelf lives in ``<data>/covers``: an ``index.json`` and the pictures, kept until
 used or deleted. A two-pass stack's first pass waits in ``covers/stack`` for the second.
@@ -66,6 +68,7 @@ from .models import (
     sentence,
 )
 from .providers import release_info
+from .scanjobs import Look
 from .scanner import images, ocr, stack, vision
 from .scanner import listing as parse
 from .visionjobs import TRANSCODE_WAIT_S
@@ -448,21 +451,29 @@ class ShelfMixin:
 
     # --- using a cover -------------------------------------------------------------------------
 
-    async def _take_cover(self, cover_id: str) -> tuple[ShelfCover, dict[str, bytes]]:
-        """Take a cover off the shelf, with its pictures."""
+    async def _take_cover(self, cover_id: str) -> tuple[ShelfCover, dict[str, tuple[bytes, Look]]]:
+        """Take a cover off the shelf, with its pictures and how each is shown: the
+        original with its crop and turn, or the picture it shows when it was mirrored or
+        straightened (a job's scan can't be). Its turn stays once it was set by hand or
+        the cover was read."""
         async with self._shelf_lock:
             idx = self._shelf_index()
             c = next((c for c in idx.covers if c.id == cover_id), None)
             if not c:
                 raise KeyError(cover_id)
-            data = {name: self._side_path(c.id, name, s).read_bytes() for name in ("outside", "inside")
-                    if (s := getattr(c, name))}
-            for name, d in data.items():
-                if (s := getattr(c, name)).by_hand:  # the job gets the picture as it was edited
-                    data[name] = await asyncio.to_thread(lambda d=d, s=s: images.jpeg(_render(d, s)))
+            out: dict[str, tuple[bytes, Look]] = {}
+            for name in ("outside", "inside"):
+                if not (s := getattr(c, name)):
+                    continue
+                d = self._side_path(c.id, name, s).read_bytes()
+                if s.flip or s.straighten:
+                    d = await asyncio.to_thread(lambda d=d, s=s: images.jpeg(_render(d, s)))
+                    out[name] = d, Look(None, 0, True, True)
+                else:
+                    out[name] = d, Look(s.crop, s.rotate, s.by_hand, s.by_hand or c.reading.state == "done")
             idx.covers.remove(c)
             self._save_shelf(idx)
-        return c, data
+        return c, out
 
     async def _put_back(self, c: ShelfCover) -> None:
         async with self._shelf_lock:
@@ -481,8 +492,8 @@ class ShelfMixin:
         source = "upload" if c.source == "camera" else c.source
         added = []
         try:
-            for name, d in data.items():
-                added.append(await self.add_scan(job_id, d, KINDS[name], source))
+            for name, (d, look) in data.items():
+                added.append(await self.add_scan(job_id, d, KINDS[name], source, look=look))
         except (OSError, ValueError, KeyError):
             for sc in added:  # the side already added comes off, as the cover goes back whole
                 await self.delete_scan(job_id, sc.id)
@@ -501,8 +512,8 @@ class ShelfMixin:
         source = "upload" if c.source == "camera" else c.source
         added = []
         try:
-            for name, d in data.items():
-                added.append(await self.add_pending(drive_id, d, KINDS[name], source))
+            for name, (d, look) in data.items():
+                added.append(await self.add_pending(drive_id, d, KINDS[name], source, look))
         except (OSError, ValueError, KeyError):
             for p in added:
                 await self.delete_pending(drive_id, p.id)
@@ -815,7 +826,7 @@ class ShelfMixin:
                 try:
                     data = self._side_path(c.id, name, s).read_bytes()
                     img = await asyncio.to_thread(_render, data, s)
-                    got = await ocr.read_picture(reader, img, KINDS[name], s.split)
+                    got = await ocr.read_picture(reader, img, KINDS[name], s.split, orient=not s.by_hand)
                 except (OSError, images.ImageError) as e:
                     await self._set_reading(cover_id, ShelfReading(state="failed",
                                                                    message=f"Couldn't read the {name}: {e}"))
@@ -894,7 +905,6 @@ class ShelfMixin:
 
 def _render(data: bytes, s: ShelfSide):
     return images.render(data, s.crop, s.rotate, s.flip, s.straighten)
-
 
 def _mismatch(st: ShelfStack) -> str:
     a, b = len(st.first), len(st.second)
