@@ -1,10 +1,12 @@
 <script lang="ts">
-	// Pictures of a box added before its disc goes in. The drive keeps them for a day;
-	// the next disc put in it takes them, and they're read as it's identified.
+	// Pictures of a box added before its disc goes in (scanned, uploaded, or a cover from
+	// the shelf). The drive keeps them for a day; the next disc put in it takes them, and
+	// they're read as it's identified.
 	import type { PendingScans, ScannerInfo } from '../api-types';
 	import { api, type ScanKind } from '../api';
 	import { Action } from '../actions.svelte';
 	import { when } from '../format';
+	import ShelfPicker from './ShelfPicker.svelte';
 
 	let { driveId, onchange }: { driveId: string; onchange?: (n: number) => void } = $props();
 	const act = new Action();
@@ -22,6 +24,8 @@
 	let data = $state<PendingScans | null>(null);
 	let scanner = $state<ScannerInfo | null>(null);
 	let kind = $state<ScanKind>('back');
+	let onShelf = $state(0);
+	let picker = $state<ShelfPicker | null>(null);
 	const touch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 	const scanning = $derived(data?.scanner?.state === 'scanning');
 
@@ -38,7 +42,18 @@
 		driveId;
 		load();
 		api.scanner().then((s) => (scanner = s)).catch(() => {});
+		api.shelf().then((v) => (onShelf = v.covers.length)).catch(() => {});
 	});
+
+	// The shelf's covers, newest first, as the Covers page lists them.
+	const shelfCovers = async () => (await api.shelf()).covers.map((cover) => ({ cover, score: 0, reason: '' }));
+
+	async function fromShelf(id: string): Promise<boolean> {
+		data = await api.shelfForDrive(id, driveId);
+		onchange?.(data.scans.length);
+		onShelf = Math.max(0, onShelf - 1);
+		return true;
+	}
 
 	// While the scanner works the list changes on the server; look again until it's done.
 	$effect(() => {
@@ -87,7 +102,16 @@
 				<input type="file" accept="image/*" capture="environment" disabled={act.busy} onchange={(e) => upload(e, 'camera')} />
 			</label>
 		{/if}
+		{#if onShelf}
+			<button disabled={act.busy} onclick={() => picker?.show()}>Pick a cover from the shelf ({onShelf})</button>
+		{/if}
 	</div>
+	<ShelfPicker
+		bind:this={picker}
+		intro="Its sides wait here for the next disc, turned and cropped as on the shelf, with what was read on them."
+		load={shelfCovers}
+		onpick={fromShelf}
+	/>
 	{#if data?.scanner}
 		<div class="small status" class:bad={data.scanner.state === 'failed'} role="status">
 			{#if scanning}<span class="spinner" aria-hidden="true"></span>Scanning the {kindName[data.scanner.kind].toLowerCase()}…

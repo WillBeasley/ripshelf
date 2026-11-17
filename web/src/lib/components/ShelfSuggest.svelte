@@ -4,7 +4,9 @@
 	import type { Job, ShelfSuggestion } from '../api-types';
 	import { api } from '../api';
 	import { Action } from '../actions.svelte';
-	import { coverFacts, coverTitle } from '../shelf';
+	import { live } from '../live.svelte';
+	import { coverTitle } from '../shelf';
+	import ShelfPicker from './ShelfPicker.svelte';
 
 	let { job }: { job: Job } = $props();
 	const act = new Action();
@@ -12,9 +14,7 @@
 	let suggestions = $state<ShelfSuggestion[]>([]);
 	let onShelf = $state(0);
 	let dismissed = $state<string | null>(null);
-	let picks = $state<ShelfSuggestion[] | null>(null);
-	let query = $state('');
-	let dialog = $state<HTMLDialogElement | null>(null);
+	let picker = $state<ShelfPicker | null>(null);
 
 	const hasSheet = $derived(job.scans.some((s) => s.kind === 'outside_full' || s.kind === 'front'));
 	const top = $derived(suggestions[0] ?? null);
@@ -40,31 +40,21 @@
 		api.shelf().then((v) => (onShelf = v.covers.length)).catch(() => {});
 	});
 
-	async function openPicker() {
-		query = '';
-		picks = null;
-		dialog?.showModal();
-		picks = (await act.run(() => api.shelfSuggestions(job.id, true))) ?? [];
+	function taken(id: string) {
+		suggestions = suggestions.filter((s) => s.cover.id !== id);
+		onShelf = Math.max(0, onShelf - 1);
 	}
 
 	async function use(id: string) {
-		const out = await act.run(() => api.shelfUseInJob(id, job.id));
-		if (out) {
-			dialog?.close();
-			suggestions = suggestions.filter((s) => s.cover.id !== id);
-			onShelf = Math.max(0, onShelf - 1);
-		}
+		if (await act.run(() => api.shelfUseInJob(id, job.id))) taken(id);
 	}
 
-	const shown = $derived(
-		(picks ?? []).filter((p) => {
-			const q = query.trim().toLowerCase();
-			if (!q) return true;
-			const r = p.cover.reading;
-			const hay = [r.title, r.year, r.barcode, r.barcode_name, r.catalogue_number].filter(Boolean).join(' ').toLowerCase();
-			return q.split(/\s+/).every((w) => hay.includes(w));
-		})
-	);
+	// From the picker, which shows its own errors.
+	async function pick(id: string): Promise<boolean> {
+		live.upsertJob(await api.shelfUseInJob(id, job.id));
+		taken(id);
+		return true;
+	}
 </script>
 
 {#if top && !hasSheet && dismissed !== top.cover.id}
@@ -81,38 +71,16 @@
 	</div>
 {/if}
 {#if onShelf}
-	<div><button class="link small" onclick={openPicker}>Pick a cover from the shelf ({onShelf})</button></div>
+	<div><button class="link small" onclick={() => picker?.show()}>Pick a cover from the shelf ({onShelf})</button></div>
 {/if}
-{#if act.error && !dialog?.open}<p class="small error-text">{act.error}</p>{/if}
+{#if act.error}<p class="small error-text">{act.error}</p>{/if}
 
-<dialog bind:this={dialog}>
-	<div class="stack picker">
-		<div class="spread">
-			<strong>Pick a cover from the shelf</strong>
-			<button class="link" onclick={() => dialog?.close()} aria-label="Close">✕</button>
-		</div>
-		<p class="small muted">Its sides become this disc's scans: they're read, help identify it, and are filed with it.</p>
-		<input type="search" placeholder="Search by title, year or barcode" bind:value={query} />
-		{#if picks === null}
-			<p class="small muted"><span class="spinner" aria-hidden="true"></span>Loading…</p>
-		{:else if !shown.length}
-			<p class="small muted">No cover matches.</p>
-		{/if}
-		<ul class="picks">
-			{#each shown as p (p.cover.id)}
-				<li>
-					<button class="pick" disabled={act.busy} onclick={() => use(p.cover.id)}>
-						{#if p.cover.outside}<img src={api.shelfSideUrl(p.cover, 'outside')} alt="" loading="lazy" />{/if}
-						<span class="title">{coverTitle(p.cover)}</span>
-						{#if coverFacts(p.cover)}<span class="small muted">{coverFacts(p.cover)}</span>{/if}
-						{#if p.score > 0}<span class="small muted">{Math.round(p.score * 100)}% · {p.reason}</span>{/if}
-					</button>
-				</li>
-			{/each}
-		</ul>
-		{#if act.error}<p class="small error-text">{act.error}</p>{/if}
-	</div>
-</dialog>
+<ShelfPicker
+	bind:this={picker}
+	intro="Its sides become this disc's scans: they're read, help identify it, and are filed with it."
+	load={() => api.shelfSuggestions(job.id, true)}
+	onpick={pick}
+/>
 
 <style>
 	.banner-shelf {
@@ -134,55 +102,6 @@
 	.text {
 		flex: 1 1 180px;
 		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	dialog {
-		padding: 12px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		background: var(--surface);
-		color: var(--text);
-		width: min(96vw, 900px);
-		max-width: 96vw;
-	}
-	dialog::backdrop {
-		background: rgb(0 0 0 / 0.7);
-	}
-	.picker {
-		gap: 8px;
-	}
-	.picker p {
-		margin: 0;
-	}
-	.picks {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr));
-		gap: 8px;
-		max-height: 60vh;
-		overflow: auto;
-	}
-	.pick {
-		width: 100%;
-		height: 100%;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 3px;
-		padding: 6px;
-		text-align: left;
-	}
-	.pick img {
-		width: 100%;
-		aspect-ratio: 16 / 9;
-		object-fit: contain;
-		border-radius: 4px;
-		background: var(--surface-2);
-	}
-	.title {
-		font-weight: 600;
 		overflow-wrap: anywhere;
 	}
 </style>

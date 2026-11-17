@@ -7,7 +7,7 @@ A disc's box often says more than the disc does. The back lists the extras, the 
 - **Any job:** in the job's panel, **Cover scans** is near the top, and it's there for every job, from the moment a disc is detected.
 - **Review cards:** at the bottom.
 - **Long before the disc goes in:** the **Covers** page keeps a shelf of case sheets scanned ahead of their discs, a whole stack at a time. See [The covers shelf](#the-covers-shelf).
-- **Before the disc goes in:** a drive with no disc has **Add a scan for the next disc**. The pictures wait there, for up to a day, and the next disc put in that drive takes them as soon as it's detected. They're read while MakeMKV scans the disc, in time to help identify it. Pictures can be removed before then, and are forgotten after a day if no disc comes. Each picture is labelled with what it shows:
+- **Before the disc goes in:** a drive with no disc has **Add a scan for the next disc**: scan or upload pictures, or **Pick a cover from the shelf**. The pictures wait there, for up to a day, and the next disc put in that drive takes them as soon as it's detected. They're read while MakeMKV scans the disc, in time to help identify it. Pictures can be removed before then, and are forgotten after a day if no disc comes. Each picture is labelled with what it shows:
 
 | Kind | What it is |
 |---|---|
@@ -302,7 +302,7 @@ When a cover is used on a job or for a drive's next disc, its sides go as you se
 The vision model's reading goes with the cover to its job (the whole outside's scan says **Read on the covers shelf**), so the model isn't asked again there. The scan's **Read again with the vision model** asks it again and replaces that reading.
 
 - **On a job.** The job's panel and its Review card say **This cover looks like it's on the shelf: …** with the cover's thumbnail, when one fits the disc. **Use it** makes the cover's sides the job's scans: they're read, used to identify the disc, and filed with it like any other scan, and the cover leaves the shelf. **Not this one** hides the suggestion. **Pick a cover from the shelf** opens every cover, best match first, with a search box.
-- **For a drive's next disc.** Open the cover on the Covers page, choose the drive and **Use for this drive's next disc**. The sides wait with the drive's other pictures for its next disc, for up to a day.
+- **For a drive's next disc.** On the Overview, a drive with no disc has **Add a scan for the next disc**, then **Pick a cover from the shelf**, which lists the shelf's covers with a search box. Or open the cover on the Covers page, choose the drive and **Use for this drive's next disc**. The sides wait with the drive's other pictures for its next disc, for up to a day.
 
 Nothing is ever used without you choosing it. A cover is suggested when:
 
