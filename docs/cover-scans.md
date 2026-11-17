@@ -92,6 +92,8 @@ A vision model, a language model that reads pictures, gets most of these. ripshe
 - **Every scan.**
 - **Only when you press Read with the vision model** on a scan. The button is there in every mode except Never.
 
+A cover from the [shelf](#the-covers-shelf) brings the model's reading of it from there, and isn't read again unless you press **Read again with the vision model**.
+
 **Where it runs:**
 - **On your network:** Ollama, or any other server with an OpenAI-compatible API (LM Studio, vLLM…). Set its address; the model is `qwen3-vl:4b-instruct` unless you name another.
 - **A cloud service with an OpenAI-compatible API:** its address, the model and a key.
@@ -275,9 +277,9 @@ Untick it for one cover a page.
 
 ### Reading
 
-Each cover is read in the background as it arrives, one at a time and taking turns with the jobs' readings: Tesseract and zbar on both sides, the vision model when Settings → Scanner and covers say (**For every scan**, or **When Tesseract struggles**, which here means the title and year weren't both read), and the barcode lookups (as in [The box helps identify the disc](#the-box-helps-identify-the-disc)). A cover shows its title and year, its barcode and what the barcode names, and DVD, Blu-ray or 4K when the cover says. The search box searches all of these.
+Each cover is read in the background as it arrives, one at a time and taking turns with the jobs' readings: Tesseract and zbar on both sides, the vision model when Settings → Scanner and covers say (**For every scan**, or **When Tesseract struggles**, which here means the title and year weren't both read), and the barcode lookups (as in [The box helps identify the disc](#the-box-helps-identify-the-disc)). The vision model reads a cover once: its reading is kept, and **Read again** (or an edit) reads the text again without asking the model. A cover shows its title and year, its barcode and what the barcode names, and DVD, Blu-ray or 4K when the cover says. The search box searches all of these.
 
-Open a cover to see each side large, and to **Read again**, **Read with the vision model** (now, whatever the setting says, in the same one-at-a-time queue), **Swap sides** or **Delete** it. **⟲**, **180°** and **⟳** under the picture turn the side shown, saved straight away.
+Open a cover to see each side large, and to **Read again**, **Read with the vision model** (now, whatever the setting says, in the same one-at-a-time queue; **Read again with the vision model** once it has read it, when it got it wrong, which replaces its reading), **Swap sides** or **Delete** it. **⟲**, **180°** and **⟳** under the picture turn the side shown, saved straight away.
 
 The list beside **Read with the vision model** picks the model to read it with, this once, without changing Settings: Anthropic's Haiku, Sonnet and Opus, or the models your server lists (Ollama's, say). **Another…** takes any model name, for when the list couldn't be fetched. To compare models on a cover, read it with one, note what it found, then read it with the next.
 
@@ -296,6 +298,8 @@ The list beside **Read with the vision model** picks the model to read it with, 
 When a cover is used on a job or for a drive's next disc, its sides go as you see them: the file as it was scanned, with the same crop and turn (so the library gets the original), or, for a side mirrored or straightened, a JPEG of it as it's shown. A side turned by hand, or by the shelf's reading, isn't turned again by the job's.
 
 ### Using a cover
+
+The vision model's reading goes with the cover to its job (the whole outside's scan says **Read on the covers shelf**), so the model isn't asked again there. The scan's **Read again with the vision model** asks it again and replaces that reading.
 
 - **On a job.** The job's panel and its Review card say **This cover looks like it's on the shelf: …** with the cover's thumbnail, when one fits the disc. **Use it** makes the cover's sides the job's scans: they're read, used to identify the disc, and filed with it like any other scan, and the cover leaves the shelf. **Not this one** hides the suggestion. **Pick a cover from the shelf** opens every cover, best match first, with a search box.
 - **For a drive's next disc.** Open the cover on the Covers page, choose the drive and **Use for this drive's next disc**. The sides wait with the drive's other pictures for its next disc, for up to a day.
