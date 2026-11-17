@@ -474,6 +474,56 @@ async def test_an_edit_keeps_the_vision_reading_and_doesnt_ask_again(harness, se
         assert not list(h.m._shelf_dir.glob(f"{c.id}.*"))
 
 
+async def test_the_shelfs_vision_reading_goes_to_the_job(harness, settings, monkeypatch):
+    """The model reads a cover once on the shelf: reading it again, or using it on a job,
+    keeps that reading, until its button asks for a new one."""
+    from ripshelf.models import Listing, ListingDetails
+    seen = []
+
+    async def read_listing(provider, img):
+        seen.append(provider.model)
+        return Listing(details=ListingDetails(title="The Lantern Keeper", year=2011 + len(seen))), 1.0
+    monkeypatch.setattr(shelf_mod.vision, "read_listing", read_listing)
+    settings.vision_mode, settings.vision_provider, settings.vision_url = "every", "local", "http://vision.test"
+    async with harness("fake-pioneer") as h:
+        h.m.text_reader = FakeReader(["x"])
+        c = (await h.m.add_shelf_upload([outside()], [], both_sides=False)).covers[0]
+        await until(lambda: h.m.shelf_cover(c.id).reading.vision_state == "done", 10, "vision")
+        await h.m.read_shelf_again(c.id)
+        r = (await until(lambda: (x := h.m.shelf_cover(c.id)).reading.state == "done" and x, 10, "read")).reading
+        assert len(seen) == 1 and r.vision and r.year == 2012, "Read again keeps the model's reading"
+        job = put(h, heron_job(state=JobState.review))
+        await h.m.use_shelf_cover(c.id, job.id)
+        done = await wait_listing(h, job.id)
+        await until(lambda: not h.m._vision_tasks, 10, "the job's vision readings")
+        sc = h.db.get_job(job.id).scans[0]
+        assert len(seen) == 1, "not read again on the job"
+        assert sc.vision == "done" and "covers shelf" in sc.vision_message
+        assert h.m.vision_reading(done, sc).kept and done.listing.found.details.year == 2012
+        h.m.ask_vision(job.id, sc.id)  # Read again with the vision model
+        await until(lambda: len(seen) == 2 and not h.m._vision_tasks, 10, "read again")
+        job = h.db.get_job(job.id)
+        assert not h.m.vision_reading(job, job.scans[0]).kept
+        assert job.listing.found.details.year == 2013, "the new reading replaced it"
+
+
+async def test_read_again_with_the_vision_model_replaces_the_reading(harness, settings, monkeypatch):
+    from ripshelf.models import Listing, ListingDetails
+    titles = iter(["The Lantern Keper", "The Lantern Keeper"])
+
+    async def read_listing(provider, img):
+        return Listing(details=ListingDetails(title=next(titles))), 1.0
+    monkeypatch.setattr(shelf_mod.vision, "read_listing", read_listing)
+    settings.vision_mode, settings.vision_provider, settings.vision_url = "every", "local", "http://vision.test"
+    async with harness() as h:
+        h.m.text_reader = FakeReader(["x"])
+        c = (await h.m.add_shelf_upload([outside()], [], both_sides=False)).covers[0]
+        await until(lambda: h.m.shelf_cover(c.id).reading.title == "The Lantern Keper", 10, "vision")
+        await h.m.ask_shelf_vision(c.id)
+        await until(lambda: h.m.shelf_cover(c.id).reading.title == "The Lantern Keeper", 10, "again")
+        assert h.m._saved_vision(h.m.shelf_cover(c.id)).listing.details.title == "The Lantern Keeper"
+
+
 # --- the scanner ---------------------------------------------------------------------------------------
 
 

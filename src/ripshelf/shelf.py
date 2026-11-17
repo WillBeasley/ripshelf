@@ -7,7 +7,8 @@ its inside (``scanner.stack`` pairs the pages, drops blank sides and tells the o
 from the inside). Each cover is read in the background, one at a time, like a job's
 scans: Tesseract and zbar, the vision model as Settings say, and the barcode lookups. The
 vision model's reading is kept beside the cover, so a cover read again (after an edit
-by hand, say) keeps it; the model is asked again only by its button.
+by hand, say) keeps it; the model is asked again only by its button. It goes with the
+cover to its job, which keeps it too.
 
 When its disc comes, the cover is used for that job (its sides become the job's scans,
 read and filed like any other) or kept for a drive's next disc, and leaves the shelf.
@@ -32,6 +33,7 @@ import logging
 import re
 import uuid
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -71,7 +73,7 @@ from .providers import release_info
 from .scanjobs import Look
 from .scanner import images, ocr, stack, vision
 from .scanner import listing as parse
-from .visionjobs import TRANSCODE_WAIT_S
+from .visionjobs import TRANSCODE_WAIT_S, VisionReading
 
 if TYPE_CHECKING:
     from .db import JobRecord
@@ -103,6 +105,10 @@ class _Vision(BaseModel):
     sha256: str  # of the outside it read
     listing: Listing
     message: str
+    provider: str = ""
+    model: str = ""
+    seconds: float = 0
+    read_at: datetime | None = None
 
 
 class ShelfMixin:
@@ -455,22 +461,24 @@ class ShelfMixin:
         """Take a cover off the shelf, with its pictures and how each is shown: the
         original with its crop and turn, or the picture it shows when it was mirrored or
         straightened (a job's scan can't be). Its turn stays once it was set by hand or
-        the cover was read."""
+        the cover was read, and the vision model's reading goes with the outside."""
         async with self._shelf_lock:
             idx = self._shelf_index()
             c = next((c for c in idx.covers if c.id == cover_id), None)
             if not c:
                 raise KeyError(cover_id)
+            seen = self._saved_vision(c)
             out: dict[str, tuple[bytes, Look]] = {}
             for name in ("outside", "inside"):
                 if not (s := getattr(c, name)):
                     continue
                 d = self._side_path(c.id, name, s).read_bytes()
+                vision = _job_vision(c.id, seen) if seen and name == "outside" else None
                 if s.flip or s.straighten:
                     d = await asyncio.to_thread(lambda d=d, s=s: images.jpeg(_render(d, s)))
-                    out[name] = d, Look(None, 0, True, True)
+                    out[name] = d, Look(None, 0, True, True, vision)
                 else:
-                    out[name] = d, Look(s.crop, s.rotate, s.by_hand, s.by_hand or c.reading.state == "done")
+                    out[name] = d, Look(s.crop, s.rotate, s.by_hand, s.by_hand or c.reading.state == "done", vision)
             idx.covers.remove(c)
             self._save_shelf(idx)
         return c, out
@@ -771,18 +779,19 @@ class ShelfMixin:
         provider = self.vision_provider()
         if provider and model:
             provider = dataclasses.replace(provider, model=model)
-        wanted = asked or not edited and (self.s.vision_mode == "every" or (
+        c = self.shelf_cover(cover_id)
+        saved = self._saved_vision(c)
+        # A reading kept is used again, until the button asks for a new one.
+        wanted = asked or not edited and not saved and (self.s.vision_mode == "every" or (
             self.s.vision_mode == "struggles" and not (found.details.title and found.details.year)))
         used, vision_state, vision_message = False, None, None
-        c = self.shelf_cover(cover_id)
         if provider and wanted and c.outside:
-            seen, vision_message = await self._shelf_vision(c, provider)
-            vision_state = "done" if seen is not None else "failed"
-            if seen is not None:
-                self._shelf_vision_path(cover_id).write_text(
-                    _Vision(sha256=c.outside.sha256, listing=seen, message=vision_message).model_dump_json(),
-                    encoding="utf-8")
-        elif saved := self._saved_vision(c):
+            got, vision_message = await self._shelf_vision(c, provider)
+            vision_state = "done" if got else "failed"
+            seen = got.listing if got else None
+            if got:
+                self._shelf_vision_path(cover_id).write_text(got.model_dump_json(), encoding="utf-8")
+        elif saved:
             seen, vision_state, vision_message = saved.listing, "done", saved.message
         else:
             seen = None
@@ -849,7 +858,7 @@ class ShelfMixin:
         self._texts_path(cover_id).write_text(_Texts(key=key, texts=texts).model_dump_json(), encoding="utf-8")
         return texts
 
-    async def _shelf_vision(self, c: ShelfCover, provider: vision.Provider) -> tuple[Listing | None, str]:
+    async def _shelf_vision(self, c: ShelfCover, provider: vision.Provider) -> tuple[_Vision | None, str]:
         """The vision model's reading of the outside, taking turns with the jobs' readings."""
         s = c.outside
         async with self._vision_lock:
@@ -864,7 +873,9 @@ class ShelfMixin:
             except (vision.VisionError, OSError, images.ImageError) as e:
                 log.info("the vision model couldn't read shelf cover %s: %s", c.id, e)
                 return None, sentence(str(e))
-        return listing, f"{provider.model} read it in {secs:.0f} s"
+        message = f"{provider.model} read it in {secs:.0f} s"
+        return _Vision(sha256=s.sha256, listing=listing, message=message, provider=provider.kind,
+                       model=provider.model, seconds=round(secs, 1), read_at=now()), message
 
     async def _shelf_barcode(self, reading: ShelfReading, code: str) -> None:
         thediscdb = any("thediscdb" in providers.enabled(self.s, k) for k in ("movie", "tv"))
@@ -905,6 +916,13 @@ class ShelfMixin:
 
 def _render(data: bytes, s: ShelfSide):
     return images.render(data, s.crop, s.rotate, s.flip, s.straighten)
+
+
+def _job_vision(cover_id: str, v: _Vision) -> VisionReading:
+    """The vision model's reading of a cover, for the job it goes to (kept there too)."""
+    return VisionReading(key=f"shelf:{cover_id}", read_at=v.read_at or now(), provider=v.provider, model=v.model,
+                         seconds=v.seconds, listing=v.listing, kept=True)
+
 
 def _mismatch(st: ShelfStack) -> str:
     a, b = len(st.first), len(st.second)

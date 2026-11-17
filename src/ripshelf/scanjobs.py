@@ -41,6 +41,7 @@ from .models import (
 from .providers import release_info
 from .scanner import images
 from .scanner.escl import Capabilities, Escl, ScannerError
+from .visionjobs import VisionReading
 
 if TYPE_CHECKING:
     from .db import JobRecord
@@ -67,6 +68,7 @@ class Look:
     rotate: int = 0
     crop_by_hand: bool = False
     rotate_by_hand: bool = False  # the reading doesn't turn it
+    vision: VisionReading | None = None  # the vision model's reading of it, kept
 
 
 class ScansMixin:
@@ -167,6 +169,10 @@ class ScansMixin:
         d = self._scans_dir(job)
         d.mkdir(parents=True, exist_ok=True)
         (d / f"{sc.id}.{EXTS[ctype]}").write_bytes(data)
+        if look and look.vision:
+            self._vision_path(job, sc.id).write_text(look.vision.model_dump_json(), encoding="utf-8")
+            by = f" by {look.vision.model}" if look.vision.model else ""
+            sc.vision, sc.vision_message = "done", f"Read on the covers shelf{by}"
         job = self._job(job_id)  # the picture took a while to read
         job.scans.append(sc)
         self._save(job)

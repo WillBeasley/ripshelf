@@ -3,7 +3,8 @@
 A drive keeps the pictures added for "the next disc" until a disc goes into it: the new
 job takes them, and they're read and used to identify the disc like any other scan.
 They're kept in ``<data>/pending-scans`` and forgotten after a day if no disc comes.
-A cover from the shelf keeps its turn and crop here, for the job.
+A cover from the shelf keeps its turn and crop here, and the vision model's reading of
+it beside it (``<id>.vision.json``), for the job.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from .models import PendingScan, PendingScans, ScanKind, ScannerRun, ScannerScan
 from .providers import release_info
 from .scanjobs import Look
 from .scanner import images
+from .visionjobs import VisionReading
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +60,10 @@ class PendingMixin:
 
     def _drop_pending_files(self, p: PendingScan) -> None:
         (self._pending_dir / f"{p.id}.{EXTS[p.content_type]}").unlink(missing_ok=True)
+        self._pending_vision_path(p.id).unlink(missing_ok=True)
+
+    def _pending_vision_path(self, scan_id: str) -> Path:
+        return self._pending_dir / f"{scan_id}.vision.json"
 
     def _save_pending(self, idx: _Index) -> None:
         self._pending_dir.mkdir(parents=True, exist_ok=True)
@@ -109,6 +115,8 @@ class PendingMixin:
                 p.rotate, p.crop_by_hand, p.rotate_by_hand = look.rotate, look.crop_by_hand, look.rotate_by_hand
             self._pending_dir.mkdir(parents=True, exist_ok=True)
             (self._pending_dir / f"{p.id}.{EXTS[ctype]}").write_bytes(data)
+            if look and look.vision:
+                self._pending_vision_path(p.id).write_text(look.vision.model_dump_json(), encoding="utf-8")
             idx.scans.append(p)
             self._save_pending(idx)
         return p
@@ -136,7 +144,11 @@ class PendingMixin:
         n = 0
         for p in mine:
             f = self._pending_dir / f"{p.id}.{EXTS[p.content_type]}"
-            look = Look(p.crop, p.rotate, p.crop_by_hand, p.rotate_by_hand)
+            try:
+                vision = VisionReading.model_validate_json(self._pending_vision_path(p.id).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                vision = None
+            look = Look(p.crop, p.rotate, p.crop_by_hand, p.rotate_by_hand, vision)
             try:
                 await self.add_scan(job_id, f.read_bytes(), p.kind, p.source, p.page, look)
                 n += 1
