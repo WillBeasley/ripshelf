@@ -78,6 +78,7 @@ from .models import (
     Problem,
     RipProgressEvent,
     RipState,
+    ScanClock,
     SetupProblem,
     Snapshots,
     Status,
@@ -103,6 +104,7 @@ log = logging.getLogger(__name__)
 
 PROGRESS_PUBLISH_S = 1.0
 PROGRESS_SAVE_S = 10.0
+SCAN_CLOCK_SAVE_S = 5.0  # how often a scan's last output time is saved for the UI
 STATUS_TIMEOUT_S = 10.0
 # How long stop() waits for cancelled tasks, so their processes are reaped first.
 STOP_WAIT_S = 5.0
@@ -559,6 +561,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         job.state = state
         if state not in (JobState.transcoding, JobState.finalising):
             job.step = None
+        if state != JobState.scanning:
+            job.scan_clock = None
         if state in TERMINAL_STATES:
             job.finished_at = now()
         else:
@@ -734,6 +738,7 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
         return None
 
     async def _scan(self, job: JobRecord, d: DriveRuntime) -> ScanResult:
+        clock = job.scan_clock = ScanClock(started_at=now(), quiet_s=self.s.scan_timeout_s, max_s=self.s.scan_max_s)
         self._set_state(job, JobState.scanning, f"Scanning disc with MakeMKV on {d.hw.device}")
         home = self._home(d)
         if self.open_gate.busy and not d.remote:
@@ -741,13 +746,19 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             self._event(job, "info", f"Waiting for {self.open_gate.holder or 'another drive'} to open its disc "
                                      f"(for {held} s so far). MakeMKV opens one disc at a time, at most "
                                      f"{int(self.open_gate.max_hold_s)} s each, then the scans run side by side")
-        d.scan = self._runner(d)
+        d.scan = scan_run = self._runner(d)
         log_path = self.work_dir(job) / "scan.log"
         told = False
+        saved = time.monotonic()
 
         def on_line(line: str) -> None:
+            # The clock the UI shows, saved every few seconds rather than for each line.
+            nonlocal told, saved
+            quiet = int(runner.idle_limit(line, self.s.scan_timeout_s))
+            if quiet != clock.quiet_s or time.monotonic() - saved >= SCAN_CLOCK_SAVE_S:
+                clock.quiet_s, clock.last_output_at, saved = quiet, now(), time.monotonic()
+                self._save(job)
             # MakeMKV goes quiet after this, so say why the scan seems stuck (once a scan).
-            nonlocal told
             if told or runner.msg_code(line) != runner.COMPLEX_MSG:
                 return
             told = True
@@ -762,6 +773,8 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                                    idle_timeout=self.s.scan_timeout_s)
         finally:
             d.scan = None
+            job.scan_clock = None
+        extended = int(scan_run.extended_s)
         # Progress lines are asked for only to tell a slow scan from a hung one.
         text = "".join(ln for ln in log_path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
                        if not ln.startswith(("PRGV:", "PRGT:", "PRGC:")))
@@ -781,13 +794,13 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                                    actions=["setup", "retry_scan"]))
         if res.timed_out:
             if res.stalled and scan.messages and scan.messages[-1].code == runner.COMPLEX_MSG:
-                quiet = max(self.s.scan_timeout_s, runner.COMPLEX_IDLE_S)
+                quiet = max(self.s.scan_timeout_s, runner.COMPLEX_IDLE_S) + extended
                 what = (f"MakeMKV was still scanning the disc's complex structure after {_span(quiet)} "
                         f"without a word")
             elif res.stalled:
-                what = f"MakeMKV stopped responding while scanning (no output for {_span(self.s.scan_timeout_s)})"
+                what = f"MakeMKV stopped responding while scanning (no output for {_span(self.s.scan_timeout_s + extended)})"
             else:
-                what = f"MakeMKV was still scanning after {_span(self.s.scan_max_s)}"
+                what = f"MakeMKV was still scanning after {_span(self.s.scan_max_s + extended)}"
             diag = diagnose(scan.messages)
             if diag:  # a drive stuck retrying bad reads, most often
                 raise JobError(Problem(
@@ -1845,6 +1858,20 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
                 and not self._clash_before_rip(job):
             self._spawn(d, self._rip(job.id), job.id)
 
+    async def extend_scan(self, job_id: int, minutes: int) -> JobRecord:
+        """Give the MakeMKV scan under way ``minutes`` longer, on both of its limits."""
+        job = self.db.get_job(job_id)
+        d = job and self.drives.get(job.drive_id)
+        if not job or job.state != JobState.scanning or not d or d.job_id != job.id or not d.scan or not job.scan_clock:
+            raise ValueError("MakeMKV isn't scanning this disc")
+        d.scan.extend(minutes * 60)
+        job.scan_clock.extended_s = int(d.scan.extended_s)
+        self._event(job, "info", f"Scan given {_span(minutes * 60)} longer, so it stops after "
+                                 f"{_span(job.scan_clock.quiet_s + job.scan_clock.extended_s)} without a word "
+                                 f"or {_span(job.scan_clock.max_s + job.scan_clock.extended_s)} in all")
+        self._save(job)
+        return job
+
     async def cancel(self, job_id: int) -> JobRecord:
         job = self.db.get_job(job_id)
         if job and job.refile and job.state == JobState.review:
@@ -2337,6 +2364,8 @@ def to_title_info(t) -> TitleInfo:
 def _span(seconds: int) -> str:
     if seconds % 3600 == 0:
         return f"{seconds // 3600} h"
+    if seconds > 3600 and seconds % 60 == 0:
+        return f"{seconds // 3600} h {seconds % 3600 // 60} min"
     return f"{seconds // 60} min" if seconds % 60 == 0 else f"{seconds} s"
 
 

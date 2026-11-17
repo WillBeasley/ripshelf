@@ -1,4 +1,4 @@
-import type { Job, JobState } from './api-types';
+import type { Job, JobState, ScanClock } from './api-types';
 
 // Binary units labelled GB, as MakeMKV prints them.
 export function gb(bytes: number | null | undefined, digits = 1): string {
@@ -100,3 +100,13 @@ export const ENCODER_NAMES: Record<string, string> = {
 	nvenc: 'GPU, NVENC',
 	x265: 'x265'
 };
+
+/** How long a MakeMKV scan has before it's stopped (seconds, at ``nowMs``), and which limit
+ * stops it: ``quiet`` (it said nothing for too long; the clock restarts when it reports) or
+ * ``total`` (its overall limit). */
+export function scanTimeLeft(clock: ScanClock, nowMs: number): { left: number; by: 'quiet' | 'total' } {
+	const since = Date.parse(clock.last_output_at ?? clock.started_at);
+	const quiet = clock.quiet_s + clock.extended_s - (nowMs - since) / 1000;
+	const total = clock.max_s + clock.extended_s - (nowMs - Date.parse(clock.started_at)) / 1000;
+	return quiet <= total ? { left: Math.max(0, quiet), by: 'quiet' } : { left: Math.max(0, total), by: 'total' };
+}

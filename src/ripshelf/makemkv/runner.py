@@ -17,7 +17,8 @@ Timeouts and cancellation kill makemkvcon with everything it started (``proc.Tre
 ``idle_timeout`` kills it only once its output has stopped for that long, because a damaged
 disc can keep a scan busy (read retries, slow AACS) well past any fixed limit. A DVD with a
 complex multiplex is the exception: MakeMKV says so, then writes nothing at all while it
-works through the VOBUs, so that silence may last up to ``COMPLEX_IDLE_S``.
+works through the VOBUs, so that silence may last up to ``COMPLEX_IDLE_S``. ``extend()``
+gives a run more time by hand: it adds to both limits while it runs.
 
 Every makemkvcon probes *every* drive it can see when it starts, and that probe
 blocks while another instance is opening its disc (the AACS / LibreDrive
@@ -30,6 +31,7 @@ which they run in parallel without trouble.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import re
@@ -347,6 +349,16 @@ class RunResult:
     error: str | None = None  # makemkvcon could not be started
 
 
+async def _stop(task: asyncio.Task) -> None:
+    """Cancel ``task`` and wait for it to end (its own error, if it already has one, is
+    the caller's to deal with)."""
+    if task.done():
+        return
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
 class MakeMKV:
     def __init__(self, command: str, gate: OpenGate | None = None, label: str | None = None):
         self.command = procs.split_command(command)
@@ -355,6 +367,8 @@ class MakeMKV:
         self._proc: asyncio.subprocess.Process | None = None
         self._tree: procs.Tree | None = None
         self._cancelled = False
+        self._deadline: float | None = None  # loop time the run is stopped at (``timeout``)
+        self.extended_s = 0.0  # added to both limits by extend()
         self.waiting = False  # queued at the open gate
 
     async def run(
@@ -373,6 +387,7 @@ class MakeMKV:
         if conf:
             set_conf(Path(home) / ".MakeMKV", conf)
         self._cancelled = False
+        self.extended_s = 0.0
         release: Callable[[], None] = lambda: None  # noqa: E731
         if self.gate:
             self.waiting = True
@@ -405,7 +420,8 @@ class MakeMKV:
         proc = self._proc
         loop = asyncio.get_running_loop()
         last_output = loop.time()
-        quiet_s = idle_timeout  # how long it may stay quiet now
+        quiet_s = idle_timeout  # how long it may stay quiet now (before any extension)
+        self._deadline = loop.time() + timeout + self.extended_s if timeout else None
 
         async def read() -> None:
             nonlocal last_output, quiet_s
@@ -431,7 +447,7 @@ class MakeMKV:
                 # proc.wait() itself waits for the pipe to close, so watch the return code.
                 while proc.returncode is None and not reader.done():
                     await asyncio.wait({reader}, timeout=0.5)
-                    if quiet_s and loop.time() - last_output > quiet_s:
+                    if quiet_s and loop.time() - last_output > quiet_s + self.extended_s:
                         raise _Stalled
                 await asyncio.wait_for(asyncio.shield(reader), EXIT_DRAIN_S)
                 if proc.returncode is None:  # output ended first, and the exit follows
@@ -444,21 +460,42 @@ class MakeMKV:
                     reader.cancel()
                 tree.kill()  # leftovers it started
 
+        async def watch(task: asyncio.Task) -> None:
+            # wait_for() with a deadline that extend() can move.
+            while True:
+                left = None if self._deadline is None else self._deadline - loop.time()
+                if left is not None and left <= 0:
+                    raise TimeoutError
+                done, _ = await asyncio.wait({task}, timeout=left)
+                if done:
+                    return task.result()
+
         timed_out = stalled = False
+        task = asyncio.create_task(pump())
         try:
-            await asyncio.wait_for(pump(), timeout)
+            await watch(task)
         except (TimeoutError, _Stalled) as e:
             timed_out, stalled = True, isinstance(e, _Stalled)
+            await _stop(task)
             self.kill()
             await self._proc.wait()
         except asyncio.CancelledError:
             self.kill()
             raise
         finally:
+            await _stop(task)
             tree.close()
+            self._deadline = None
         rc = self._proc.returncode
         self._proc = self._tree = None
         return RunResult(rc, timed_out=timed_out, stalled=stalled, cancelled=self._cancelled)
+
+    def extend(self, seconds: float) -> None:
+        """Give the run ``seconds`` longer: it may stay quiet that much longer, and its overall
+        timeout is that much later."""
+        self.extended_s += seconds
+        if self._deadline is not None:
+            self._deadline += seconds
 
     def kill(self) -> None:
         p = self._proc

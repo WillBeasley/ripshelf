@@ -861,6 +861,23 @@ class ShelfSuggestion(BaseModel):
 
 
 ScannerSource = Literal["platen", "feeder"]
+class ScanClock(BaseModel):
+    """The limits of the MakeMKV scan under way. Each is the setting plus ``extended_s``,
+    the time given by hand (POST /api/jobs/{id}/scan/extend)."""
+
+    started_at: datetime
+    quiet_s: int = Field(description="stopped once MakeMKV says nothing for this long (before any extension); "
+                                     "longer while it scans a complex DVD structure")
+    max_s: int = Field(description="and in any case this long after it started (before any extension)")
+    extended_s: int = Field(0, description="added to both by hand")
+    last_output_at: datetime | None = Field(None, description="about when MakeMKV last wrote something "
+                                                              "(updated every few seconds, not each line)")
+
+
+class ExtendScanRequest(BaseModel):
+    minutes: int = Field(5, ge=1, le=240)
+
+
 ScannerState = Literal["scanning", "failed"]
 
 
@@ -969,6 +986,7 @@ class Job(BaseModel):
     listing: ScanListing | None = Field(None, description="what's on the disc, read from the scans")
     scan_match: ScanMatch | None = Field(None, description="the listing matched to the disc's titles")
     refile: Refile | None = Field(None, description="finished, and being identified again")
+    scan_clock: ScanClock | None = Field(None, description="the limits of the MakeMKV scan under way")
 
 
 class ContributionTitle(BaseModel):

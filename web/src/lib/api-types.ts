@@ -88,6 +88,7 @@ export interface Api {
   EpisodeGuess?: EpisodeGuess;
   EpisodeRef?: EpisodeRef;
   Evidence?: Evidence;
+  ExtendScanRequest?: ExtendScanRequest;
   Filesystem?: Filesystem;
   FinishedPage?: FinishedPage;
   FolderRequest?: FolderRequest;
@@ -134,6 +135,7 @@ export interface Api {
   RipProgress?: RipProgress;
   RipProgressEvent?: RipProgressEvent;
   RipState?: RipState;
+  ScanClock?: ScanClock;
   ScanListing?: ScanListing;
   ScanMatch?: ScanMatch;
   ScanSplit?: ScanSplit;
@@ -979,6 +981,13 @@ export interface EpisodeGuess {
   score: number;
 }
 /**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ExtendScanRequest".
+ */
+export interface ExtendScanRequest {
+  minutes: number;
+}
+/**
  * One disk (filesystem) and the ripshelf folders on it. Sizes in bytes; none when not found.
  *
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1102,6 +1111,10 @@ export interface Job {
    * finished, and being identified again
    */
   refile: Refile | null;
+  /**
+   * the limits of the MakeMKV scan under way
+   */
+  scan_clock: ScanClock | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1715,6 +1728,32 @@ export interface RefileMove {
   done: boolean;
 }
 /**
+ * The limits of the MakeMKV scan under way. Each is the setting plus ``extended_s``,
+ * the time given by hand (POST /api/jobs/{id}/scan/extend).
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScanClock".
+ */
+export interface ScanClock {
+  started_at: string;
+  /**
+   * stopped once MakeMKV says nothing for this long (before any extension); longer while it scans a complex DVD structure
+   */
+  quiet_s: number;
+  /**
+   * and in any case this long after it started (before any extension)
+   */
+  max_s: number;
+  /**
+   * added to both by hand
+   */
+  extended_s: number;
+  /**
+   * about when MakeMKV last wrote something (updated every few seconds, not each line)
+   */
+  last_output_at: string | null;
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "FolderRequest".
  */
@@ -1891,6 +1930,10 @@ export interface JobDetail {
    * finished, and being identified again
    */
   refile: Refile | null;
+  /**
+   * the limits of the MakeMKV scan under way
+   */
+  scan_clock: ScanClock | null;
   events: JobEvent[];
   titles: TitleInfo[];
 }
