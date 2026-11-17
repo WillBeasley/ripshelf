@@ -259,6 +259,11 @@ class WorkerHub:
         if w:
             w.commands.put_nowait({"type": "cancel", "run": run.id})
 
+    def extend_run(self, run: Run, seconds: float) -> None:
+        w = self.workers.get(run.worker)
+        if w:
+            w.commands.put_nowait({"type": "extend", "run": run.id, "seconds": seconds})
+
     @staticmethod
     def _write(run: Run, text: str) -> None:
         if run.log_fh:
@@ -280,6 +285,7 @@ class RemoteMakeMKV:
         self.max_file_bytes = max_file_bytes(disc_kind)  # the disc's kind bounds each file uploaded
         self._run: Run | None = None
         self._cancelled = False
+        self.extended_s = 0.0  # given by extend(), and sent on to the worker
         self.waiting = False
 
     async def run(self, args: list[str], home: Path, log_path: Path,
@@ -287,6 +293,7 @@ class RemoteMakeMKV:
                   idle_timeout: float | None = None,
                   conf: dict[str, str | None] | None = None) -> RunResult:
         self._cancelled = False
+        self.extended_s = 0.0
         w = self.hub.workers.get(self.worker_id)
         if not w or not w.online:
             log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -307,6 +314,11 @@ class RemoteMakeMKV:
             raise
         finally:
             self._run = None
+
+    def extend(self, seconds: float) -> None:
+        self.extended_s += seconds
+        if self._run:
+            self.hub.extend_run(self._run, seconds)
 
     def kill(self) -> None:
         if self._run:

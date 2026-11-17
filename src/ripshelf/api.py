@@ -48,6 +48,7 @@ from .models import (
     Drive,
     DriveNameUpdate,
     DriveStats,
+    ExtendScanRequest,
     Filesystem,
     FinishedPage,
     FolderRequest,
@@ -394,6 +395,12 @@ async def keep_identity(job_id: int, request: Request):
 @api.post("/jobs/{job_id}/cancel", response_model=Job)
 async def cancel(job_id: int, request: Request):
     return await _job_action(request, job_id, manager(request).cancel)
+
+
+@api.post("/jobs/{job_id}/scan/extend", response_model=Job)
+async def extend_scan(job_id: int, body: ExtendScanRequest, request: Request):
+    """Give the MakeMKV scan under way longer before it's stopped (409 if there's none)."""
+    return await _job_action(request, job_id, lambda i: manager(request).extend_scan(i, body.minutes))
 
 
 @api.post("/jobs/{job_id}/media", response_model=Job)

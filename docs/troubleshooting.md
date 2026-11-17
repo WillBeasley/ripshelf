@@ -87,7 +87,7 @@ The job says "MakeMKV stopped responding while scanning" or "was still scanning 
 - **An older drive that hangs while MakeMKV makes a firmware dump**, below.
 - **Several drives in one container slowing each other down.** Use [one worker per drive](modes.md).
 
-The limits are in Settings → Drives and ripping, under Advanced.
+The limits are in Settings → Drives and ripping, under Advanced. While a scan runs, its drive card counts down to the time it would be stopped, and **Give it longer** (+5 min, +15 min, +1 h) adds to both limits for that scan only, on a remote worker too. Use it when you'd rather wait than retry, for a disc you know is slow.
 
 A DVD with a complex multiplex is the one slow scan that goes silent: MakeMKV logs "Complex multiplex encountered - N cells and M VOBUs have to be scanned" and then writes nothing until it's done, which took over 5 minutes for 4759 VOBUs on an LG GGC-H20N. The job notes it, and the scan is allowed up to an hour of silence after that message (or the timeout in Settings, if longer), within the overall limit.
 

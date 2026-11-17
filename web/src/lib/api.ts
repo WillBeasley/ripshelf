@@ -126,6 +126,7 @@ export const api = {
 	reidentify: (id: number) => call<Job>('POST', `/jobs/${id}/reidentify`),
 	keepIdentity: (id: number) => call<Job>('POST', `/jobs/${id}/reidentify/keep`),
 	cancel: (id: number) => call<Job>('POST', `/jobs/${id}/cancel`),
+	extendScan: (id: number, minutes: number) => call<Job>('POST', `/jobs/${id}/scan/extend`, { minutes }),
 	setMedia: (id: number, media: MediaKind) => call<Job>('POST', `/jobs/${id}/media`, { media }),
 	contribution: (id: number) => call<ContributionView>('GET', `/jobs/${id}/thediscdb`),
 	contribute: (id: number) => call<ContributionView>('POST', `/jobs/${id}/thediscdb/send`),

@@ -121,6 +121,70 @@ async def test_overall_timeout_still_applies_to_a_chatty_run(tmp_path):
     assert res.timed_out and not res.stalled
 
 
+async def _extend_after(m: runner.MakeMKV, delay: float, seconds: float) -> None:
+    await asyncio.sleep(delay)
+    m.extend(seconds)
+
+
+async def test_extending_lets_a_quiet_scan_stay_quiet_longer(tmp_path):
+    cmd = script(tmp_path, """
+        import time
+        print("MSG:1005", flush=True); time.sleep(2.5)
+        print("TCOUNT:3", flush=True)
+    """)
+    m = runner.MakeMKV(cmd)
+    run = asyncio.create_task(m.run([], tmp_path, tmp_path / "log", timeout=30, idle_timeout=1.0))
+    await _extend_after(m, 0.5, 3)
+    res = await run
+    assert res.returncode == 0 and not res.timed_out and m.extended_s == 3
+
+
+async def test_an_extended_scan_still_stalls_once_the_extra_time_is_up(tmp_path):
+    cmd = script(tmp_path, 'import time\nprint("MSG:1005", flush=True)\ntime.sleep(60)')
+    m = runner.MakeMKV(cmd)
+    started = asyncio.get_running_loop().time()
+    run = asyncio.create_task(m.run([], tmp_path, tmp_path / "log", timeout=30, idle_timeout=1.0))
+    await _extend_after(m, 0.5, 1.5)
+    res = await run
+    took = asyncio.get_running_loop().time() - started
+    assert res.stalled and 2.4 < took < 10
+
+
+async def test_extending_moves_the_overall_timeout(tmp_path):
+    cmd = script(tmp_path, """
+        import time
+        for _ in range(25):
+            print("PRGV:1,2,3", flush=True); time.sleep(0.1)
+    """)
+    m = runner.MakeMKV(cmd)
+    run = asyncio.create_task(m.run([], tmp_path, tmp_path / "log", timeout=1.5, idle_timeout=1.0))
+    await _extend_after(m, 0.5, 5)
+    res = await run
+    assert res.returncode == 0 and not res.timed_out
+
+
+async def test_the_moved_timeout_still_stops_a_run(tmp_path):
+    cmd = script(tmp_path, """
+        import time
+        while True:
+            print("PRGV:1,2,3", flush=True); time.sleep(0.1)
+    """)
+    m = runner.MakeMKV(cmd)
+    started = asyncio.get_running_loop().time()
+    run = asyncio.create_task(m.run([], tmp_path, tmp_path / "log", timeout=1.0, idle_timeout=1.0))
+    await _extend_after(m, 0.3, 1.0)
+    res = await run
+    assert res.timed_out and not res.stalled and not m.running
+    assert 1.9 < asyncio.get_running_loop().time() - started < 10
+
+
+async def test_a_new_run_starts_without_the_last_ones_extension(tmp_path):
+    m = runner.MakeMKV(script(tmp_path, "pass"))
+    m.extend(60)
+    await m.run([], tmp_path, tmp_path / "log", timeout=30, idle_timeout=1.0)
+    assert m.extended_s == 0
+
+
 COMPLEX = ('MSG:3024,4096,2,"Complex multiplex encountered - 7 cells and 1234 VOBUs have to be scanned.",'
            '"Complex multiplex encountered - %1 cells and %2 VOBUs have to be scanned.","7","1234"')
 
