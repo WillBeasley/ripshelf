@@ -177,11 +177,22 @@ def uvicorn_log_config() -> dict:
     return cfg
 
 
+def warn_if_init() -> None:
+    """Orphaned processes (MakeMKV's mmgplsrv helper, for one) go to PID 1, which
+    must reap them. ripshelf doesn't, so as PID 1 they pile up as zombies."""
+    if not proc.WINDOWS and os.getpid() == 1:
+        logging.getLogger(__name__).warning(
+            "ripshelf is running as PID 1, so MakeMKV's leftover helpers will pile up as "
+            "zombie processes. Start the container with the image's own entrypoint (tini), "
+            "or with docker run --init (init: true in compose)")
+
+
 def run() -> None:
     logging.basicConfig(level=logging.INFO, format=applog.FORMAT)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     s = load_settings()
     applog.install_file(s.data_dir)
+    warn_if_init()
     if sys.argv[1:2] == ["worker"]:
         run_worker(s)
         return
