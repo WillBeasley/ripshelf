@@ -106,6 +106,7 @@ from .models import (
     Tool,
     TvConfirmRequest,
     TvMatchTextRequest,
+    TvPlayAllRequest,
     TvProposeRequest,
     TvSplitRequest,
     VisionModels,
@@ -953,6 +954,13 @@ async def tv_match_text(job_id: int, body: TvMatchTextRequest, request: Request)
 async def tv_confirm(job_id: int, body: TvConfirmRequest, request: Request):
     m = manager(request)
     return await _job_action(request, job_id, lambda i: m.tv_confirm(i, body.mapping))
+
+
+@api.post("/jobs/{job_id}/tv/play-all", response_model=Job)
+async def tv_play_all(job_id: int, body: TvPlayAllRequest, request: Request):
+    """Work the episodes (how many, in what order) out from the play-all once it's ripped."""
+    m = manager(request)
+    return await _job_action(request, job_id, lambda i: m.tv_play_all(i, body.wait))
 
 
 @api.put("/jobs/{job_id}/tv/mapping", response_model=Job)

@@ -327,9 +327,14 @@ class TvPlan(BaseModel):
                                                          "as found in those shows' episode lists")
     from_scan: bool = Field(False, description="the show or episodes were set from the cover scan, so it's "
                                                "reviewed, not confirmed without review")
-    order_from: Literal["season", "box", "names", "disc_db"] | None = Field(
+    order_from: Literal["season", "box", "names", "disc_db", "play_all"] | None = Field(
         None, description="what put the episodes on the titles in this order: the season's own order from "
-                          "the start episode (a guess), the cover scan's list, a pasted run order, or TheDiscDB")
+                          "the start episode (a guess), the cover scan's list, a pasted run order, TheDiscDB, "
+                          "or the play-all's own order")
+    wait_play_all: bool = Field(False, description="the user asked for the episodes to be worked out from the "
+                                                   "play-all once it's ripped")
+    play_all_order: list[int] = Field(default=[], description="episode titles in the order the play-all plays "
+                                                              "them, once read from the ripped files")
     auto_confirmed: bool = False
     auto_evidence: list[str] = Field(default=[], description="why it was (or wasn't) confirmed without review")
     splits: list[TitleSplit] = Field(default=[], description="long titles each holding several episodes, split "
@@ -1431,6 +1436,11 @@ class TitleMapUpdate(BaseModel):
     title_index: int
     role: TitleRole
     episodes: list[EpisodeRef] = []
+
+
+class TvPlayAllRequest(BaseModel):
+    wait: bool = Field(True, description="true works the episodes out from the play-all (now if it's ripped, "
+                                         "else once it is); false stops waiting")
 
 
 class TvSplitRequest(BaseModel):

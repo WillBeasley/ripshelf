@@ -89,6 +89,7 @@
 			return x.confidence === 'high' ? 'Box name and running time match' : 'From the box: worth a check';
 		if (plan?.disc_db) return 'From TheDiscDB';
 		if (plan?.order_from === 'names') return 'From the run order you pasted';
+		if (plan?.order_from === 'play_all') return plan.order_verified === false ? "In the play-all's order: check it" : "In the play-all's order";
 		if (plan?.order_from === 'season' && plan.order_verified !== true) return "Season order: a guess, check it";
 		if (plan?.order_verified) return 'Order checked against the play-all';
 		return r.note ?? '';
@@ -105,7 +106,7 @@
 					.filter((i, n, all) => all.indexOf(i) === n && !(String(i) in (job.rip.files ?? {})))
 			: []
 	);
-	const canConfirm = $derived(!!plan?.show && !splits.some((sp) => sp.state === 'waiting') && !problemCount && !!episodeRows.length && !act.busy && !missing.length);
+	const canConfirm = $derived(!!plan?.show && !plan.wait_play_all && !splits.some((sp) => sp.state === 'waiting') && !problemCount && !!episodeRows.length && !act.busy && !missing.length);
 
 	// --- changing titles
 
@@ -201,6 +202,14 @@
 		if (ripping && !window.confirm('Eject to check the disc? The rip pauses; titles already ripped are kept, and the rest are ripped when you put the same disc back.'))
 			return;
 		act.run(() => api.checkDisc(job.id, ripping));
+	}
+
+	// The episodes worked out from what the play-all plays: now if every title is ripped,
+	// else once they are.
+	const allRipped = $derived(job.rip.state === 'done' && job.rip.all_titles);
+	const canUsePlayAll = $derived(!!plan && !job.refile && !splits.length && plan.order_from !== 'play_all');
+	function playAll(wait: boolean) {
+		act.run(() => api.tvPlayAll(job.id, wait));
 	}
 
 	async function confirm() {
@@ -375,16 +384,41 @@
 		</section>
 	{/if}
 
-	{#if plan?.order_verified === true}
-		<span class="badge ok">✓ Order verified against the play-all</span>
-	{:else if plan?.order_verified === false}
-		<span class="badge bad">✗ {plan.order_note}</span>
-	{:else if orderGuess}
-		<p class="small warn-note">
-			Which {splits.length ? 'part' : 'title'} is which episode is a guess: they're given the season's episodes in
-			order{plan?.start_episode ? ` from episode ${plan.start_episode}` : ''}, and discs often hold them in another
-			order. Check them, scan the box, or paste its run order under More tools.
-		</p>
+	{#if plan?.wait_play_all}
+		<section class="play-all box">
+			<div class="headline">Waiting for the play-all</div>
+			<p class="small">
+				Once every title is ripped{ripped ? ` (the rip is ${ripped} done)` : ''}, the titles the play-all plays become the
+				episodes, in the order it plays them{plan.show && !plan.compilation ? `, from episode ${plan.start_episode ?? 1}` : ''}.
+				Nothing to do until then.
+			</p>
+			<button class="link small" disabled={act.busy} onclick={() => playAll(false)}>Don't wait</button>
+		</section>
+	{:else}
+		{#if plan?.order_verified === true}
+			<span class="badge ok">✓ {plan.play_all_order.length && plan.order_note ? plan.order_note : 'Order verified against the play-all'}</span>
+		{:else if plan?.order_verified === false || (plan?.play_all_order.length && plan.order_note)}
+			<span class="badge" class:bad={plan?.order_verified === false}>{plan?.order_verified === false ? '✗ ' : ''}{plan?.order_note}</span>
+		{:else if plan?.order_note?.startsWith("Couldn't read the play-all")}
+			<span class="badge bad">✗ {plan.order_note}</span>
+		{:else if orderGuess}
+			<p class="small warn-note">
+				Which {splits.length ? 'part' : 'title'} is which episode is a guess: they're given the season's episodes in
+				order{plan?.start_episode ? ` from episode ${plan.start_episode}` : ''}, and discs often hold them in another
+				order. Check them, scan the box, wait for the play-all, or paste its run order under More tools.
+			</p>
+		{/if}
+		{#if canUsePlayAll && plan?.order_verified !== true}
+			<div class="row">
+				<button disabled={act.busy} onclick={() => playAll(true)}
+					title="Make the titles the play-all plays the episodes, in its order, numbered from the disc's first episode">
+					{allRipped ? "Use the play-all's order" : 'Wait for the play-all'}
+				</button>
+				<span class="small muted">
+					{allRipped ? 'Numbers the episodes as the play-all plays them.' : "When the box doesn't list the episodes: they're worked out from the play-all once it's ripped."}
+				</span>
+			</div>
+		{/if}
 	{/if}
 
 	{#if plan?.show && !job.refile}
@@ -556,6 +590,8 @@
 		<div class="small status" class:warn={!canConfirm}>
 			{#if !plan?.show}
 				Pick the show
+			{:else if plan.wait_play_all}
+				Waiting for the play-all to be ripped
 			{:else if scan?.toCome}
 				Waiting for {titlesText(splits.filter((sp) => sp.state === 'waiting').map((sp) => sp.title_index))} to be ripped
 			{:else if unpicked}
