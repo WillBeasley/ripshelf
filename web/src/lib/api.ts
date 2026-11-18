@@ -247,6 +247,8 @@ export const api = {
 	tvSetMapping: (id: number, mapping: TitleMapUpdate[]) =>
 		call<Job>('PUT', `/jobs/${id}/tv/mapping`, { mapping }),
 	tvSplit: (id: number, body: TvSplitRequest) => call<Job>('POST', `/jobs/${id}/tv/split`, body),
+	// Work the episodes out from what the play-all plays (``wait=false`` stops waiting).
+	tvPlayAll: (id: number, wait: boolean) => call<Job>('POST', `/jobs/${id}/tv/play-all`, { wait }),
 	thumbUrl: (id: number, title: number) => `/api/jobs/${id}/thumbs/${title}.jpg`,
 	// ``at`` (s) keeps the browser's copy right when a cut by hand renumbers the marks.
 	splitThumbUrl: (id: number, title: number, mark: number, at: number) =>

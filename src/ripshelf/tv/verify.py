@@ -28,6 +28,15 @@ FFMPEG_TIMEOUT_S = 60
 SETTLE_S = 2.0
 
 
+# A DVD play-all leaves out each episode's short closing cell, so an episode can
+# sit a little before (or after) where the lengths or chapters put it. Look this
+# far either side, a step at a time (a frame matches for about 0.2 s either way).
+SHIFT_MAX_S = 1.0
+SHIFT_STEP_S = 0.1
+SHIFTS = (0.0, *(s * k * SHIFT_STEP_S for k in range(1, round(SHIFT_MAX_S / SHIFT_STEP_S) + 1) for s in (-1, 1)))
+_NO_FRAME = object()
+
+
 @dataclass
 class OrderCheck:
     verified: bool | None  # None if it could not check (no play-all, ffmpeg missing, ...)
@@ -66,30 +75,41 @@ async def frame(ffmpeg: str, path: Path, at_s: float) -> bytes | None:
 
 
 def frames_match(a: bytes, b: bytes) -> bool:
-    if a == b:
-        return True
-    return sum(abs(x - y) for x, y in zip(a, b, strict=True)) / len(a) <= MATCH_MAX_MEAN_DIFF
+    return a == b or _diff(a, b) <= MATCH_MAX_MEAN_DIFF
 
 
-async def verify_order(ffmpeg: str, ffprobe: str, play_all: Path, ordered: list[tuple[int, Path]]) -> OrderCheck:
+async def verify_order(ffmpeg: str, ffprobe: str, play_all: Path, ordered: list[tuple[int, Path]],
+                       starts: dict[int, float] | None = None) -> OrderCheck:
+    """``starts``: where each episode starts in the play-all, when its chapters say
+    (else the running sum of the episodes' lengths)."""
     if len(ordered) < 2:
         return OrderCheck(None, "nothing to check, because there are fewer than two episodes", {})
     lengths = await asyncio.gather(*(duration(ffprobe, p) for _, p in ordered))
     if any(x is None for x in lengths):
         return OrderCheck(None, "could not read episode lengths (is ffprobe installed?)", {})
     total = await duration(ffprobe, play_all)
-    if total is None or total + 2 < sum(lengths):
+    if total is None or total + max(2.0, len(lengths) * SHIFT_MAX_S) < sum(lengths):
         return OrderCheck(None, "the play-all is shorter than the episodes together", {})
     per: dict[int, bool] = {}
     start = 0.0
     for (idx, path), length in zip(ordered, lengths, strict=True):
+        if starts and idx in starts:
+            start = starts[idx]
         ok = True
-        for frac in SAMPLE_AT:
+        for k, frac in enumerate(SAMPLE_AT):
             t = length * frac
-            a, b = await asyncio.gather(frame(ffmpeg, path, t), frame(ffmpeg, play_all, start + t))
-            if a is None or b is None:
+            a = await frame(ffmpeg, path, t)
+            if a is None:
                 return OrderCheck(None, "could not decode frames (is ffmpeg installed?)", per)
-            ok = ok and frames_match(a, b)
+            # The first look finds the episode's exact place near where it should be;
+            # the next ones must be there.
+            shift = await _find(ffmpeg, play_all, a, start + t, SHIFTS if k == 0 else (0.0,))
+            if shift is _NO_FRAME:
+                return OrderCheck(None, "could not decode frames (is ffmpeg installed?)", per)
+            if shift is None:
+                ok = False
+                break
+            start += shift
         per[idx] = ok
         start += length
     bad = [i for i, ok in per.items() if not ok]
@@ -97,6 +117,26 @@ async def verify_order(ffmpeg: str, ffprobe: str, play_all: Path, ordered: list[
         return OrderCheck(True, f"all {len(per)} episodes match the play-all frame for frame", per)
     return OrderCheck(False, "titles " + ", ".join(map(str, bad)) + " do not match the play-all at their position",
                       per)
+
+
+def _diff(a: bytes, b: bytes) -> float:
+    return sum(abs(x - y) for x, y in zip(a, b, strict=True)) / len(a)
+
+
+async def _find(ffmpeg: str, play_all: Path, want: bytes, at: float, shifts) -> float | object | None:
+    """The shift from ``at`` where the play-all shows ``want`` closest; None if it doesn't."""
+    best, best_d = None, None
+    for d in shifts:
+        if at + d < 0:
+            continue
+        b = await frame(ffmpeg, play_all, at + d)
+        if b is None:
+            return _NO_FRAME
+        if b == want:
+            return d
+        if frames_match(want, b) and (best_d is None or _diff(want, b) < best_d):
+            best, best_d = d, _diff(want, b)
+    return best
 
 
 async def thumbnail(ffmpeg: str, path: Path, out: Path, at_fraction: float = 0.1,

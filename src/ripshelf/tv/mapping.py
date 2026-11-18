@@ -42,12 +42,23 @@ def runtime_cost(duration_s: int, runtime_min: float | None, pal: bool) -> float
     return min(1.0, max(0.0, diff - slack) / runtime_min * 2)
 
 
-def align(titles: list[TitleInfo], episodes: list[Episode], pal: bool = False) -> list[Assignment | None]:
+def align(titles: list[TitleInfo], episodes: list[Episode], pal: bool = False,
+          all_episodes: bool = False) -> list[Assignment | None]:
     """Best monotone alignment of ordered titles to ordered episodes (None = not an episode).
 
     Dynamic programming over (titles used, episodes used). Each title takes
-    one episode, two consecutive episodes, or none (an extra).
+    one episode, two consecutive episodes, or none (an extra). With
+    ``all_episodes`` (the play-all says so) every title is an episode, if the
+    season has enough of them.
     """
+    if all_episodes and len(titles) <= len(episodes):
+        found = _align(titles, episodes, pal, extra=False)
+        if all(found):
+            return found
+    return _align(titles, episodes, pal, extra=True)
+
+
+def _align(titles: list[TitleInfo], episodes: list[Episode], pal: bool, extra: bool) -> list[Assignment | None]:
     n, m = len(titles), len(episodes)
     inf = float("inf")
     best = [[inf] * (m + 1) for _ in range(n + 1)]
@@ -59,7 +70,7 @@ def align(titles: list[TitleInfo], episodes: list[Episode], pal: bool = False) -
             if cur == inf:
                 continue
             d = titles[i].duration_s
-            options = [(j, EXTRA_COST)]  # not an episode
+            options = [(j, EXTRA_COST)] if extra else []  # not an episode
             if j < m:
                 options.append((j + 1, runtime_cost(d, episodes[j].runtime, pal)))
             if j + 1 < m:
@@ -73,6 +84,8 @@ def align(titles: list[TitleInfo], episodes: list[Episode], pal: bool = False) -
     # Prefer using episodes (a run), then the lowest cost.
     j = min(range(m + 1), key=lambda k: (best[n][k], -k))
     out: list[Assignment | None] = [None] * n
+    if best[n][j] == inf:
+        return out
     i = n
     while i > 0:
         pi, pj, took = back[i][j]
@@ -99,12 +112,12 @@ def describe(title: TitleInfo, a: Assignment | None, pal: bool) -> str:
 
 
 def propose(ordered: list[TitleInfo], others: dict[int, TitleMap], season_episodes: list[Episode],
-            start_episode: int | None, pal: bool) -> list[TitleMap]:
+            start_episode: int | None, pal: bool, all_episodes: bool = False) -> list[TitleMap]:
     """Mapping for a box-set disc, with ``ordered`` episode titles from ``start_episode`` on."""
     eps = sorted(season_episodes, key=lambda e: e.episode)
     if start_episode:
         eps = [e for e in eps if e.episode >= start_episode]
-    found = align(ordered, eps, pal)
+    found = align(ordered, eps, pal, all_episodes)
     out = []
     for t, a in zip(ordered, found, strict=True):
         if a is None:
