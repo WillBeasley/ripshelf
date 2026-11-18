@@ -8,6 +8,7 @@ import os
 import shutil
 import signal
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -283,3 +284,19 @@ async def test_shutdown_tells_the_app_at_once(settings):
     server.handle_exit(signal.SIGTERM, None)
     await asyncio.wait_for(app.state.closing.wait(), 5)
     assert server.should_exit
+
+
+@pytest.mark.parametrize("pid, windows, warned", [(1, False, True), (4242, False, False), (1, True, False)])
+def test_running_as_pid_1_warns_about_zombies(monkeypatch, caplog, pid, windows, warned):
+    monkeypatch.setattr(main.os, "getpid", lambda: pid)
+    monkeypatch.setattr(main.proc, "WINDOWS", windows)
+    with caplog.at_level(logging.WARNING, logger="ripshelf.main"):
+        main.warn_if_init()
+    assert ("zombie" in caplog.text) is warned
+
+
+def test_the_image_runs_ripshelf_under_tini():
+    # Without an init as PID 1 every orphaned mmgplsrv stayed a zombie in the worker.
+    dockerfile = (Path(__file__).parents[1] / "Dockerfile").read_text(encoding="utf-8")
+    assert 'ENTRYPOINT ["/usr/bin/tini", "--"]' in dockerfile
+    assert " tini " in dockerfile.split("FROM ")[-1], "the final stage installs tini"
