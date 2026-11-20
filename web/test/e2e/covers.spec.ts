@@ -125,3 +125,30 @@ test('covers picked by holding one are deleted together', async ({ page }) => {
 	await expect(page.getByText('selected')).toBeHidden();
 	expect((await newest(page)).id).toBe(keep);
 });
+
+test("a cover from the shelf waits for a drive's next disc, turned as it was", async ({ page }) => {
+	await upload(page, 6);
+	const cover = await newest(page);
+	await page.request.patch(`/api/covers/${cover.id}/outside`, { data: { rotate: 180 } });
+
+	// An empty drive offers the shelf beside its scan and upload buttons.
+	await page.goto('/');
+	const drive = page.locator('article.drive').filter({ hasText: '/dev/fake-sr3' });
+	await drive.getByRole('button', { name: 'Eject', exact: true }).click();
+	await drive.getByRole('button', { name: 'Add a scan for the next disc' }).click();
+	await drive.getByRole('button', { name: /^Pick a cover from the shelf/ }).click();
+	const picker = page.getByRole('dialog');
+	await expect(picker.locator('button.pick')).not.toHaveCount(0);
+	await picker.locator('button.pick').first().click();
+	await expect(picker).toBeHidden();
+	await expect(drive.getByRole('button', { name: 'Scans for the next disc (1)' })).toBeVisible();
+
+	const pending = (await (await page.request.get('/api/drives/fake-ggc-h20n/pending-scans')).json()).scans;
+	expect(pending.map((p: { rotate: number; rotate_by_hand: boolean }) => [p.rotate, p.rotate_by_hand])).toEqual([[180, true]]);
+	expect((await (await page.request.get('/api/covers')).json()).covers.map((c: { id: string }) => c.id)).not.toContain(cover.id);
+
+	// Put the drive back as it was for the other tests.
+	await page.request.delete(`/api/drives/fake-ggc-h20n/pending-scans/${pending[0].id}`);
+	await drive.getByRole('button', { name: 'Insert disc (fake)' }).click();
+	await expect(drive.getByRole('button', { name: /PAPER_KITES/ })).toBeVisible();
+});

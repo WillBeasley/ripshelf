@@ -279,6 +279,30 @@ async def test_cancel_and_reregister(tmp_path):
     assert "PRGV:1,2,3" in (tmp_path / "log").read_text()
 
 
+async def test_extending_a_remote_scan_is_sent_to_its_worker(tmp_path):
+    h = hubmod.WorkerHub()
+    h.register("w", "W", [{"id": "d", "device": "/dev/sr0"}], [], False)
+    m = hubmod.RemoteMakeMKV(h, "w", "d")
+    task = asyncio.create_task(m.run(["-r", "info", "dev:/dev/sr0"], tmp_path, tmp_path / "log",
+                                     timeout=60, idle_timeout=5))
+    await until(lambda: h.runs)
+    run_id = next(iter(h.runs))
+    m.extend(300)
+    cmds = await h.next_commands("w", wait=1)
+    assert cmds[1] == {"type": "extend", "run": run_id, "seconds": 300} and m.extended_s == 300
+    h.finish(run_id, 0, False, False, None, [])
+    await asyncio.wait_for(task, 2)
+
+
+async def test_the_worker_extends_its_run(tmp_path):
+    agent = Agent(worker_settings(tmp_path, "http://controller.test"), FakeDrives(present=set()))
+    m = agent.runs[7] = agentmod.runner.MakeMKV("makemkvcon")
+    agent.handle({"type": "extend", "run": 7, "seconds": 120})
+    agent.handle({"type": "extend", "run": 8, "seconds": 120})  # a run that has ended
+    assert m.extended_s == 120
+    await agent.client.aclose()
+
+
 async def test_worker_drives_keep_their_own_id_unless_taken():
     h = hubmod.WorkerHub(local_ids=lambda: {"local-drive"})
     a = h.register("a", "A", [{"id": "lg", "device": "/dev/sr3"}], [], False)

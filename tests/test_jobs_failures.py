@@ -110,6 +110,47 @@ async def test_no_output_then_timeout(harness, settings, mkv_script):
         assert h.m.drives[job.drive_id].scan is None
 
 
+async def test_a_scan_given_longer_by_hand_gets_past_the_stall_timeout(harness, settings, mkv_script):
+    settings.scan_timeout_s = 2
+    settings.makemkvcon = mkv_script(info="time.sleep(5); replay('scan-dvd-moonlit-orchard.log')")
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.state == JobState.scanning and j.scan_clock is not None)
+        assert (job.scan_clock.quiet_s, job.scan_clock.max_s, job.scan_clock.extended_s) == (2, settings.scan_max_s, 0)
+        d = h.m.drives[job.drive_id]
+        await until(lambda: d.scan is not None, what="scan started")
+        job = await h.m.extend_scan(job.id, 1)
+        assert job.scan_clock.extended_s == 60 and d.scan.extended_s == 60
+        assert h.db.get_job(job.id).scan_clock.extended_s == 60
+        job = await h.wait_job(lambda j: j.state not in (JobState.detected, JobState.scanning), timeout=20)
+        assert job.problem is None or job.problem.code != "scan_timeout"
+        assert job.titles and job.scan_clock is None
+        assert any("Scan given 1 min longer, so it stops after 62 s without a word" in e.message
+                   for e in h.db.events(job.id))
+        with pytest.raises(ValueError, match="isn't scanning"):
+            await h.m.extend_scan(job.id, 5)
+
+
+async def test_a_scan_can_only_be_given_longer_while_it_runs(harness):
+    async with harness() as h:
+        with pytest.raises(ValueError, match="isn't scanning"):
+            await h.m.extend_scan(999, 5)
+        job = h.db.create_job("fake-pioneer", "/dev/fake-sr2")
+        with pytest.raises(ValueError, match="isn't scanning"):
+            await h.m.extend_scan(job.id, 5)
+
+
+async def test_a_stalled_scan_says_how_long_it_was_given(harness, settings, mkv_script):
+    settings.scan_timeout_s = 1
+    settings.makemkvcon = mkv_script(info="time.sleep(600)")
+    async with harness(PM) as h:
+        job = await h.wait_job(lambda j: j.state == JobState.scanning and j.scan_clock is not None)
+        d = h.m.drives[job.drive_id]
+        await until(lambda: d.scan is not None, what="scan started")
+        d.scan.extend(1)  # a second more, rather than whole minutes
+        job = await h.wait_job(lambda j: j.state == JobState.failed, timeout=20)
+        assert "no output for 2 s" in job.problem.message and job.scan_clock is None
+
+
 COMPLEX = ('MSG:3024,4096,2,"Complex multiplex encountered - 19 cells and 4759 VOBUs have to be scanned.",'
            '"Complex multiplex encountered - %1 cells and %2 VOBUs have to be scanned.","19","4759"')
 

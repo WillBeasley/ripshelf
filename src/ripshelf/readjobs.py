@@ -176,7 +176,7 @@ class ReadingMixin:
         data = found[0].read_bytes()
         img = await asyncio.to_thread(images.render, data, sc.crop, sc.rotate)
         started = time.monotonic()
-        reading = await ocr.read_picture(reader, img, sc.kind, sc.split)
+        reading = await ocr.read_picture(reader, img, sc.kind, sc.split, orient=not sc.rotate_by_hand)
         job = self.db.get_job(job_id)
         sc = next((x for x in job.scans if x.id == scan_id), None) if job else None
         if not sc:

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Candidate, Job } from '#lib/api-types.ts';
-import { duration, eta, gb, gbPerMin, guessTitle, jobTitle, kindLabel, percent, size, via } from '#lib/format.ts';
+import type { Candidate, Job, ScanClock } from '#lib/api-types.ts';
+import { duration, eta, gb, gbPerMin, guessTitle, jobTitle, kindLabel, percent, scanTimeLeft, size, via } from '#lib/format.ts';
 
 // Just the parts of a job these read.
 function job(over: Partial<Job> = {}): Job {
@@ -75,5 +75,33 @@ describe('titles', () => {
 		expect(kindLabel(null)).toBe('Disc');
 		expect(via(['tmdb', 'omdb', 'someday'])).toBe('via TMDB · OMDb · someday');
 		expect(via([])).toBe('');
+	});
+});
+
+describe('scan time left', () => {
+	const start = Date.parse('2026-11-17T20:00:00Z');
+	const clock = (over: Partial<ScanClock> = {}): ScanClock => ({
+		started_at: '2026-11-17T20:00:00Z',
+		quiet_s: 300,
+		max_s: 7200,
+		extended_s: 0,
+		last_output_at: null,
+		...over
+	});
+
+	it('counts down the quiet limit from MakeMKV\'s last word', () => {
+		expect(scanTimeLeft(clock(), start + 60_000)).toEqual({ left: 240, by: 'quiet' });
+		const spoke = clock({ last_output_at: '2026-11-17T20:10:00Z' });
+		expect(scanTimeLeft(spoke, start + 11 * 60_000)).toEqual({ left: 240, by: 'quiet' });
+	});
+
+	it('adds the time given by hand', () => {
+		expect(scanTimeLeft(clock({ extended_s: 900 }), start + 60_000)).toEqual({ left: 1140, by: 'quiet' });
+	});
+
+	it('is cut short by the overall limit', () => {
+		const late = clock({ last_output_at: '2026-11-17T21:58:00Z' });
+		expect(scanTimeLeft(late, start + 118 * 60_000)).toEqual({ left: 120, by: 'total' });
+		expect(scanTimeLeft(late, start + 125 * 60_000).left).toBe(0);
 	});
 });

@@ -9,6 +9,7 @@
 	import PendingScans from './PendingScans.svelte';
 	import PresetForm from './PresetForm.svelte';
 	import Progress from './Progress.svelte';
+	import ScanClock from './ScanClock.svelte';
 	import StatePill from './StatePill.svelte';
 
 	let { drive }: { drive: Drive } = $props();
@@ -128,6 +129,8 @@
 
 		{#if showProgress && progress}
 			<Progress {progress} />
+		{:else if current.state === 'scanning' && current.scan_clock}
+			<ScanClock job={current} clock={current.scan_clock} />
 		{:else if current.state === 'scanning'}
 			<p class="small muted">MakeMKV is scanning the disc…</p>
 		{/if}

@@ -94,6 +94,8 @@ def test_unknown_ids(client, method, path):
 def test_job_actions_on_missing_job_are_errors_not_crashes(client):
     for action in ("retry", "cancel", "identify-again"):
         assert client.post(f"/api/jobs/999/{action}").status_code == 409
+    assert client.post("/api/jobs/999/scan/extend", json={"minutes": 5}).status_code == 409
+    assert client.post("/api/jobs/999/scan/extend", json={"minutes": 0}).status_code == 422
     assert client.post("/api/jobs/999/search", json={"query": "x"}).status_code == 404
     assert client.post("/api/jobs/999/confirm", json={"candidate": {"title": "x"}}).status_code == 409
 

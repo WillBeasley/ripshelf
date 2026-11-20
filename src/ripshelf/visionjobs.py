@@ -5,6 +5,8 @@ When it runs is a setting: never, only for scans Tesseract struggled with, for e
 scan, or only when asked (the scan's "Read with the vision model" button). A reading is
 kept beside the scan as ``<id>.vision.json`` and merged into the listing with
 Tesseract's (``listing.merge``); like Tesseract's, it never replaces the user's edits.
+A cover from the shelf brings the reading the model made of it there, which is kept
+(not asked again) until the scan's button asks for a new one.
 
 A local model keeps a desktop CPU busy for a minute or more a picture, so readings take
 turns across jobs, and wait while a transcode runs. Cloud readings take seconds and
@@ -45,6 +47,7 @@ class VisionReading(BaseModel):
     model: str
     seconds: float
     listing: Listing
+    kept: bool = False  # made on the covers shelf: kept whatever changes, until asked again
 
 
 def struggles(sc: CoverScan, text: ScanText | None) -> list[str]:
@@ -133,7 +136,7 @@ class VisionMixin:
             r = VisionReading.model_validate_json(self._vision_path(job, sc.id).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
-        return r if r.key.startswith(self._read_key(sc) + ":") else None
+        return r if r.kept or r.key.startswith(self._read_key(sc) + ":") else None
 
     def _wanted(self, job: JobRecord, provider: vision.Provider) -> list[CoverScan]:
         """Scans to read with the vision model now, as Settings say."""
@@ -142,7 +145,7 @@ class VisionMixin:
         out = []
         for sc in job.scans:
             r = self.vision_reading(job, sc)
-            if r and r.key == self._vision_key(sc, provider) and sc.id not in asked:
+            if r and (r.kept or r.key == self._vision_key(sc, provider)) and sc.id not in asked:
                 continue
             if sc.id in asked or mode == "every" and sc.kind in (*LISTING_KINDS, "front") or \
                     mode == "struggles" and struggles(sc, self.scan_text(job.id, sc.id)):

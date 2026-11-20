@@ -327,9 +327,14 @@ class TvPlan(BaseModel):
                                                          "as found in those shows' episode lists")
     from_scan: bool = Field(False, description="the show or episodes were set from the cover scan, so it's "
                                                "reviewed, not confirmed without review")
-    order_from: Literal["season", "box", "names", "disc_db"] | None = Field(
+    order_from: Literal["season", "box", "names", "disc_db", "play_all"] | None = Field(
         None, description="what put the episodes on the titles in this order: the season's own order from "
-                          "the start episode (a guess), the cover scan's list, a pasted run order, or TheDiscDB")
+                          "the start episode (a guess), the cover scan's list, a pasted run order, TheDiscDB, "
+                          "or the play-all's own order")
+    wait_play_all: bool = Field(False, description="the user asked for the episodes to be worked out from the "
+                                                   "play-all once it's ripped")
+    play_all_order: list[int] = Field(default=[], description="episode titles in the order the play-all plays "
+                                                              "them, once read from the ripped files")
     auto_confirmed: bool = False
     auto_evidence: list[str] = Field(default=[], description="why it was (or wasn't) confirmed without review")
     splits: list[TitleSplit] = Field(default=[], description="long titles each holding several episodes, split "
@@ -509,6 +514,8 @@ class CoverScan(BaseModel):
     sha256: str
     size_bytes: int
     rotate: ScanRotate = Field(0, description="turned clockwise by this much when shown or used")
+    rotate_by_hand: bool = Field(False, description="turned by hand (here or on the covers shelf): reading "
+                                                    "the text doesn't turn it again")
     crop: list[int] | None = Field(None, description="the picture within the scan, [left, top, right, "
                                                      "bottom] in the original's pixels, when trimmed")
     crop_by_hand: bool = Field(False, description="the crop was set by hand, not found by trimming")
@@ -861,6 +868,23 @@ class ShelfSuggestion(BaseModel):
 
 
 ScannerSource = Literal["platen", "feeder"]
+class ScanClock(BaseModel):
+    """The limits of the MakeMKV scan under way. Each is the setting plus ``extended_s``,
+    the time given by hand (POST /api/jobs/{id}/scan/extend)."""
+
+    started_at: datetime
+    quiet_s: int = Field(description="stopped once MakeMKV says nothing for this long (before any extension); "
+                                     "longer while it scans a complex DVD structure")
+    max_s: int = Field(description="and in any case this long after it started (before any extension)")
+    extended_s: int = Field(0, description="added to both by hand")
+    last_output_at: datetime | None = Field(None, description="about when MakeMKV last wrote something "
+                                                              "(updated every few seconds, not each line)")
+
+
+class ExtendScanRequest(BaseModel):
+    minutes: int = Field(5, ge=1, le=240)
+
+
 ScannerState = Literal["scanning", "failed"]
 
 
@@ -969,6 +993,7 @@ class Job(BaseModel):
     listing: ScanListing | None = Field(None, description="what's on the disc, read from the scans")
     scan_match: ScanMatch | None = Field(None, description="the listing matched to the disc's titles")
     refile: Refile | None = Field(None, description="finished, and being identified again")
+    scan_clock: ScanClock | None = Field(None, description="the limits of the MakeMKV scan under way")
 
 
 class ContributionTitle(BaseModel):
@@ -1431,6 +1456,11 @@ class TitleMapUpdate(BaseModel):
     title_index: int
     role: TitleRole
     episodes: list[EpisodeRef] = []
+
+
+class TvPlayAllRequest(BaseModel):
+    wait: bool = Field(True, description="true works the episodes out from the play-all (now if it's ripped, "
+                                         "else once it is); false stops waiting")
 
 
 class TvSplitRequest(BaseModel):
