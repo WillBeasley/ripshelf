@@ -90,12 +90,12 @@ FROM docker.io/library/python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014
 # reaches Quick Sync through libmfx1, whose own runtime predates 12th gen (Alder Lake)
 # and fails with "unsupported (-3)" there; libmfx-gen1.2 is the oneVPL runtime it loads
 # instead. Tesseract (with its English and orientation data) reads the text on scans
-# of the box, and zbar (libzbar0, for pyzbar) their barcodes.
+# of the box, and zbar (libzbar0, for pyzbar) their barcodes. tini is PID 1 (below).
 RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
         /etc/apt/sources.list.d/debian.sources \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        libssl3 libexpat1 zlib1g p7zip-full util-linux ffmpeg mkvtoolnix \
+        libssl3 libexpat1 zlib1g p7zip-full util-linux ffmpeg mkvtoolnix tini \
         vainfo default-jre-headless \
         tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd libzbar0 \
  && if [ "$(dpkg --print-architecture)" = amd64 ]; then \
@@ -139,4 +139,8 @@ ENV RIPSHELF_DATA_DIR=/data \
     HOME=/data
 VOLUME ["/data", "/scratch", "/library"]
 EXPOSE 8380
+# tini runs as PID 1 and reaps orphaned processes. makemkvcon's helper (mmgplsrv)
+# is orphaned whenever makemkvcon exits or is killed before it, and the orphan goes
+# to PID 1; ripshelf there never reaps it, so each scan left a zombie behind.
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["ripshelf"]

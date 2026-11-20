@@ -4,6 +4,8 @@
          -> identify show, season, disc; propose a title -> episode mapping
          -> review (always, for TV) with the mapping table, confirm
          -> thumbnails + order check against the play-all, once ripped
+            (or, when the user asks to wait for it, the episodes worked out
+            from what the play-all plays: tv/playall.py)
          -> finalise every mapped title into TV/Show (Year)/Season NN/
 
 A disc with its episodes in one long title has that title split at chapters
@@ -55,7 +57,7 @@ from .models import (
 )
 from .providers import thediscdb
 from .providers.tvmaze import Tvmaze, TvmazeError
-from .tv import keyless, naming, shape, tmdb_tv, verify
+from .tv import keyless, naming, playall, shape, tmdb_tv, verify
 from .tv import mapping as tvmap
 from .tv import split as tvsplit
 from .tv.labels import TvLabel, parse_tv_label, split_show_name
@@ -122,7 +124,8 @@ class TvMixin:
         return TitleRole.skip if role == TitleRole.extra and not self.s.tv_rip_extras else role
 
     def _ordered_episode_titles(self, job: JobRecord, plan: TvPlan | None = None) -> list:
-        """Episode titles in disc order. That's play-all clip order on Blu-ray, else title number."""
+        """Episode titles in disc order. That's the play-all's order once read from the ripped
+        files, or play-all clip order on Blu-ray, else title number."""
         plan = plan or job.tv
         roles = {m.title_index: m.role for m in plan.mapping} if plan else {}
         eps = [t for t in job.titles if roles.get(t.index) == TitleRole.episode]
@@ -136,6 +139,9 @@ class TvMixin:
                 return (sp.title_index, 1, t.index) if sp else (t.index, 0)
 
             return sorted([*eps, *parts], key=where)
+        if plan and plan.play_all_order:
+            seen = {i: k for k, i in enumerate(plan.play_all_order)}
+            return sorted(eps, key=lambda t: (seen.get(t.index, len(seen)), t.index))
         bluray = job.disc.kind in (DiscKind.bluray, DiscKind.uhd)
         pa = next((t for t in job.titles if roles.get(t.index) == TitleRole.play_all), None)
         order = shape.play_all_order(pa, eps, bluray)
@@ -382,7 +388,7 @@ class TvMixin:
                 notes.append(source)
             if not episodes:
                 notes.append(f"No episodes listed for season {season}")
-            reshaped = self._reshape(job, plan, episodes)
+            reshaped = None if plan.play_all_order else self._reshape(job, plan, episodes)
             if reshaped:
                 notes.append(reshaped)
                 ordered = self._ordered_episode_titles(job, plan)
@@ -411,8 +417,9 @@ class TvMixin:
                 ordered = self._ordered_episode_titles(job, plan)
                 others = {m.title_index: m.model_copy(update={"episodes": []}) for m in plan.mapping
                           if m.role != TitleRole.episode}
-            plan.mapping = tvmap.propose(ordered, others, episodes, plan.start_episode, pal)
-            plan.order_from = "season"
+            plan.mapping = tvmap.propose(ordered, others, episodes, plan.start_episode, pal,
+                                         all_episodes=bool(plan.play_all_order))
+            plan.order_from = "play_all" if plan.play_all_order else "season"
             self._label_parts(plan)
             plan.disc_db = False
             mapped = self._disc_match_mapping(job, plan, show)
@@ -423,7 +430,8 @@ class TvMixin:
         # task saves to it while we wait on the network).
         fresh = self.db.get_job(job_id)
         plan.show = show
-        plan.order_verified, plan.order_note = None, None
+        if not plan.play_all_order:  # else still the play-all's order, checked already
+            plan.order_verified, plan.order_note = None, None
         if fresh.tv:
             plan.candidates = fresh.tv.candidates or plan.candidates
         job = fresh
@@ -1130,6 +1138,8 @@ class TvMixin:
         if ok:
             self._event(job, "info", "Confirming without review, because " + "; ".join(why))
             await self.tv_confirm(job_id, [], source="auto")
+        elif job.tv.wait_play_all and job.rip.state not in ("done", "failed"):
+            pass  # the user is waiting for the play-all; it's said once that's read
         elif "waiting for the order check" not in why or job.rip.state in ("done", "failed"):
             # Final, so a human is needed (the review notification was held back until now).
             self._spawn_notify(self.db.get_job(job_id), "review")
@@ -1187,6 +1197,7 @@ class TvMixin:
                                  poster_url=show.poster_url, score=show.score)
         job.identity_source = source
         plan.auto_confirmed = source == "auto"
+        plan.wait_play_all = False
         job.problem = None
         job.destination = str(naming.show_folder(self.s.tv, show))
         if job.refile:  # finished already, so its files move to the new names
@@ -1335,6 +1346,10 @@ class TvMixin:
                 await verify.thumbnail(self.s.ffmpeg, Path(f), out, length=length)
         await self._analyse_split(job_id)
         job = self.db.get_job(job_id)
+        if job.tv.wait_play_all:
+            await self._read_play_all(job_id)
+            await self._maybe_auto_confirm(job_id)
+            return
         if not self.s.verify_order or job.tv.splits:
             await self._maybe_auto_confirm(job_id)
             return
@@ -1346,13 +1361,120 @@ class TvMixin:
                 "some titles were not ripped"
             check = verify.OrderCheck(None, note, {})
         else:
-            check = await verify.verify_order(self.s.ffmpeg, self.s.ffprobe, Path(job.rip.files[pa]),
-                                              [(i, Path(job.rip.files[i])) for i in ordered])
+            # The play-all's chapters say where each title sits in it, and which titles it plays.
+            read = await self._play_all_read(job, pa, frames=False)
+            if read.found and read.order != ordered:
+                check = verify.OrderCheck(False, f"{read.note}, not as mapped here: “Use the play-all's order” "
+                                                 "numbers the episodes that way", {})
+            else:
+                check = await verify.verify_order(self.s.ffmpeg, self.s.ffprobe, Path(job.rip.files[pa]),
+                                                  [(i, Path(job.rip.files[i])) for i in ordered],
+                                                  read.starts or None)
         job = self.db.get_job(job_id)
         job.tv.order_verified, job.tv.order_note = check.verified, check.note
         self._event(job, "info" if check.verified is not False else "warning", f"Episode order: {check.note}")
         self._save(job)
         await self._maybe_auto_confirm(job_id)
+
+    # --- the episodes from the play-all ------------------------------------------------
+
+    async def tv_play_all(self, job_id: int, wait: bool) -> JobRecord:
+        """Work the episodes (how many, and in what order) out from what the play-all plays,
+        now if every title is ripped, else once they are. ``wait=False`` stops waiting."""
+        job = self._tv_job(job_id)
+        plan = job.tv
+        if job.media != MediaKind.tv or plan is None:
+            raise ValueError("only a TV disc has a play-all")
+        if not wait:
+            if plan.wait_play_all:
+                plan.wait_play_all = False
+                self._event(job, "info", "Not waiting for the play-all any more")
+                self._save(job)
+            return job
+        if plan.splits:
+            raise ValueError("the episodes here are cut from one long title, so there's no play-all to read")
+        plan.wait_play_all, plan.user_edited = True, True
+        ripped = job.rip.state == RipState.done and job.rip.all_titles
+        self._event(job, "info", "Working the episodes out from the play-all" if ripped else
+                    "Waiting for the play-all to be ripped, to work the episodes out from it")
+        self._save(job)
+        if ripped:
+            await self._read_play_all(job_id)
+        return self.db.get_job(job_id)
+
+    def _play_all_titles(self, job: JobRecord) -> list[int]:
+        """Titles that may be the play-all, likeliest first: the one marked as it, then the
+        longest titles that are longer than two others together."""
+        roles = {m.title_index: m.role for m in job.tv.mapping}
+        ripped = [t for t in job.titles if t.index in job.rip.files and roles.get(t.index) != TitleRole.duplicate]
+        out = [i for i, r in roles.items() if r == TitleRole.play_all and i in job.rip.files]
+        for t in sorted(ripped, key=lambda t: -t.duration_s):
+            shorter = sorted(o.duration_s for o in ripped if o.index != t.index and o.duration_s >= shape.MIN_EPISODE_S
+                             and o.duration_s < t.duration_s)
+            if t.index not in out and len(shorter) >= 2 and t.duration_s >= shorter[0] + shorter[1]:
+                out.append(t.index)
+        return out[:3]
+
+    async def _play_all_read(self, job: JobRecord, pa: int, frames: bool = True) -> playall.PlayAllRead:
+        roles = {m.title_index: m.role for m in job.tv.mapping}
+        length = next(t.duration_s for t in job.titles if t.index == pa)
+        others = [(t.index, Path(job.rip.files[t.index])) for t in job.titles
+                  if t.index != pa and t.index in job.rip.files and roles.get(t.index) != TitleRole.duplicate
+                  and t.duration_s < length]
+        return await playall.read(self.s.ffmpeg, self.s.ffprobe, Path(job.rip.files[pa]), others, length,
+                                  frames=frames)
+
+    async def _read_play_all(self, job_id: int) -> None:
+        """Make the titles the play-all plays the episodes, in its order, and number them
+        from the disc's first episode on."""
+        job = self.db.get_job(job_id)
+        read, pa = playall.PlayAllRead(note="no title on this disc is long enough to be a play-all"), None
+        for i in self._play_all_titles(job):
+            read = await self._play_all_read(job, i)
+            if read.found:
+                pa = i
+                break
+        job = self.db.get_job(job_id)
+        plan = job.tv
+        plan.wait_play_all = False
+        if pa is None:
+            plan.order_verified, plan.order_note = None, f"Couldn't read the play-all: {read.note}"
+            self._event(job, "warning", f"{plan.order_note}, so check the episodes by hand")
+            self._check_plan(job)
+            self._save(job)
+            return
+        check = await verify.verify_order(self.s.ffmpeg, self.s.ffprobe, Path(job.rip.files[pa]),
+                                          [(i, Path(job.rip.files[i])) for i in read.order], read.starts)
+        job = self.db.get_job(job_id)
+        plan = job.tv
+        plan.wait_play_all = False
+        for m in plan.mapping:
+            if m.title_index == pa:
+                m.role, m.episodes = TitleRole.play_all, []
+                m.note = f"plays titles {', '.join(map(str, read.order))} back to back"
+            elif m.title_index in read.order:
+                m.role, m.by_hand, m.note = TitleRole.episode, False, None
+            elif m.role in (TitleRole.episode, TitleRole.play_all):
+                m.role, m.episodes = self._default_role(TitleRole.extra), []
+                m.note, m.by_hand = "not in the play-all", False
+        plan.play_all_order = list(read.order)
+        plan.order_verified = check.verified  # None: ffmpeg couldn't look, so the chapters alone say
+        plan.order_note = read.note[0].upper() + read.note[1:] if check.verified is not False else \
+            f"The play-all's chapters say titles {', '.join(map(str, read.order))}, but {check.note}"
+        if plan.show and not plan.compilation:
+            ordered = self._ordered_episode_titles(job, plan)
+            others = {m.title_index: m.model_copy(update={"episodes": []}) for m in plan.mapping
+                      if m.role != TitleRole.episode}
+            pal = any(t.framerate == "25" for t in ordered)
+            plan.mapping = tvmap.propose(ordered, others, plan.episodes, plan.start_episode, pal, all_episodes=True)
+            plan.order_from = "play_all"
+        n = len(read.order)
+        self._event(job, "info" if plan.order_verified else "warning",
+                    f"{plan.order_note}: {n} episodes" + (f", from episode {plan.start_episode}"
+                                                          if plan.show and not plan.compilation else ""))
+        self._check_plan(job)
+        self._save(job)
+        self.rematch(job_id)
 
     def thumbnail_path(self, job_id: int, title_index: int) -> Path | None:
         job = self.db.get_job(job_id)

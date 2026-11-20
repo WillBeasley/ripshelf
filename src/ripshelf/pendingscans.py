@@ -3,6 +3,8 @@
 A drive keeps the pictures added for "the next disc" until a disc goes into it: the new
 job takes them, and they're read and used to identify the disc like any other scan.
 They're kept in ``<data>/pending-scans`` and forgotten after a day if no disc comes.
+A cover from the shelf keeps its turn and crop here, and the vision model's reading of
+it beside it (``<id>.vision.json``), for the job.
 """
 
 from __future__ import annotations
@@ -20,7 +22,9 @@ from . import library
 from .db import now
 from .models import PendingScan, PendingScans, ScanKind, ScannerRun, ScannerScanRequest, ScanSource
 from .providers import release_info
+from .scanjobs import Look
 from .scanner import images
+from .visionjobs import VisionReading
 
 log = logging.getLogger(__name__)
 
@@ -50,9 +54,16 @@ class PendingMixin:
         fresh = [p for p in idx.scans if p.expires_at > now()]
         for p in idx.scans:
             if p not in fresh:
-                (self._pending_dir / f"{p.id}.{EXTS[p.content_type]}").unlink(missing_ok=True)
+                self._drop_pending_files(p)
         idx.scans = fresh
         return idx
+
+    def _drop_pending_files(self, p: PendingScan) -> None:
+        (self._pending_dir / f"{p.id}.{EXTS[p.content_type]}").unlink(missing_ok=True)
+        self._pending_vision_path(p.id).unlink(missing_ok=True)
+
+    def _pending_vision_path(self, scan_id: str) -> Path:
+        return self._pending_dir / f"{scan_id}.vision.json"
 
     def _save_pending(self, idx: _Index) -> None:
         self._pending_dir.mkdir(parents=True, exist_ok=True)
@@ -74,19 +85,21 @@ class PendingMixin:
         f = self._pending_dir / f"{p.id}.{EXTS[p.content_type]}" if p else None
         return (f, p.content_type) if f and f.is_file() else None
 
-    async def add_pending(self, drive_id: str, data: bytes, kind: ScanKind, source: ScanSource) -> PendingScan:
-        """Keep a picture for the next disc in this drive."""
+    async def add_pending(self, drive_id: str, data: bytes, kind: ScanKind, source: ScanSource,
+                          look: Look | None = None) -> PendingScan:
+        """Keep a picture for the next disc in this drive (trimmed, or shown as ``look``
+        says)."""
         self._drive_known(drive_id)
         if len(data) > release_info.MAX_COVER_BYTES:
             raise ValueError("the picture is larger than 20 MB")
         ctype = release_info.sniff(data)
         if not ctype:
             raise ValueError("the picture must be a JPEG, PNG or WebP")
-        trim = source != "camera" and self.s.scanner_trim
+        trim = source != "camera" and self.s.scanner_trim and not look
 
         def measure():
             img = images.open_image(data)
-            return img.width, img.height, images.trim_box(img) if trim else None
+            return img.width, img.height, look.crop if look else images.trim_box(img) if trim else None
 
         width, height, crop = await asyncio.to_thread(measure)
         async with self._pending_lock:
@@ -98,8 +111,12 @@ class PendingMixin:
             p = PendingScan(id=uuid.uuid4().hex[:12], drive_id=drive_id, kind=kind, source=source, page=page,
                             created_at=now(), expires_at=now() + KEEP, content_type=ctype, width=width,
                             height=height, sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data), crop=crop)
+            if look:
+                p.rotate, p.crop_by_hand, p.rotate_by_hand = look.rotate, look.crop_by_hand, look.rotate_by_hand
             self._pending_dir.mkdir(parents=True, exist_ok=True)
             (self._pending_dir / f"{p.id}.{EXTS[ctype]}").write_bytes(data)
+            if look and look.vision:
+                self._pending_vision_path(p.id).write_text(look.vision.model_dump_json(), encoding="utf-8")
             idx.scans.append(p)
             self._save_pending(idx)
         return p
@@ -110,7 +127,7 @@ class PendingMixin:
             p = next((x for x in idx.scans if x.id == scan_id and x.drive_id == drive_id), None)
             if not p:
                 raise KeyError(scan_id)
-            (self._pending_dir / f"{p.id}.{EXTS[p.content_type]}").unlink(missing_ok=True)
+            self._drop_pending_files(p)
             idx.scans.remove(p)
             self._save_pending(idx)
 
@@ -128,11 +145,16 @@ class PendingMixin:
         for p in mine:
             f = self._pending_dir / f"{p.id}.{EXTS[p.content_type]}"
             try:
-                await self.add_scan(job_id, f.read_bytes(), p.kind, p.source, p.page)
+                vision = VisionReading.model_validate_json(self._pending_vision_path(p.id).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                vision = None
+            look = Look(p.crop, p.rotate, p.crop_by_hand, p.rotate_by_hand, vision)
+            try:
+                await self.add_scan(job_id, f.read_bytes(), p.kind, p.source, p.page, look)
                 n += 1
             except (OSError, ValueError, KeyError) as e:
                 log.info("could not give job %s the waiting scan %s: %s", job_id, p.id, e)
-            f.unlink(missing_ok=True)
+            self._drop_pending_files(p)
         if n:
             self._event(self.db.get_job(job_id), "info",
                         f"Took the {n} picture{'s' if n != 1 else ''} of the box added before the disc went in")

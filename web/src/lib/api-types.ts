@@ -88,6 +88,7 @@ export interface Api {
   EpisodeGuess?: EpisodeGuess;
   EpisodeRef?: EpisodeRef;
   Evidence?: Evidence;
+  ExtendScanRequest?: ExtendScanRequest;
   Filesystem?: Filesystem;
   FinishedPage?: FinishedPage;
   FolderRequest?: FolderRequest;
@@ -134,6 +135,7 @@ export interface Api {
   RipProgress?: RipProgress;
   RipProgressEvent?: RipProgressEvent;
   RipState?: RipState;
+  ScanClock?: ScanClock;
   ScanListing?: ScanListing;
   ScanMatch?: ScanMatch;
   ScanSplit?: ScanSplit;
@@ -190,6 +192,7 @@ export interface Api {
   TvConfirmRequest?: TvConfirmRequest;
   TvMatchTextRequest?: TvMatchTextRequest;
   TvPlan?: TvPlan;
+  TvPlayAllRequest?: TvPlayAllRequest;
   TvProposeRequest?: TvProposeRequest;
   TvSplitRequest?: TvSplitRequest;
   VisionModels?: VisionModels;
@@ -679,6 +682,10 @@ export interface CoverScan {
    */
   rotate: 0 | 90 | 180 | 270;
   /**
+   * turned by hand (here or on the covers shelf): reading the text doesn't turn it again
+   */
+  rotate_by_hand: boolean;
+  /**
    * the picture within the scan, [left, top, right, bottom] in the original's pixels, when trimmed
    */
   crop: number[] | null;
@@ -979,6 +986,13 @@ export interface EpisodeGuess {
   score: number;
 }
 /**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ExtendScanRequest".
+ */
+export interface ExtendScanRequest {
+  minutes: number;
+}
+/**
  * One disk (filesystem) and the ripshelf folders on it. Sizes in bytes; none when not found.
  *
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1102,6 +1116,10 @@ export interface Job {
    * finished, and being identified again
    */
   refile: Refile | null;
+  /**
+   * the limits of the MakeMKV scan under way
+   */
+  scan_clock: ScanClock | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -1186,9 +1204,17 @@ export interface TvPlan {
    */
   from_scan: boolean;
   /**
-   * what put the episodes on the titles in this order: the season's own order from the start episode (a guess), the cover scan's list, a pasted run order, or TheDiscDB
+   * what put the episodes on the titles in this order: the season's own order from the start episode (a guess), the cover scan's list, a pasted run order, TheDiscDB, or the play-all's own order
    */
-  order_from: ("season" | "box" | "names" | "disc_db") | null;
+  order_from: ("season" | "box" | "names" | "disc_db" | "play_all") | null;
+  /**
+   * the user asked for the episodes to be worked out from the play-all once it's ripped
+   */
+  wait_play_all: boolean;
+  /**
+   * episode titles in the order the play-all plays them, once read from the ripped files
+   */
+  play_all_order: number[];
   auto_confirmed: boolean;
   /**
    * why it was (or wasn't) confirmed without review
@@ -1715,6 +1741,32 @@ export interface RefileMove {
   done: boolean;
 }
 /**
+ * The limits of the MakeMKV scan under way. Each is the setting plus ``extended_s``,
+ * the time given by hand (POST /api/jobs/{id}/scan/extend).
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScanClock".
+ */
+export interface ScanClock {
+  started_at: string;
+  /**
+   * stopped once MakeMKV says nothing for this long (before any extension); longer while it scans a complex DVD structure
+   */
+  quiet_s: number;
+  /**
+   * and in any case this long after it started (before any extension)
+   */
+  max_s: number;
+  /**
+   * added to both by hand
+   */
+  extended_s: number;
+  /**
+   * about when MakeMKV last wrote something (updated every few seconds, not each line)
+   */
+  last_output_at: string | null;
+}
+/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "FolderRequest".
  */
@@ -1891,6 +1943,10 @@ export interface JobDetail {
    * finished, and being identified again
    */
   refile: Refile | null;
+  /**
+   * the limits of the MakeMKV scan under way
+   */
+  scan_clock: ScanClock | null;
   events: JobEvent[];
   titles: TitleInfo[];
 }
@@ -2088,6 +2144,10 @@ export interface PendingScan {
    * turned clockwise by this much when shown or used
    */
   rotate: 0 | 90 | 180 | 270;
+  /**
+   * turned by hand (here or on the covers shelf): reading the text doesn't turn it again
+   */
+  rotate_by_hand: boolean;
   /**
    * the picture within the scan, [left, top, right, bottom] in the original's pixels, when trimmed
    */
@@ -3430,6 +3490,16 @@ export interface TvMatchTextRequest {
    * episode names in disc order, one per line or comma separated
    */
   text: string;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "TvPlayAllRequest".
+ */
+export interface TvPlayAllRequest {
+  /**
+   * true works the episodes out from the play-all (now if it's ripped, else once it is); false stops waiting
+   */
+  wait: boolean;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

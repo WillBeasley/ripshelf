@@ -327,6 +327,11 @@ class Agent:
             if m:
                 m.cancel()
             return
+        if kind == "extend":
+            m = self.runs.get(cmd.get("run"))
+            if m:
+                m.extend(float(cmd.get("seconds") or 0))
+            return
         coro = {"makemkv": self.do_makemkv, "structure": self.do_structure, "eject": self.do_eject,
                 "close_tray": self.do_close_tray}.get(kind)
         if coro is None:

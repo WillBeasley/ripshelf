@@ -48,6 +48,7 @@ from .models import (
     Drive,
     DriveNameUpdate,
     DriveStats,
+    ExtendScanRequest,
     Filesystem,
     FinishedPage,
     FolderRequest,
@@ -106,6 +107,7 @@ from .models import (
     Tool,
     TvConfirmRequest,
     TvMatchTextRequest,
+    TvPlayAllRequest,
     TvProposeRequest,
     TvSplitRequest,
     VisionModels,
@@ -394,6 +396,12 @@ async def keep_identity(job_id: int, request: Request):
 @api.post("/jobs/{job_id}/cancel", response_model=Job)
 async def cancel(job_id: int, request: Request):
     return await _job_action(request, job_id, manager(request).cancel)
+
+
+@api.post("/jobs/{job_id}/scan/extend", response_model=Job)
+async def extend_scan(job_id: int, body: ExtendScanRequest, request: Request):
+    """Give the MakeMKV scan under way longer before it's stopped (409 if there's none)."""
+    return await _job_action(request, job_id, lambda i: manager(request).extend_scan(i, body.minutes))
 
 
 @api.post("/jobs/{job_id}/media", response_model=Job)
@@ -953,6 +961,13 @@ async def tv_match_text(job_id: int, body: TvMatchTextRequest, request: Request)
 async def tv_confirm(job_id: int, body: TvConfirmRequest, request: Request):
     m = manager(request)
     return await _job_action(request, job_id, lambda i: m.tv_confirm(i, body.mapping))
+
+
+@api.post("/jobs/{job_id}/tv/play-all", response_model=Job)
+async def tv_play_all(job_id: int, body: TvPlayAllRequest, request: Request):
+    """Work the episodes (how many, in what order) out from the play-all once it's ripped."""
+    m = manager(request)
+    return await _job_action(request, job_id, lambda i: m.tv_play_all(i, body.wait))
 
 
 @api.put("/jobs/{job_id}/tv/mapping", response_model=Job)

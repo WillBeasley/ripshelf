@@ -356,7 +356,9 @@
 				{#if scanner?.vision}
 					<span class="row vision">
 						<button disabled={act.busy || open.reading.vision_state === 'queued' || open.reading.vision_state === 'reading' || (ownModel && !model.trim())}
-							onclick={() => doThen(() => api.shelfVision(open!.id, model.trim() || undefined))}>Read with the vision model</button>
+							title="Its reading is kept, and goes with the cover to its job; this asks the model again and replaces it"
+							onclick={() => doThen(() => api.shelfVision(open!.id, model.trim() || undefined))}
+							>{open.reading.vision_state === 'done' ? 'Read again with the vision model' : 'Read with the vision model'}</button>
 						<label class="small">
 							<span class="sr-only">Vision model</span>
 							<select value={ownModel ? OTHER : model} onchange={pickModel} title="The model to read it with, this once (Settings aren't changed)">

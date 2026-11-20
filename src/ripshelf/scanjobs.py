@@ -12,6 +12,7 @@ The network scanner is one device, so it scans for one job at a time.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import logging
 import shutil
@@ -40,6 +41,7 @@ from .models import (
 from .providers import release_info
 from .scanner import images
 from .scanner.escl import Capabilities, Escl, ScannerError
+from .visionjobs import VisionReading
 
 if TYPE_CHECKING:
     from .db import JobRecord
@@ -55,6 +57,18 @@ COVER_KINDS = ("front", "back")
 LIBRARY_NAMES: dict[str, str] = {"front": "front", "back": "back", "outside_full": "outside-full",
                                  "inside_full": "inside-full", "insert": "insert", "other": "other"}
 NUMBERED = ("insert", "other")
+
+
+@dataclasses.dataclass
+class Look:
+    """How a picture that comes already looked at (from the covers shelf, or kept for a
+    drive's next disc) is shown: its crop and turn are kept, not found again."""
+
+    crop: list[int] | None
+    rotate: int = 0
+    crop_by_hand: bool = False
+    rotate_by_hand: bool = False  # the reading doesn't turn it
+    vision: VisionReading | None = None  # the vision model's reading of it, kept
 
 
 class ScansMixin:
@@ -119,8 +133,9 @@ class ScansMixin:
     # --- adding, changing and removing ----------------------------------------------
 
     async def add_scan(self, job_id: int, data: bytes, kind: ScanKind, source: ScanSource,
-                       page: int | None = None) -> CoverScan:
-        """Keep a picture of the box (JPEG, PNG or WebP, at most 20 MB)."""
+                       page: int | None = None, look: Look | None = None) -> CoverScan:
+        """Keep a picture of the box (JPEG, PNG or WebP, at most 20 MB), trimmed, or
+        shown as ``look`` says."""
         if len(data) > MAX_SCAN_BYTES:
             raise ValueError("the picture is larger than 20 MB")
         ctype = release_info.sniff(data)
@@ -130,14 +145,17 @@ class ScansMixin:
         if len(job.scans) >= MAX_SCANS:
             raise ValueError(f"a job keeps at most {MAX_SCANS} pictures; remove some first")
         # Scans have the empty glass around them; a photo is all picture.
-        trim = source != "camera" and self.s.scanner_trim
+        trim = source != "camera" and self.s.scanner_trim and not look
+        rotate = look.rotate if look else 0
 
         def measure() -> tuple[int, int, list[int] | None, ScanSplit | None]:
             img = images.open_image(data)
-            box = images.trim_box(img) if trim else None
+            box = look.crop if look else images.trim_box(img) if trim else None
             # A whole sheet the right way up: where its spine is (a sideways one is
             # turned by the reading, and its spine found then).
-            split = images.find_spine(img.crop(box) if box else img) if kind == "outside_full" else None
+            shown = img.crop(box) if box else img
+            split = images.find_spine(shown.rotate(-rotate, expand=True) if rotate else shown) \
+                if kind == "outside_full" else None
             return img.width, img.height, box, split
 
         width, height, crop, split = await asyncio.to_thread(measure)
@@ -146,9 +164,15 @@ class ScansMixin:
         sc = CoverScan(id=uuid.uuid4().hex[:12], kind=kind, source=source, page=page, created_at=now(),
                        content_type=ctype, width=width, height=height,
                        sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data), crop=crop, split=split)
+        if look:
+            sc.rotate, sc.crop_by_hand, sc.rotate_by_hand = look.rotate, look.crop_by_hand, look.rotate_by_hand
         d = self._scans_dir(job)
         d.mkdir(parents=True, exist_ok=True)
         (d / f"{sc.id}.{EXTS[ctype]}").write_bytes(data)
+        if look and look.vision:
+            self._vision_path(job, sc.id).write_text(look.vision.model_dump_json(), encoding="utf-8")
+            by = f" by {look.vision.model}" if look.vision.model else ""
+            sc.vision, sc.vision_message = "done", f"Read on the covers shelf{by}"
         job = self._job(job_id)  # the picture took a while to read
         job.scans.append(sc)
         self._save(job)
@@ -180,6 +204,7 @@ class ScansMixin:
             sc.page = body.page
         if body.rotate is not None:
             sc.rotate = body.rotate
+            sc.rotate_by_hand = True
         if body.crop is not None:
             sc.crop = images.crop_from_shown(body.crop, sc.width, sc.height, sc.rotate)
             sc.crop_by_hand = True
