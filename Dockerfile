@@ -4,7 +4,7 @@
 # The base images are pinned by digest, so a rebuild gets the same Debian and Python;
 # Dependabot opens a pull request when a newer one is published (.github/dependabot.yml).
 
-FROM docker.io/library/node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS web
+FROM docker.io/library/node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
