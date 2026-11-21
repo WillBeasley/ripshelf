@@ -275,7 +275,7 @@ async def test_auto_check_rules(harness, auto):
             ({"show": Show(tmdb_id=1, name="X", score=0.8)}, False, "below 0.90"),
             ({"show": Show(tmdb_id=1, name="X", score=0.99, excluded=True)}, False, "below"),
             ({"consistent": False, "problems": ["title 2 is marked as an episode but has none"]}, False, "has none"),
-            ({"order_verified": False}, False, "did not match the play-all"),
+            ({"order_verified": False}, False, "didn't confirm the episode order"),
         ]
         for change, ok, text in cases:
             job.tv = TvPlan(**{**base, **change})

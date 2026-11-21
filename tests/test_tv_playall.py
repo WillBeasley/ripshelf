@@ -57,6 +57,25 @@ def test_chapters_tolerate_a_little_drift_but_not_another_episode():
     assert order == [1, 5] and starts[5] == 900.0
 
 
+def test_a_dropped_opening_cell_is_placed_by_the_inner_chapters():
+    """Some DVD episodes open with a short cell the play-all leaves out, so the first chapter
+    is a little shorter in the play-all. The marks between chapters still say where it is,
+    and when they run to the frame they prove the order without looking at frames."""
+    one, two = [267.12, 328.08, 292.08, 241.32], [228.36, 273.48, 261.6, 333.96]
+    pa = chapters_of(*one, 227.88, *two[1:], at=0.08)
+    eps = {1: chapters_of(*one, 0.4, at=0.08), 2: chapters_of(*two, 0.4, at=0.08)}
+    order, starts, exact = playall._match_chapters(pa, eps)
+    assert order == [1, 2] and exact == {1, 2}
+    assert starts[1] == pytest.approx(0.0)
+    assert starts[2] == pytest.approx(sum(one) + 227.88 - 228.36)  # 0.48 s before its first chapter mark
+    # About the same lengths, but not the same chapters: found, not proven.
+    near = chapters_of(*one, 227.88, *(x + 0.3 for x in two[1:]), at=0.08)
+    assert playall._match_chapters(near, eps)[2] == {1}
+    read = playall.PlayAllRead(order, starts, "chapters", exact=exact)
+    assert read.proves([1, 2]) and not read.proves([2, 1])
+    assert not playall.PlayAllRead(order, starts, "chapters", exact={1}).proves([1, 2])
+
+
 # --- the mapping takes every title the play-all plays ------------------------------------------
 
 
@@ -80,9 +99,11 @@ def test_play_all_titles_are_all_episodes():
 # --- real files (ffmpeg) -------------------------------------------------------------------------
 
 
-def moving(path: Path, parts: list[tuple[int, list[float]]], tail: float = 0.0) -> Path:
+def moving(path: Path, parts: list[tuple[int, list[float]]], tail: float = 0.0, rate: int = 10,
+           spin: int = 0) -> Path:
     """A video of moving test pictures, one hue per part, with a chapter per given length
-    (and a short closing chapter of ``tail`` s, like a DVD's last cell)."""
+    (and a short closing chapter of ``tail`` s, like a DVD's last cell). ``spin`` turns the
+    hue this many degrees a second, so each frame looks unlike the next."""
     inputs, chapters, at = [], [], 0.0
     for hue, lengths in parts:
         for n in lengths:
@@ -94,9 +115,9 @@ def moving(path: Path, parts: list[tuple[int, list[float]]], tail: float = 0.0) 
         inputs.append((None, tail))
     args = []
     for hue, d in inputs:
-        src = f"testsrc=s=160x90:r=10:d={d}" if hue is not None else f"color=c=black:s=160x90:r=10:d={d}"
+        src = f"testsrc=s=160x90:r={rate}:d={d}" if hue is not None else f"color=c=black:s=160x90:r={rate}:d={d}"
         args += ["-f", "lavfi", "-i", src]
-    filt = "".join(f"[{i}:v]" + (f"hue=h={hue}[h{i}];" if hue is not None else f"null[h{i}];")
+    filt = "".join(f"[{i}:v]" + (f"hue=h='{hue}+{spin}*t'[h{i}];" if hue is not None else f"null[h{i}];")
                    for i, (hue, _) in enumerate(inputs))
     filt += "".join(f"[h{i}]" for i in range(len(inputs))) + f"concat=n={len(inputs)}:v=1[v]"
     meta = path.with_suffix(".txt")
@@ -126,6 +147,22 @@ async def test_dvd_play_all_is_read_and_checked(tmp_path):
     assert check.verified is True, check.note
     wrong = await verify.verify_order("ffmpeg", "ffprobe", pa, [ordered[0], ordered[2], ordered[1]], None)
     assert wrong.verified is False
+
+
+@needs_ffmpeg
+async def test_the_frame_check_finds_an_episode_between_its_steps(tmp_path, monkeypatch):
+    """A 0.44 s closing cell puts the next episode a frame off every 0.1 s step, and on a
+    moving 25 fps picture the frame next to it is too different to pass (job 238's false
+    alarm). Looking frame by frame near the closest step finds it."""
+    a, b, c = (0, [2.0, 2.0]), (120, [2.5, 1.5]), (240, [2.0, 2.0])
+    files = [(i, moving(tmp_path / f"t{i}.mkv", [p], tail=0.44, rate=25, spin=900))
+             for i, p in ((1, a), (2, b), (3, c))]
+    pa = moving(tmp_path / "t0.mkv", [a, b, c], rate=25, spin=900)
+    check = await verify.verify_order("ffmpeg", "ffprobe", pa, files, None)
+    assert check.verified is True, check.note
+    monkeypatch.setattr(verify, "FINE_SHIFTS", ())
+    coarse = await verify.verify_order("ffmpeg", "ffprobe", pa, files, None)
+    assert coarse.verified is False and coarse.note.startswith("couldn't confirm titles")
 
 
 @needs_ffmpeg

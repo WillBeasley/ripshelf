@@ -1113,7 +1113,7 @@ class TvMixin:
         why.append(f"all {len(eps)} episode runtimes match")
         has_play_all = any(m.role == TitleRole.play_all for m in plan.mapping)
         if plan.order_verified is False:
-            return False, [*why, "episode order did not match the play-all"]
+            return False, [*why, "the play-all didn't confirm the episode order"]
         if plan.disc_db:
             why.append("TheDiscDB says which title is which episode")
         elif plan.order_verified is True:
@@ -1366,6 +1366,8 @@ class TvMixin:
             if read.found and read.order != ordered:
                 check = verify.OrderCheck(False, f"{read.note}, not as mapped here: “Use the play-all's order” "
                                                  "numbers the episodes that way", {})
+            elif read.proves(ordered):
+                check = _chapters_prove(ordered)
             else:
                 check = await verify.verify_order(self.s.ffmpeg, self.s.ffprobe, Path(job.rip.files[pa]),
                                                   [(i, Path(job.rip.files[i])) for i in ordered],
@@ -1443,8 +1445,9 @@ class TvMixin:
             self._check_plan(job)
             self._save(job)
             return
-        check = await verify.verify_order(self.s.ffmpeg, self.s.ffprobe, Path(job.rip.files[pa]),
-                                          [(i, Path(job.rip.files[i])) for i in read.order], read.starts)
+        check = _chapters_prove(read.order) if read.proves(read.order) else \
+            await verify.verify_order(self.s.ffmpeg, self.s.ffprobe, Path(job.rip.files[pa]),
+                                      [(i, Path(job.rip.files[i])) for i in read.order], read.starts)
         job = self.db.get_job(job_id)
         plan = job.tv
         plan.wait_play_all = False
@@ -1816,6 +1819,11 @@ def _disc_numbers(job: JobRecord) -> TvLabel:
         if named.season is not None:
             return named
     return tvl
+
+
+def _chapters_prove(order: list[int]) -> verify.OrderCheck:
+    return verify.OrderCheck(True, f"all {len(order)} episodes' chapters match the play-all's to the frame",
+                             dict.fromkeys(order, True))
 
 
 def _clock(s: float) -> str:
