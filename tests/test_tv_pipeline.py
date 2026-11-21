@@ -338,3 +338,51 @@ async def test_a_ripped_episode_gone_from_scratch_fails_the_job(harness, keyed, 
             await h.m.tv_confirm(job.id, [])
             failed = await ended(h, job.id)
     assert failed.problem.code == "rip_incomplete" and "3" in failed.problem.message
+
+
+def leave_out(h, job_id, index):
+    """As if MakeMKV ripped every title but didn't save this one."""
+    job = h.job(job_id)
+    Path(job.rip.files.pop(index)).unlink()
+    h.db.save_job(job)
+
+
+async def test_an_extra_makemkv_left_out_is_skipped(harness, keyed, settings):
+    settings.tv_unmatched = "extras"
+    with respx.mock(assert_all_called=False) as router:
+        mock_show(router, "pippa-goose")
+        async with harness(SD) as h:
+            job = await mapped_pippa(h)
+            leave_out(h, job.id, 10)
+            await h.m.tv_confirm(job.id, [TitleMapUpdate(title_index=10, role=TitleRole.extra)])
+            done = await ended(h, job.id)
+    assert done.state == JobState.done, done.problem
+    m = next(m for m in done.tv.mapping if m.title_index == 10)
+    assert m.role == TitleRole.skip and "didn't save" in m.note
+    assert not (settings.tv / "Pippa & Goose (2013)" / "extras").exists()
+
+
+async def test_an_extra_makemkv_left_out_isnt_copied(harness, keyed, settings):
+    # Mapped (and failed) before the plan check skipped titles MakeMKV didn't save, so a
+    # retry copies the rest.
+    settings.tv_unmatched = "extras"
+    with respx.mock(assert_all_called=False) as router:
+        mock_show(router, "pippa-goose")
+        async with harness(SD) as h:
+            job = await mapped_pippa(h)
+            leave_out(h, job.id, 10)
+            job = h.job(job.id)
+            m = next(m for m in job.tv.mapping if m.title_index == 10)
+            m.role, m.episodes = TitleRole.extra, []
+            assert [i for i, _, _ in h.m._tv_targets(job)] == list(range(1, 10))
+
+
+async def test_an_episode_makemkv_left_out_stops_the_confirm(harness, keyed, settings):
+    with respx.mock(assert_all_called=False) as router:
+        mock_show(router, "pippa-goose")
+        async with harness(SD) as h:
+            job = await mapped_pippa(h)
+            leave_out(h, job.id, 3)
+            with pytest.raises(ValueError, match="didn't save title 3, so it can't be an episode"):
+                await h.m.tv_confirm(job.id, [])
+            assert h.job(job.id).state == JobState.review

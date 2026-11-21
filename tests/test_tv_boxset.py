@@ -281,3 +281,18 @@ async def test_auto_check_rules(harness, auto):
             job.tv = TvPlan(**{**base, **change})
             got, why = h.m._auto_check(job)
             assert got is ok and any(text in w for w in why), (change, why)
+
+
+async def test_a_title_makemkv_didnt_save(harness, keyed, settings, mkv_script, monkeypatch):
+    from ripshelf.dev import fake
+
+    monkeypatch.setattr(fake.DRIVES[DRIVE][1], "label", "SEAGULL_MANOR_S1_D1")
+    settings.makemkvcon = mkv_script(info=disc_info(RUNTIMES[1]), rip=RIP_ALL.replace(', "title_t03.mkv"', ""))
+    with respx.mock(assert_all_called=False) as router:
+        mock_show(router, "seagull-manor")
+        async with harness() as h:
+            await h.insert(DRIVE)
+            d = await until(lambda: next((j for j in h.db.list_jobs() if j.state == JobState.review
+                                          and j.rip.state == "done"), None), 40)
+            assert any(e.message == "MakeMKV didn't save title 3, so it can't be filed" for e in h.db.events(d.id))
+            assert "MakeMKV didn't save title 3, so it can't be an episode" in d.tv.problems

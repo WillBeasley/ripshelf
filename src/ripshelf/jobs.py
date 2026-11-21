@@ -1425,6 +1425,9 @@ class Manager(TvMixin, TranscodeMixin, ContributeMixin, ScansMixin, ReadingMixin
             job.rip.size_bytes = sum(p.stat().st_size for p in files)
             total = sum(Path(f).stat().st_size for f in job.rip.files.values())
             self._event(job, "rip", f"Rip complete: {len(job.rip.files)} titles ({gib(total)})")
+            if left := [t.index for t in job.titles if t.index not in job.rip.files]:
+                self._event(job, "warning", f"MakeMKV didn't save title{'s' if len(left) > 1 else ''} "
+                            f"{', '.join(map(str, left))}, so {'they' if len(left) > 1 else 'it'} can't be filed")
         else:
             main_file = files[0]
             if extras:

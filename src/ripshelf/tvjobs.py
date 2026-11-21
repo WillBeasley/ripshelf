@@ -942,6 +942,17 @@ class TvMixin:
                 plan.problems.append(f"title {sp.title_index} can't be split ({sp.error}), so keep it whole")
         if not job.rip.all_titles and job.rip.state == RipState.done:
             plan.problems.append("only the main title was ripped, so put the disc back to rip the episodes")
+        elif job.rip.state == RipState.done and not job.refile:
+            # MakeMKV can rip every title but leave some out (a disc's twin of a title, with
+            # the same length but the other cells), and there's nothing of those to copy.
+            cut = {sp.title_index for sp in plan.splits}
+            for m in plan.mapping:
+                if m.title_index in job.rip.files or m.title_index in cut or m.part_of is not None:
+                    continue
+                if m.role == TitleRole.extra:
+                    m.role, m.note, m.by_hand = TitleRole.skip, "MakeMKV didn't save this title", False
+                elif m.role == TitleRole.episode:
+                    plan.problems.append(f"MakeMKV didn't save title {m.title_index}, so it can't be an episode")
         plan.consistent = not plan.problems
 
     # --- user actions -----------------------------------------------------------------
@@ -1549,6 +1560,8 @@ class TvMixin:
                 eps = [known.get(episode_key(e)) or Episode(season=e.season, episode=e.episode) for e in m.episodes]
                 out.append((m.title_index, naming.episode_path(self.s.tv, show, eps), eps))
             elif m.role == TitleRole.extra:
+                if job.rip.all_titles and m.part_of is None and m.title_index not in job.rip.files:
+                    continue  # MakeMKV didn't save it (mapped before _check_plan skipped those)
                 if (b := bonus.get(m.title_index)):
                     # A bonus episode of another show: in that show's season, or as an extra
                     # of this one named after it ("Guess with Jess - Where's My Feather Gone").
