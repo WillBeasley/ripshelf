@@ -28,12 +28,18 @@ FFMPEG_TIMEOUT_S = 60
 SETTLE_S = 2.0
 
 
-# A DVD play-all leaves out each episode's short closing cell, so an episode can
-# sit a little before (or after) where the lengths or chapters put it. Look this
-# far either side, a step at a time (a frame matches for about 0.2 s either way).
+# A DVD play-all leaves out each episode's short closing cell (and some an opening
+# one), so an episode can sit a little before (or after) where the lengths or
+# chapters put it. Look this far either side, a step at a time.
 SHIFT_MAX_S = 1.0
 SHIFT_STEP_S = 0.1
 SHIFTS = (0.0, *(s * k * SHIFT_STEP_S for k in range(1, round(SHIFT_MAX_S / SHIFT_STEP_S) + 1) for s in (-1, 1)))
+# A step can land a frame off the episode's (a frame is 0.04 s on PAL), and on a
+# moving scene the next frame is too different to pass. So around the closest
+# looks, try every frame up to the next step, half a frame at a time.
+FINE_STEP_S = 0.02
+FINE_SHIFTS = tuple(s * k * FINE_STEP_S for k in range(1, round(SHIFT_STEP_S / FINE_STEP_S)) for s in (-1, 1))
+FINE_AROUND = 2
 _NO_FRAME = object()
 
 
@@ -102,7 +108,7 @@ async def verify_order(ffmpeg: str, ffprobe: str, play_all: Path, ordered: list[
             if a is None:
                 return OrderCheck(None, "could not decode frames (is ffmpeg installed?)", per)
             # The first look finds the episode's exact place near where it should be;
-            # the next ones must be there.
+            # the next ones must be there, give or take a frame.
             shift = await _find(ffmpeg, play_all, a, start + t, SHIFTS if k == 0 else (0.0,))
             if shift is _NO_FRAME:
                 return OrderCheck(None, "could not decode frames (is ffmpeg installed?)", per)
@@ -115,7 +121,8 @@ async def verify_order(ffmpeg: str, ffprobe: str, play_all: Path, ordered: list[
     bad = [i for i, ok in per.items() if not ok]
     if not bad:
         return OrderCheck(True, f"all {len(per)} episodes match the play-all frame for frame", per)
-    return OrderCheck(False, "titles " + ", ".join(map(str, bad)) + " do not match the play-all at their position",
+    # Not found where it should be; it may be elsewhere in the play-all, or not in it at all.
+    return OrderCheck(False, "couldn't confirm titles " + ", ".join(map(str, bad)) + " from the play-all's frames",
                       per)
 
 
@@ -125,18 +132,30 @@ def _diff(a: bytes, b: bytes) -> float:
 
 async def _find(ffmpeg: str, play_all: Path, want: bytes, at: float, shifts) -> float | object | None:
     """The shift from ``at`` where the play-all shows ``want`` closest; None if it doesn't."""
-    best, best_d = None, None
-    for d in shifts:
-        if at + d < 0:
-            continue
-        b = await frame(ffmpeg, play_all, at + d)
-        if b is None:
-            return _NO_FRAME
-        if b == want:
-            return d
-        if frames_match(want, b) and (best_d is None or _diff(want, b) < best_d):
-            best, best_d = d, _diff(want, b)
-    return best
+    looked: dict[float, float] = {}
+
+    async def look(ds) -> float | object | None:
+        for d in ds:
+            d = round(d, 3)
+            if at + d < 0 or d in looked:
+                continue
+            b = await frame(ffmpeg, play_all, at + d)
+            if b is None:
+                return _NO_FRAME
+            if b == want:
+                return d
+            looked[d] = _diff(want, b)
+        return None
+
+    hit = await look(shifts)
+    if hit is not None:
+        return hit
+    for d in sorted(looked, key=looked.get)[:FINE_AROUND]:
+        hit = await look(d + f for f in FINE_SHIFTS)
+        if hit is not None:
+            return hit
+    close = [d for d, x in looked.items() if x <= MATCH_MAX_MEAN_DIFF]
+    return min(close, key=looked.get) if close else None
 
 
 async def thumbnail(ffmpeg: str, path: Path, out: Path, at_fraction: float = 0.1,
