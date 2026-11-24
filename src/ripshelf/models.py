@@ -1384,7 +1384,7 @@ def setting_fields() -> list[SettingField]:
         if not u or proc.WINDOWS and name in LINUX_ONLY_SETTINGS:
             continue
         t, nullable = _plain(f.annotation)
-        limits = {k: getattr(m, k) for m in f.metadata for k in ("ge", "le") if hasattr(m, k)}
+        limits = {k: v for m in f.metadata for k in ("ge", "le") if (v := getattr(m, k, None)) is not None}
         limits |= {k: v for k, v in (("ge", u.ge), ("le", u.le)) if v is not None}
         choices = u.choices
         if not choices and get_origin(t) is Literal:

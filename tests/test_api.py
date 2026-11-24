@@ -166,6 +166,10 @@ def test_setting_fields_describe_every_editable_setting(client, monkeypatch):
     assert (timeout["minimum"], timeout["maximum"], timeout["advanced"]) == (30, 3600, True)
     assert fields["uhd_models"]["controller_only"] and fields["uhd_models"]["kind"] == "list"
     assert fields["auto_confirm_threshold"]["kind"] == "range" and fields["library_dir"]["kind"] == "path"
+    # Limits on the field itself reach the page (without them the sliders went 0 to 100).
+    for name in ("auto_confirm_threshold", "tv_auto_threshold"):
+        assert (fields[name]["minimum"], fields[name]["maximum"], fields[name]["step"]) == (0.5, 1, 0.01)
+    assert fields["poll_interval_s"]["minimum"] == 1  # the screen's own limit
     assert fields["drive_names"]["section"] is None
     # Every field the page shows has a title to show and search.
     assert all(f["title"] for f in fields.values() if f["section"] and not f["name"].endswith("_path"))
